@@ -1389,6 +1389,18 @@ const SUPABASE_URL = 'https://wgwexzyqaiwosgraaczi.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indnd2V4enlxYWl3b3NncmFhY3ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODEwNzUsImV4cCI6MjA4ODI1NzA3NX0.IS8u4SL1XeLh9KgD4c2Pl9BiGNg0zkiNauUzu_QtKH8';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// ── ANALYTICS ──
+const SESSION_ID = (() => {
+  let id = sessionStorage.getItem('kb_session');
+  if (!id) { id = Math.random().toString(36).slice(2) + Date.now().toString(36); sessionStorage.setItem('kb_session', id); }
+  return id;
+})();
+let _sessionCities = [];
+
+function track(event, city = null, value = null) {
+  sb.from('analytics').insert({ event, city, value, session_id: SESSION_ID }).then(() => {});
+}
+
 // ── UPSERT LISTING & GET STABLE ID ──
 async function upsertListing(activity, city) {
   const cityParts = city.split(',');
@@ -1569,6 +1581,7 @@ function toggleFilter(btn, val) {
   activeFilters = new Set([val]);
   const banner = document.getElementById('categoryBanner');
   if (banner) banner.style.display = 'none';
+  if (val !== 'all') track('filter_used', null, val);
   applyFilters();
 }
 
@@ -1666,9 +1679,12 @@ function openReview(id, name) {
   document.getElementById('reviewSuccess').classList.remove('visible');
   setModalRating(0);
   document.getElementById('reviewModal').classList.add('open');
+  track('review_start', null, name);
 }
 
 function closeModal() {
+  const wasCompleted = document.getElementById('reviewSuccess').classList.contains('visible');
+  if (!wasCompleted) track('review_abandon', null, String(currentModalId));
   document.getElementById('reviewModal').classList.remove('open');
 }
 
@@ -1724,6 +1740,7 @@ async function submitReview() {
   const successEl = document.getElementById('reviewSuccess');
   successEl.textContent = successMsg;
   successEl.classList.add('visible');
+  track('review_submit', null, String(currentModalId));
   setTimeout(closeModal, 2200);
 }
 
@@ -1750,6 +1767,7 @@ async function captureEmail() {
   // Always show success to user regardless of DB result
   document.getElementById('emailSuccess').classList.add('visible');
   document.getElementById('emailInput').value = '';
+  track('email_capture', city);
 }
 
 // ── SUBMISSION FORM ──
@@ -1788,6 +1806,7 @@ async function submitPlace() {
 
   // Always show success and reset form
   document.getElementById('submitSuccess').classList.add('visible');
+  track('submit_place', city, name);
   ['sb-name','sb-city','sb-addr','sb-url','sb-desc','sb-submitter','sb-email'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('sb-type').value = '';
   document.getElementById('sb-age').value = '';
@@ -1800,6 +1819,7 @@ async function submitPlace() {
 const mainContent = () => document.querySelectorAll('nav, .hero, .filters-bar, .main-content, footer, .cookie-banner');
 
 function showAdvertisePage() {
+  track('advertise_click');
   hideLegalPage();
   mainContent().forEach(el => el.style.display = 'none');
   document.getElementById('advertisePage').style.display = 'block';
@@ -2208,6 +2228,11 @@ async function onCitySelected(city) {
   // Track this city search for the edge function to refresh
   sb.from('city_searches').upsert({ city, last_searched: new Date().toISOString() }, { onConflict: 'city' }).then(() => {});
 
+  // Track analytics
+  track('city_search', city);
+  _sessionCities.push(city);
+  if (_sessionCities.length === 2) track('multi_city_session', city, _sessionCities[0]);
+
   try {
     // ── CHECK CACHE — serve ANY cached data instantly, refresh in background ──
     const { data: cached } = await sb
@@ -2227,6 +2252,7 @@ async function onCitySelected(city) {
       document.getElementById('activities').style.display = 'block';
       document.getElementById('activities').scrollIntoView({ behavior: 'smooth', block: 'start' });
       loadEventsForCity(city);
+      track('cache_hit', city);
 
       // ── BACKGROUND REFRESH if stale ──
       const oldest = cached.reduce((min, r) => {
@@ -2245,6 +2271,7 @@ async function onCitySelected(city) {
     }
 
     // ── NO CACHE — fire live AI search ──
+    track('cache_miss', city);
     document.getElementById('loaderMsg').textContent = `Finding the best spots in ${city}…`;
     await loadTopPicksForCity(city);
     loadEventsForCity(city);
