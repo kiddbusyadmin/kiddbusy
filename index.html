@@ -2209,9 +2209,8 @@ async function onCitySelected(city) {
   sb.from('city_searches').upsert({ city, last_searched: new Date().toISOString() }, { onConflict: 'city' }).then(() => {});
 
   try {
-    // ── CHECK CACHE ──
-    const cutoff = new Date(Date.now() - CACHE_TTL_MS).toISOString();
-    const { data: cached, error: cacheError } = await sb
+    // ── CHECK CACHE — serve ANY cached data instantly, refresh in background ──
+    const { data: cached } = await sb
       .from('listings')
       .select('*')
       .ilike('city', cityName)
@@ -2219,31 +2218,36 @@ async function onCitySelected(city) {
       .order('rating', { ascending: false })
       .limit(20);
 
-    console.log(`[KiddBusy] Cache check for "${cityName}": ${cached?.length ?? 0} rows found`, cacheError || '');
+    console.log(`[KiddBusy] Cache check for "${cityName}": ${cached?.length ?? 0} rows found`);
 
-    // Filter fresh rows client-side (handles null last_refreshed gracefully)
-    const fresh = (cached || []).filter(r => {
-      if (!r.last_refreshed) return false;
-      return new Date(r.last_refreshed) >= new Date(Date.now() - CACHE_TTL_MS);
-    });
-
-    console.log(`[KiddBusy] Fresh rows (within 3h): ${fresh.length}`);
-
-    if (fresh.length >= 5) {
-      // ── SERVE FROM CACHE ── fast path
-      document.getElementById('loaderMsg').textContent = `Loading ${city}…`;
-      renderCachedListings(fresh);
+    if (cached && cached.length >= 5) {
+      // ── SERVE STALE DATA INSTANTLY ──
+      renderCachedListings(cached);
       document.getElementById('loaderArea').classList.remove('visible');
       document.getElementById('activities').style.display = 'block';
       document.getElementById('activities').scrollIntoView({ behavior: 'smooth', block: 'start' });
-      loadEventsForCity(city); // non-blocking
+      loadEventsForCity(city);
+
+      // ── BACKGROUND REFRESH if stale ──
+      const oldest = cached.reduce((min, r) => {
+        if (!r.last_refreshed) return min;
+        return new Date(r.last_refreshed) < new Date(min) ? r.last_refreshed : min;
+      }, new Date().toISOString());
+      const isStale = !oldest || (Date.now() - new Date(oldest)) > CACHE_TTL_MS;
+
+      if (isStale) {
+        console.log(`[KiddBusy] Stale cache for "${cityName}", refreshing in background…`);
+        loadTopPicksForCity(city).then(() => {
+          console.log(`[KiddBusy] Background refresh complete for "${cityName}"`);
+        });
+      }
       return;
     }
 
-    // ── CACHE MISS — fire live AI search ──
+    // ── NO CACHE — fire live AI search ──
     document.getElementById('loaderMsg').textContent = `Finding the best spots in ${city}…`;
     await loadTopPicksForCity(city);
-    loadEventsForCity(city); // non-blocking — loads in background
+    loadEventsForCity(city);
 
   } catch(err) {
     console.error('City load failed:', err);
