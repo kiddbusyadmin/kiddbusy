@@ -1,0 +1,2316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KiddBusy – Find Kid-Friendly Fun Near You</title>
+<meta name="description" content="Discover kid-friendly businesses open today, local events, and hidden gems in your city. The parent-powered activity finder." />
+
+<!-- ── OPEN GRAPH (Facebook, iMessage, LinkedIn) ── -->
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://kiddbusy.com/" />
+<meta property="og:title" content="KiddBusy – Find Kid-Friendly Fun Near You" />
+<meta property="og:description" content="Discover kid-friendly businesses open today, local events, and hidden gems in your city. The parent-powered activity finder." />
+<meta property="og:image" content="https://kiddbusy.com/og-image.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+
+<!-- ── TWITTER CARD ── -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="KiddBusy – Find Kid-Friendly Fun Near You" />
+<meta name="twitter:description" content="Discover kid-friendly businesses open today, local events, and hidden gems in your city." />
+<meta name="twitter:image" content="https://kiddbusy.com/og-image.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --sun: #FFCF2F;
+    --sky: #4AC6FF;
+    --grass: #3ECF8E;
+    --tomato: #FF5A5F;
+    --plum: #6C3FC5;
+    --cream: #FFF8EE;
+    --ink: #1A1230;
+    --muted: #7B6E8A;
+    --card: #FFFFFF;
+    --border: #EEE5FF;
+    --shadow: 0 4px 24px rgba(108,63,197,0.10);
+    --radius: 20px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: var(--cream);
+    color: var(--ink);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── NAV ── */
+  nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 40px;
+    background: var(--card);
+    border-bottom: 3px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 2px 16px rgba(108,63,197,0.07);
+  }
+  .logo { font-family: 'Fredoka One', cursive; font-size: 2rem; color: var(--plum); letter-spacing: 1px; }
+  .logo span { color: var(--tomato); }
+  nav .nav-links { display: flex; gap: 24px; list-style: none; }
+  nav .nav-links a { text-decoration: none; color: var(--muted); font-weight: 700; transition: color .2s; }
+  nav .nav-links a:hover { color: var(--plum); }
+  .nav-cta {
+    background: var(--plum); color: #fff; border: none; border-radius: 50px;
+    padding: 10px 22px; font-family: 'Nunito', sans-serif; font-weight: 800;
+    font-size: 0.95rem; cursor: pointer; transition: background .2s, transform .1s;
+  }
+  .nav-cta:hover { background: #5730A8; transform: translateY(-1px); }
+
+  /* ── HERO ── */
+  .hero {
+    background: linear-gradient(135deg, #6C3FC5 0%, #4AC6FF 100%);
+    padding: 80px 40px 100px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    pointer-events: none;
+    background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  }
+  .hero-badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.2);
+    border: 2px solid rgba(255,255,255,0.4);
+    color: #fff;
+    border-radius: 50px;
+    padding: 6px 18px;
+    font-size: 0.85rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-family: 'Fredoka One', cursive;
+    font-size: clamp(2.5rem, 6vw, 4.5rem);
+    color: #fff;
+    line-height: 1.1;
+    margin-bottom: 16px;
+    position: relative;
+  }
+  .hero h1 .highlight { color: var(--sun); }
+  .hero p {
+    color: rgba(255,255,255,0.88);
+    font-size: 1.2rem;
+    max-width: 540px;
+    margin: 0 auto 40px;
+    font-weight: 600;
+  }
+  .city-picker-wrap {
+    max-width: 420px;
+    margin: 0 auto;
+  }
+  .stacked-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .pick-row {
+    background: #fff;
+    border-radius: 20px;
+    padding: 12px 18px 12px 22px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: opacity .2s, box-shadow .2s;
+  }
+  .pick-row:focus-within {
+    box-shadow: 0 4px 28px rgba(155,92,240,0.25);
+  }
+  .pick-row label {
+    font-size: .78rem;
+    font-weight: 800;
+    color: var(--plum);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    white-space: nowrap;
+    min-width: 52px;
+  }
+  .pick-row select {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-family: 'Nunito', sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--ink);
+    background: transparent;
+    cursor: pointer;
+    padding: 4px 0;
+    appearance: none;
+    -webkit-appearance: none;
+    min-width: 0;
+  }
+  .pick-row select:disabled { color: #C0B8D4; cursor: not-allowed; }
+  .pick-arrow {
+    color: var(--plum);
+    font-size: 1rem;
+    pointer-events: none;
+    flex-shrink: 0;
+  }
+  .find-btn {
+    background: var(--tomato);
+    color: #fff;
+    border: none;
+    border-radius: 50px;
+    padding: 16px;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 800;
+    font-size: 1.05rem;
+    cursor: pointer;
+    width: 100%;
+    transition: background .2s, transform .15s, opacity .2s;
+    opacity: .45;
+    pointer-events: none;
+  }
+  .find-btn.active {
+    opacity: 1;
+    pointer-events: all;
+  }
+  .find-btn.active:hover {
+    background: #e04449;
+    transform: translateY(-2px);
+  }
+  .hero-emojis {
+    position: absolute; font-size: 2.5rem; animation: float 4s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes float {
+    0%,100% { transform: translateY(0); }
+    50% { transform: translateY(-14px); }
+  }
+
+  /* ── FILTERS ── */
+  .filters-bar {
+    display: flex; gap: 10px; flex-wrap: wrap;
+    padding: 24px 40px;
+    background: #fff;
+    border-bottom: 2px solid var(--border);
+    justify-content: center;
+  }
+  .filter-chip {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 18px; border-radius: 50px;
+    border: 2px solid var(--border);
+    background: #fff; font-family: 'Nunito', sans-serif;
+    font-weight: 700; font-size: 0.9rem; cursor: pointer;
+    transition: all .2s; color: var(--muted);
+  }
+  .filter-chip:hover, .filter-chip.active {
+    background: var(--plum); color: #fff; border-color: var(--plum);
+  }
+  .filter-chip .chip-icon { font-size: 1.1rem; }
+
+  /* ── MAIN LAYOUT ── */
+  .main-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 40px 24px;
+  }
+  .section-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 24px;
+  }
+  .section-title {
+    font-family: 'Fredoka One', cursive;
+    font-size: 1.7rem; color: var(--ink);
+  }
+  .section-title span { color: var(--plum); }
+  .see-all { color: var(--plum); font-weight: 800; text-decoration: none; font-size: 0.9rem; }
+  .see-all:hover { text-decoration: underline; }
+
+  /* ── ACTIVITY GRID ── */
+  .activities-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 24px;
+    margin-bottom: 60px;
+  }
+  .activity-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    border: 2px solid var(--border);
+    transition: transform .2s, box-shadow .2s;
+    cursor: pointer;
+  }
+  .activity-card:hover {
+    box-shadow: 0 8px 32px rgba(108,63,197,0.15);
+  }
+  .card-thumb {
+    height: 160px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 4rem;
+    position: relative;
+  }
+  .open-badge {
+    position: absolute; top: 12px; right: 12px;
+    background: var(--grass); color: #fff;
+    border-radius: 50px; padding: 4px 12px;
+    font-size: 0.75rem; font-weight: 800;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .closed-badge {
+    position: absolute; top: 12px; right: 12px;
+    background: #ccc; color: #fff;
+    border-radius: 50px; padding: 4px 12px;
+    font-size: 0.75rem; font-weight: 800;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .card-body { padding: 18px 20px 20px; }
+  .card-category {
+    font-size: 0.75rem; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 1px; color: var(--plum); margin-bottom: 6px;
+  }
+  .card-name { font-family: 'Fredoka One', cursive; font-size: 1.25rem; color: var(--ink); margin-bottom: 6px; }
+  .card-desc { font-size: 0.88rem; color: var(--muted); line-height: 1.5; margin-bottom: 12px; }
+  .card-meta { display: flex; justify-content: space-between; align-items: center; }
+  .card-addr { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+  .card-footer { display: flex; justify-content: space-between; align-items: center; }
+  .review-btn {
+    background: var(--plum); color: #fff;
+    border: none; border-radius: 50px;
+    padding: 6px 14px; font-family: 'Nunito', sans-serif;
+    font-weight: 800; font-size: 0.8rem;
+    cursor: pointer; transition: background .2s, transform .1s;
+  }
+  .review-btn:hover { background: #5730A8; transform: scale(1.05); }
+  .category-filter {
+    cursor: pointer;
+    transition: color .15s;
+  }
+  .category-filter:hover { color: #9B5CF0; text-decoration: underline; }
+  .stars-clickable:hover .star { color: #FFB800; }
+  .stars-clickable:hover .star-count { color: var(--plum); text-decoration: underline; }
+  .activity-card { cursor: default; }
+  /* Stars */
+  .stars { display: flex; align-items: center; gap: 3px; }
+  .star { font-size: 1rem; color: #ddd; cursor: pointer; transition: color .1s; }
+  .star.filled { color: var(--sun); }
+  .star-count { font-size: 0.78rem; color: var(--muted); font-weight: 700; margin-left: 4px; }
+  .card-age-tag {
+    display: inline-block; background: #EEE5FF; color: var(--plum);
+    border-radius: 50px; padding: 3px 10px; font-size: 0.75rem;
+    font-weight: 800; margin-right: 6px;
+  }
+  .card-tags { margin-bottom: 10px; }
+
+  /* ── EVENTS SECTION ── */
+  .events-list { display: flex; flex-direction: column; gap: 16px; margin-bottom: 60px; }
+  .event-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    display: flex; gap: 20px; align-items: center;
+    box-shadow: var(--shadow);
+    border: 2px solid var(--border);
+    transition: transform .2s;
+    cursor: pointer;
+  }
+  .event-card:hover { transform: translateX(6px); }
+  .event-date-box {
+    min-width: 60px; text-align: center;
+    background: var(--plum); border-radius: 14px;
+    padding: 10px 8px;
+    color: #fff;
+  }
+  .event-month { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; opacity: .8; }
+  .event-day { font-family: 'Fredoka One', cursive; font-size: 1.8rem; line-height: 1; }
+  .event-info { flex: 1; }
+  .event-name { font-family: 'Fredoka One', cursive; font-size: 1.1rem; color: var(--ink); margin-bottom: 4px; }
+  .event-detail { font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+  .event-free { background: var(--grass); color: #fff; border-radius: 50px; padding: 4px 12px; font-size: 0.78rem; font-weight: 800; }
+  .event-paid { background: var(--sky); color: #fff; border-radius: 50px; padding: 4px 12px; font-size: 0.78rem; font-weight: 800; }
+
+  /* ── LOADING ── */
+  .loader {
+    text-align: center; padding: 60px 20px;
+    display: none;
+  }
+  .loader.visible { display: block; }
+  .spinner {
+    width: 50px; height: 50px;
+    border: 5px solid var(--border);
+    border-top-color: var(--plum);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    margin: 0 auto 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  .loader p { color: var(--muted); font-weight: 700; }
+  .ai-response {
+    background: #fff;
+    border-radius: var(--radius);
+    padding: 28px;
+    border: 2px solid var(--border);
+    box-shadow: var(--shadow);
+    white-space: pre-wrap;
+    font-size: 0.95rem;
+    line-height: 1.7;
+    color: var(--ink);
+    margin-bottom: 40px;
+  }
+  .ai-response h3 { font-family: 'Fredoka One', cursive; color: var(--plum); margin-bottom: 12px; font-size: 1.3rem; }
+
+  /* ── SUBMISSION FORM ── */
+  .submit-section {
+    background: linear-gradient(135deg, #EEE5FF, #E0F7FF);
+    border-radius: 28px;
+    padding: 50px 40px;
+    margin-bottom: 60px;
+    border: 2px solid var(--border);
+  }
+  .submit-section h2 { font-family: 'Fredoka One', cursive; font-size: 2rem; color: var(--plum); margin-bottom: 8px; }
+  .submit-section p { color: var(--muted); font-weight: 600; margin-bottom: 32px; font-size: 1rem; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-group.full { grid-column: 1 / -1; }
+  label { font-weight: 800; font-size: 0.88rem; color: var(--ink); }
+  input, select, textarea {
+    padding: 12px 16px;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    font-family: 'Nunito', sans-serif;
+    font-size: 0.95rem;
+    color: var(--ink);
+    background: #fff;
+    transition: border-color .2s;
+    outline: none;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--plum); }
+  textarea { resize: vertical; min-height: 90px; }
+  .submit-btn {
+    background: var(--plum); color: #fff;
+    border: none; border-radius: 50px;
+    padding: 14px 36px; font-family: 'Nunito', sans-serif;
+    font-weight: 800; font-size: 1rem;
+    cursor: pointer; transition: background .2s, transform .1s;
+    margin-top: 8px;
+  }
+  .submit-btn:hover { background: #5730A8; transform: translateY(-2px); }
+  .success-msg {
+    display: none; background: var(--grass); color: #fff;
+    border-radius: 12px; padding: 14px 20px;
+    font-weight: 700; margin-top: 16px;
+  }
+  .success-msg.visible { display: block; }
+
+  /* ── STAR RATING INPUT ── */
+  .star-input { display: flex; gap: 6px; }
+  .star-input span { font-size: 1.8rem; cursor: pointer; color: #ddd; transition: color .1s; }
+  .star-input span:hover, .star-input span.active { color: var(--sun); }
+
+  /* ── EMAIL CAPTURE ── */
+  .email-capture {
+    background: var(--ink);
+    border-radius: 28px;
+    padding: 60px 40px;
+    text-align: center;
+    margin-bottom: 60px;
+    position: relative;
+    overflow: hidden;
+  }
+  .email-capture::before {
+    content: '🎈🎡🎠🎪';
+    position: absolute; top: 20px; font-size: 1.5rem;
+    left: 50%; transform: translateX(-50%);
+    opacity: 0.3; letter-spacing: 16px;
+  }
+  .email-capture h2 {
+    font-family: 'Fredoka One', cursive;
+    font-size: 2.2rem; color: #fff;
+    margin-bottom: 10px; position: relative;
+  }
+  .email-capture h2 span { color: var(--sun); }
+  .email-capture p { color: rgba(255,255,255,0.7); font-weight: 600; margin-bottom: 30px; font-size: 1rem; }
+  .email-form {
+    display: flex; gap: 10px; max-width: 480px; margin: 0 auto;
+    background: rgba(255,255,255,0.1);
+    padding: 8px 8px 8px 20px;
+    border-radius: 50px;
+    border: 2px solid rgba(255,255,255,0.2);
+  }
+  .email-form input {
+    flex: 1; border: none; background: transparent;
+    color: #fff; font-size: 1rem; outline: none;
+  }
+  .email-form input::placeholder { color: rgba(255,255,255,0.5); }
+  .email-form button {
+    background: var(--sun); color: var(--ink);
+    border: none; border-radius: 50px;
+    padding: 11px 24px; font-family: 'Nunito', sans-serif;
+    font-weight: 800; font-size: 0.95rem; cursor: pointer;
+    transition: transform .1s;
+  }
+  .email-form button:hover { transform: scale(1.04); }
+  .email-perks { display: flex; justify-content: center; gap: 24px; margin-top: 20px; flex-wrap: wrap; }
+  .email-perk { color: rgba(255,255,255,0.6); font-size: 0.82rem; font-weight: 700; display: flex; align-items: center; gap: 5px; }
+  .email-success { display: none; color: var(--sun); font-weight: 800; font-size: 1.1rem; margin-top: 16px; }
+  .email-success.visible { display: block; }
+
+  /* ── REVIEW MODAL ── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(26,18,48,0.6); z-index: 1000;
+    align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: #fff; border-radius: 28px;
+    padding: 40px; max-width: 500px; width: 90%;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.2);
+    animation: popIn .25s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  @keyframes popIn { from { transform: scale(0.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .modal h3 { font-family: 'Fredoka One', cursive; font-size: 1.6rem; color: var(--plum); margin-bottom: 6px; }
+  .modal-close {
+    position: absolute; top: 16px; right: 20px;
+    background: none; border: none; font-size: 1.5rem;
+    cursor: pointer; color: var(--muted);
+  }
+  .modal { position: relative; }
+
+  /* ── CHECKBOX ── */
+  .checkbox-label {
+    display: flex; align-items: flex-start; gap: 12px;
+    cursor: pointer; font-weight: 700; font-size: .92rem; color: var(--ink);
+    line-height: 1.4;
+  }
+  .checkbox-label input[type="checkbox"] { display: none; }
+  .checkbox-custom {
+    width: 22px; height: 22px; min-width: 22px;
+    border: 2.5px solid var(--border);
+    border-radius: 6px; background: #fff;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .15s;
+  }
+  .checkbox-label input:checked + .checkbox-custom {
+    background: var(--plum); border-color: var(--plum);
+  }
+  .checkbox-label input:checked + .checkbox-custom::after {
+    content: '✓'; color: #fff; font-size: .85rem; font-weight: 900;
+  }
+  .owner-divider {
+    display: flex; align-items: center; gap: 12px;
+    color: var(--muted); font-size: .82rem; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .8px;
+    margin: 4px 0;
+  }
+  .owner-divider::before, .owner-divider::after {
+    content: ''; flex: 1; height: 2px; background: var(--border);
+  }
+  .sponsor-box {
+    background: linear-gradient(135deg, #FFFBEA, #FFF3CC);
+    border: 2px solid var(--sun); border-radius: 16px;
+    padding: 18px 20px;
+  }
+  .sponsor-pitch {
+    display: flex; gap: 14px; align-items: flex-start;
+  }
+  .sponsor-pitch-icon { font-size: 2rem; line-height: 1; }
+  .sponsor-pitch strong { font-size: .95rem; color: var(--ink); display: block; margin-bottom: 4px; }
+  .sponsor-pitch p { font-size: .83rem; color: var(--muted); line-height: 1.5; margin-bottom: 6px; font-weight: 600; }
+  .sponsor-learn-more { font-size: .83rem; font-weight: 800; color: var(--plum); text-decoration: none; }
+  .sponsor-learn-more:hover { text-decoration: underline; }
+
+  /* ── ADVERTISE PAGE ── */
+  .adpage-hero {
+    background: linear-gradient(135deg, #1A1230 0%, #3A1F7A 100%);
+    padding: 70px 40px 80px; text-align: center;
+    position: relative;
+  }
+  .adpage-back {
+    position: absolute; top: 24px; left: 32px;
+    background: rgba(255,255,255,.12); color: rgba(255,255,255,.85);
+    border: 2px solid rgba(255,255,255,.2); border-radius: 50px;
+    padding: 8px 18px; font-family: 'Nunito', sans-serif;
+    font-weight: 800; font-size: .88rem; cursor: pointer;
+    transition: background .2s;
+  }
+  .adpage-back:hover { background: rgba(255,255,255,.22); }
+  .adpage-badge {
+    display: inline-block; background: rgba(255,207,47,.2);
+    border: 2px solid var(--sun); color: var(--sun);
+    border-radius: 50px; padding: 6px 18px;
+    font-size: .85rem; font-weight: 800; letter-spacing: 1px;
+    text-transform: uppercase; margin-bottom: 20px;
+  }
+  .adpage-hero h1 {
+    font-family: 'Fredoka One', cursive;
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    color: #fff; line-height: 1.1; margin-bottom: 14px;
+  }
+  .adpage-hero h1 span { color: var(--sun); }
+  .adpage-hero p { color: rgba(255,255,255,.75); font-size: 1.1rem; font-weight: 600; max-width: 520px; margin: 0 auto; }
+  .adpage-content { max-width: 1100px; margin: 0 auto; padding: 50px 24px 80px; }
+  .adpage-stats {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+    margin-bottom: 60px;
+  }
+  .adpage-stat {
+    background: #fff; border-radius: 18px; padding: 24px 20px;
+    text-align: center; border: 2px solid var(--border);
+    box-shadow: var(--shadow);
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .stat-num { font-family: 'Fredoka One', cursive; font-size: 2rem; color: var(--plum); }
+  .stat-label { font-size: .8rem; font-weight: 700; color: var(--muted); }
+  .adpage-section { margin-bottom: 60px; }
+  .adpage-section-title { font-family: 'Fredoka One', cursive; font-size: 2rem; color: var(--ink); margin-bottom: 8px; }
+  .adpage-section-title span { color: var(--plum); }
+  .adpage-section-sub { color: var(--muted); font-weight: 600; margin-bottom: 32px; }
+  .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .pricing-card {
+    background: #fff; border-radius: 24px; padding: 32px 28px;
+    border: 2px solid var(--border); box-shadow: var(--shadow);
+    position: relative; display: flex; flex-direction: column;
+  }
+  .pricing-card.featured {
+    border-color: var(--plum); box-shadow: 0 8px 40px rgba(108,63,197,.2);
+    transform: scale(1.03);
+  }
+  .pricing-card.bundle { border-color: var(--grass); }
+  .pricing-best {
+    position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+    background: var(--plum); color: #fff; border-radius: 50px;
+    padding: 4px 18px; font-size: .78rem; font-weight: 800;
+    white-space: nowrap;
+  }
+  .pricing-best.best-value { background: var(--grass); }
+  .pricing-icon { font-size: 2.2rem; margin-bottom: 8px; }
+  .pricing-card h3 { font-family: 'Fredoka One', cursive; font-size: 1.4rem; color: var(--ink); margin-bottom: 4px; }
+  .pricing-price { font-family: 'Fredoka One', cursive; font-size: 2.8rem; color: var(--plum); margin: 8px 0; }
+  .pricing-price span { font-size: 1.1rem; color: var(--muted); }
+  .pricing-desc { font-size: .88rem; color: var(--muted); line-height: 1.55; margin-bottom: 18px; font-weight: 600; }
+  .pricing-perks { list-style: none; display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; flex: 1; }
+  .pricing-perks li { font-size: .88rem; font-weight: 700; color: var(--ink); }
+  .pricing-cta {
+    background: var(--plum); color: #fff;
+    border: none; border-radius: 50px; padding: 13px 20px;
+    font-family: 'Nunito', sans-serif; font-weight: 800; font-size: .95rem;
+    cursor: pointer; transition: background .2s, transform .1s;
+    text-align: center; width: 100%;
+  }
+  .pricing-cta:hover { background: #5730A8; transform: translateY(-2px); }
+  .pricing-cta.secondary { background: var(--ink); }
+  .pricing-cta.secondary:hover { background: #2d1f50; }
+  .adpage-howit { background: linear-gradient(135deg, #EEE5FF, #E0F7FF); border-radius: 28px; padding: 50px 40px; margin-bottom: 60px; }
+  .howit-steps { display: flex; align-items: flex-start; gap: 0; margin-top: 32px; flex-wrap: wrap; justify-content: center; }
+  .howit-step { flex: 1; min-width: 160px; text-align: center; padding: 0 16px; }
+  .howit-step strong { display: block; font-size: .95rem; color: var(--ink); margin-bottom: 6px; }
+  .howit-step p { font-size: .83rem; color: var(--muted); font-weight: 600; line-height: 1.5; }
+  .step-num {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: var(--plum); color: #fff;
+    font-family: 'Fredoka One', cursive; font-size: 1.3rem;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 12px;
+  }
+  .howit-arrow { font-size: 1.5rem; color: var(--plum); opacity: .4; padding-top: 12px; align-self: center; }
+  .adpage-form-wrap {
+    background: #fff; border-radius: 28px; padding: 50px 40px;
+    border: 2px solid var(--border); box-shadow: var(--shadow);
+  }
+
+  @media (max-width: 900px) {
+    .pricing-grid { grid-template-columns: 1fr; }
+    .pricing-card.featured { transform: none; }
+    .adpage-stats { grid-template-columns: 1fr 1fr; }
+    .howit-arrow { display: none; }
+  }
+  /* ── COOKIE BANNER ── */
+  .cookie-banner {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--ink);
+    border-top: 2px solid rgba(255,255,255,0.08);
+    padding: 14px 28px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 20px; z-index: 999;
+    transform: translateY(100%);
+    transition: transform .35s cubic-bezier(.34,1.26,.64,1);
+    flex-wrap: wrap;
+  }
+  .cookie-banner.visible { transform: translateY(0); }
+  .cookie-text { font-size: .82rem; color: rgba(255,255,255,.7); font-weight: 600; flex: 1; min-width: 200px; }
+  .cookie-text a { color: var(--sky); text-decoration: none; }
+  .cookie-text a:hover { text-decoration: underline; }
+  .cookie-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .cookie-btn {
+    padding: 7px 18px; border-radius: 50px;
+    font-family: 'Nunito', sans-serif; font-weight: 800; font-size: .82rem;
+    cursor: pointer; border: none; transition: all .15s;
+  }
+  .cookie-btn.accept { background: var(--grass); color: #fff; }
+  .cookie-btn.accept:hover { background: #32b87a; }
+  .cookie-btn.decline { background: transparent; color: rgba(255,255,255,.5); border: 1px solid rgba(255,255,255,.15); }
+  .cookie-btn.decline:hover { color: rgba(255,255,255,.8); }
+
+  /* ── CORRECTION MODAL ── */
+  .correction-btn {
+    background: none; border: none; cursor: pointer;
+    font-size: .75rem; color: var(--muted); font-family: 'Nunito', sans-serif;
+    font-weight: 700; padding: 4px 0;
+    display: flex; align-items: center; gap: 4px;
+    transition: color .15s;
+  }
+  .correction-btn:hover { color: var(--tomato); }
+
+  /* ── LEGAL PAGES ── */
+  .legal-page {
+    display: none;
+    max-width: 780px; margin: 0 auto; padding: 50px 24px 80px;
+  }
+  .legal-back {
+    display: inline-flex; align-items: center; gap: 6px;
+    color: var(--plum); font-weight: 800; font-size: .88rem;
+    background: none; border: none; cursor: pointer;
+    margin-bottom: 32px; font-family: 'Nunito', sans-serif;
+  }
+  .legal-back:hover { text-decoration: underline; }
+  .legal-page h1 { font-family: 'Fredoka One', cursive; font-size: 2.2rem; color: var(--ink); margin-bottom: 6px; }
+  .legal-page .legal-date { color: var(--muted); font-size: .85rem; font-weight: 600; margin-bottom: 36px; }
+  .legal-page h2 { font-family: 'Fredoka One', cursive; font-size: 1.3rem; color: var(--plum); margin: 28px 0 10px; }
+  .legal-page p { color: #444; line-height: 1.75; margin-bottom: 14px; font-size: .95rem; }
+  .legal-page ul { color: #444; line-height: 1.75; margin: 0 0 14px 20px; font-size: .95rem; }
+  .legal-page ul li { margin-bottom: 6px; }
+  .legal-page a { color: var(--plum); }
+
+  /* ── 404 PAGE ── */
+  .page-404 {
+    display: none;
+    text-align: center; padding: 100px 24px;
+  }
+  .page-404 .emoji-404 { font-size: 5rem; margin-bottom: 20px; }
+  .page-404 h1 { font-family: 'Fredoka One', cursive; font-size: 2.8rem; color: var(--ink); margin-bottom: 12px; }
+  /* ── FOOTER ── */
+  footer {
+    background: var(--ink); color: rgba(255,255,255,0.6);
+    text-align: center; padding: 32px 24px;
+    font-size: 0.88rem; font-weight: 600;
+  }
+  footer strong { color: var(--sun); }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 640px) {
+    nav { padding: 14px 20px; }
+    .nav-links { display: none; }
+    .nav-cta { display: none; }
+    .hero { padding: 50px 20px 70px; }
+    .filters-bar { padding: 16px 20px; overflow-x: auto; }
+    .main-content { padding: 28px 16px; }
+    .submit-section { padding: 32px 20px; }
+    .form-grid { grid-template-columns: 1fr; }
+    .email-capture { padding: 40px 16px; }
+    .email-form {
+      flex-direction: column;
+      border-radius: 16px;
+      padding: 12px;
+      gap: 10px;
+    }
+    .email-form input {
+      width: 100%;
+      font-size: 1rem;
+      padding: 4px 0;
+    }
+    .email-form button {
+      width: 100%;
+      padding: 14px;
+      font-size: 1rem;
+      border-radius: 12px;
+    }
+    .city-picker-wrap { max-width: 100%; }
+    .pick-row { border-radius: 16px; padding: 10px 14px; }
+    .pick-row select { font-size: .95rem; }
+    .activities-grid { grid-template-columns: 1fr; }
+    .pricing-grid { grid-template-columns: 1fr; }
+    .adpage-stats { grid-template-columns: 1fr 1fr; }
+    body { overflow-x: hidden; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">Kidd<span>Busy</span></div>
+  <ul class="nav-links">
+    <li><a href="#submit" onclick="document.getElementById('submit').scrollIntoView({behavior:'smooth'});return false;">Submit a Place</a></li>
+    <li><a href="#" onclick="showAdvertisePage(); return false;" style="color:var(--sun);font-weight:800">📣 Advertise</a></li>
+  </ul>
+  <button class="nav-cta" onclick="document.getElementById('email-section').scrollIntoView({behavior:'smooth'})">Get Updates</button>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-emojis" style="left:5%;top:20%;animation-delay:.5s">🎠</div>
+  <div class="hero-emojis" style="right:6%;top:15%;animation-delay:1.2s">🎡</div>
+  <div class="hero-emojis" style="left:12%;bottom:15%;animation-delay:.2s">🎈</div>
+  <div class="hero-emojis" style="right:10%;bottom:10%;animation-delay:.8s">🦁</div>
+  <div class="hero-badge">🌟 Parent-Powered Activity Finder</div>
+  <h1>Find <span class="highlight">Fun Things</span><br>To Do With Your Kids</h1>
+  <p>Discover kid-friendly activities, local gems, and family fun — just pick your city.</p>
+  <div class="city-picker-wrap">
+    <div class="stacked-picker">
+      <div class="pick-row">
+        <label for="stateSelect">📍 State</label>
+        <select id="stateSelect" onchange="onStateSelected(this.value)">
+          <option value="">Choose a state…</option>
+        </select>
+        <span class="pick-arrow">▾</span>
+      </div>
+      <div class="pick-row" id="cityRow" style="opacity:.45;pointer-events:none">
+        <label for="citySelect">🏙️ City</label>
+        <select id="citySelect" disabled>
+          <option value="">Choose a city…</option>
+        </select>
+        <span class="pick-arrow">▾</span>
+      </div>
+      <button class="find-btn" id="findBtn" disabled onclick="onFindClicked()">Find Activities 🎉</button>
+    </div>
+  </div>
+</section>
+
+<!-- FILTERS -->
+<div class="filters-bar" id="filtersBar">
+  <button class="filter-chip active" onclick="toggleFilter(this,'all')"><span class="chip-icon">✨</span> All</button>
+  <button class="filter-chip" onclick="toggleFilter(this,'outdoor')"><span class="chip-icon">🌳</span> Outdoor</button>
+  <button class="filter-chip" onclick="toggleFilter(this,'indoor')"><span class="chip-icon">🏠</span> Indoor</button>
+  <button class="filter-chip" onclick="toggleFilter(this,'free')"><span class="chip-icon">🆓</span> Free</button>
+  <button class="filter-chip" onclick="toggleFilter(this,'parks')"><span class="chip-icon">🌿</span> Parks</button>
+  <button class="filter-chip" onclick="toggleFilter(this,'playgrounds')"><span class="chip-icon">🛝</span> Playgrounds</button>
+  <button class="filter-chip" onclick="toggleFilter(this,'splashpads')"><span class="chip-icon">💦</span> Splash Pads</button>
+  <button class="filter-chip" onclick="toggleFilter(this,'toddler')"><span class="chip-icon">🍼</span> Toddlers</button>
+  <button class="filter-chip" onclick="toggleFilter(this,'school')"><span class="chip-icon">🎒</span> School Age</button>
+  <button class="filter-chip" onclick="toggleFilter(this,'teens')"><span class="chip-icon">🎮</span> Teens</button>
+</div>
+
+<!-- MAIN CONTENT -->
+<main class="main-content">
+
+  <!-- AI RESULTS AREA -->
+  <div id="loaderArea" class="loader">
+    <div class="spinner"></div>
+    <p id="loaderMsg">Finding kid-friendly fun…</p>
+  </div>
+  <div id="aiResultArea" style="display:none"></div>
+
+  <!-- SPLASH STATE – shown before city is selected -->
+  <div id="splashState" style="text-align:center;padding:80px 24px 60px">
+    <div style="font-size:4rem;margin-bottom:20px">🗺️</div>
+    <h2 style="font-family:'Fredoka One',cursive;font-size:2rem;color:var(--ink);margin-bottom:12px">Where are you exploring?</h2>
+    <p style="color:var(--muted);font-weight:600;font-size:1.05rem;max-width:420px;margin:0 auto 32px">Pick your city above and we'll find the best kid-friendly spots near you.</p>
+    <div style="display:flex;justify-content:center;gap:20px;flex-wrap:wrap;font-size:2rem">
+      <span style="animation:float 3s ease-in-out infinite;animation-delay:0s">🎪</span>
+      <span style="animation:float 3s ease-in-out infinite;animation-delay:.4s">🎨</span>
+      <span style="animation:float 3s ease-in-out infinite;animation-delay:.8s">🏊</span>
+      <span style="animation:float 3s ease-in-out infinite;animation-delay:1.2s">🌳</span>
+      <span style="animation:float 3s ease-in-out infinite;animation-delay:1.6s">🎢</span>
+      <span style="animation:float 3s ease-in-out infinite;animation-delay:2s">🦁</span>
+    </div>
+  </div>
+
+  <!-- ACTIVITIES -->
+  <section id="activities" style="display:none">
+    <div class="section-header">
+      <h2 class="section-title"><span>Top Picks</span> in <span id="topPicksCity" style="color:var(--plum)">…</span></h2>
+      <a href="#" class="see-all" onclick="event.preventDefault(); showAllActivities()">See all →</a>
+    </div>
+    <div class="activities-grid" id="activitiesGrid"></div>
+  </section>
+
+  <!-- EVENTS -->
+  <section id="events" style="display:none">
+    <div class="section-header">
+      <h2 class="section-title"><span>Upcoming Events</span> in <span id="eventsCity" style="color:var(--plum)">…</span></h2>
+      <span id="eventsFreshness" style="font-size:.78rem;color:var(--muted);font-weight:700"></span>
+    </div>
+    <div class="events-list" id="eventsList"></div>
+  </section>
+
+  <!-- EMAIL CAPTURE -->
+  <section class="email-capture" id="email-section">
+    <h2>Never Miss the <span>Fun</span> 🎉</h2>
+    <p>Get a weekly roundup of new places and events for families in your city.</p>
+    <div class="email-form">
+      <input type="email" id="emailInput" placeholder="your@email.com" />
+      <button onclick="captureEmail()">Count Me In!</button>
+    </div>
+    <div class="email-perks">
+      <span class="email-perk">✅ Weekly picks</span>
+      <span class="email-perk">✅ Free events first</span>
+      <span class="email-perk">✅ No spam ever</span>
+    </div>
+    <div class="email-success" id="emailSuccess">🎊 You're in! Check your inbox for a welcome note.</div>
+  </section>
+
+  <!-- SUBMIT A PLACE -->
+  <section class="submit-section" id="submit">
+    <h2>🗺️ Know a Great Spot?</h2>
+    <p>Submit a business or event for review — help other parents discover awesome places!</p>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Business / Event Name *</label>
+        <input type="text" id="sb-name" placeholder="e.g. Bounce World" />
+      </div>
+      <div class="form-group">
+        <label>Type *</label>
+        <select id="sb-type">
+          <option value="">Select type…</option>
+          <option>🏃 Indoor Play</option>
+          <option>🌳 Park / Outdoor</option>
+          <option>🎨 Arts & Crafts</option>
+          <option>🎭 Theater / Shows</option>
+          <option>🦁 Zoo / Animals</option>
+          <option>🏊 Swimming</option>
+          <option>🎮 Arcade / Gaming</option>
+          <option>📚 Library / Education</option>
+          <option>🎪 Festival / Fair</option>
+          <option>🍦 Food & Treats</option>
+          <option>🏆 Sports</option>
+          <option>💃 Dance / Music</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>City & State *</label>
+        <input type="text" id="sb-city" placeholder="e.g. Portland, OR" />
+      </div>
+      <div class="form-group">
+        <label>Address</label>
+        <input type="text" id="sb-addr" placeholder="Street address" />
+      </div>
+      <div class="form-group">
+        <label>Website / Social Link</label>
+        <input type="url" id="sb-url" placeholder="https://..." />
+      </div>
+      <div class="form-group">
+        <label>Age Range</label>
+        <select id="sb-age">
+          <option value="">All ages</option>
+          <option>0–2 (Toddler)</option>
+          <option>3–5 (Preschool)</option>
+          <option>6–12 (School Age)</option>
+          <option>13+ (Teen)</option>
+          <option>All ages</option>
+        </select>
+      </div>
+      <div class="form-group full">
+        <label>What makes it great for kids?</label>
+        <textarea id="sb-desc" placeholder="Tell parents what to expect, what to bring, parking tips, etc."></textarea>
+      </div>
+      <div class="form-group full">
+        <label>Your Rating</label>
+        <div class="star-input" id="submitStars">
+          <span onclick="setSubmitRating(1)">★</span>
+          <span onclick="setSubmitRating(2)">★</span>
+          <span onclick="setSubmitRating(3)">★</span>
+          <span onclick="setSubmitRating(4)">★</span>
+          <span onclick="setSubmitRating(5)">★</span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Your Name (optional)</label>
+        <input type="text" id="sb-submitter" placeholder="First name or nickname" />
+      </div>
+      <div class="form-group">
+        <label>Your Email (for updates)</label>
+        <input type="email" id="sb-email" placeholder="your@email.com" />
+      </div>
+      <div class="form-group full">
+        <div class="owner-divider">
+          <span>Are you the business owner?</span>
+        </div>
+      </div>
+      <div class="form-group full">
+        <label class="checkbox-label" id="ownerCheckLabel">
+          <input type="checkbox" id="sb-isowner" onchange="toggleSponsorBox()" />
+          <span class="checkbox-custom"></span>
+          <span>I own or manage this business</span>
+        </label>
+      </div>
+      <div class="form-group full sponsor-box" id="sponsorBox" style="display:none">
+        <div class="sponsor-pitch">
+          <div class="sponsor-pitch-icon">⭐</div>
+          <div>
+            <strong>Get featured as a Sponsored Location</strong>
+            <p>Sponsored listings appear at the top of search results with a highlighted badge, reaching thousands of local parents each month. Starting at just $49/month.</p>
+            <a href="#" onclick="showAdvertisePage(); return false;" class="sponsor-learn-more">Learn more about sponsorship →</a>
+          </div>
+        </div>
+        <label class="checkbox-label" style="margin-top:14px">
+          <input type="checkbox" id="sb-sponsor" />
+          <span class="checkbox-custom" style="--cb-color:#FFCF2F"></span>
+          <span>Yes, I'm interested in a <strong>Sponsored Listing</strong> — contact me with details</span>
+        </label>
+      </div>
+    </div>
+    <button class="submit-btn" onclick="submitPlace()">Submit for Review 🚀</button>
+    <div class="success-msg" id="submitSuccess">🎉 Thanks! Our team will review your submission within 24 hours.</div>
+  </section>
+
+</main>
+
+<!-- REVIEWS SUMMARY MODAL -->
+<div class="modal-overlay" id="summaryModal">
+  <div class="modal" style="max-width:520px">
+    <button class="modal-close" onclick="closeSummaryModal()">✕</button>
+    <h3 id="summaryTitle">Reviews</h3>
+    <div id="summaryStarsDisplay" style="display:flex;align-items:center;gap:8px;margin:8px 0 20px"></div>
+    <div id="summaryList" style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:14px"></div>
+    <button class="submit-btn" style="width:100%;margin-top:20px" onclick="switchToWriteReview()">✍️ Write a Review</button>
+  </div>
+</div>
+
+<!-- WRITE REVIEW MODAL -->
+<div class="modal-overlay" id="reviewModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <h3 id="modalTitle">Leave a Review</h3>
+    <p style="color:var(--muted);margin-bottom:20px;font-weight:600;font-size:.9rem">Share your experience with other families</p>
+    <div style="margin-bottom:16px">
+      <label style="display:block;margin-bottom:8px;font-weight:800;font-size:.88rem">Your Rating</label>
+      <div class="star-input" id="modalStars">
+        <span onclick="setModalRating(1)">★</span>
+        <span onclick="setModalRating(2)">★</span>
+        <span onclick="setModalRating(3)">★</span>
+        <span onclick="setModalRating(4)">★</span>
+        <span onclick="setModalRating(5)">★</span>
+      </div>
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="display:block;margin-bottom:6px;font-weight:800;font-size:.88rem">Your Review</label>
+      <textarea id="modalReview" placeholder="What did your kids love? Any tips for other parents?" style="width:100%"></textarea>
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="display:block;margin-bottom:6px;font-weight:800;font-size:.88rem">Your Name</label>
+      <input type="text" id="modalName" placeholder="e.g. Sarah M." style="width:100%" />
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="display:block;margin-bottom:6px;font-weight:800;font-size:.88rem">Kid's Age Range <span style="color:var(--tomato)">*</span></label>
+      <select id="modalAgeRange" style="width:100%">
+        <option value="">Select age range…</option>
+        <option>👶 0–2 (Baby / Toddler)</option>
+        <option>🧒 3–5 (Preschool)</option>
+        <option>🎒 6–9 (Early School Age)</option>
+        <option>🏃 10–12 (Tween)</option>
+        <option>🎮 13+ (Teen)</option>
+      </select>
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="display:block;margin-bottom:6px;font-weight:800;font-size:.88rem">Email <span style="color:var(--muted);font-weight:600;font-size:.8rem">(optional — get notified of new places near you)</span></label>
+      <input type="email" id="modalEmail" placeholder="your@email.com" style="width:100%" />
+    </div>
+    <button class="submit-btn" style="width:100%" onclick="submitReview()">Post Review ✨</button>
+    <div class="success-msg" id="reviewSuccess">🌟 Review posted! Thank you!</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     ADVERTISE PAGE (hidden by default)
+══════════════════════════════════════════ -->
+<div id="advertisePage" style="display:none">
+
+  <div class="adpage-hero">
+    <button class="adpage-back" onclick="hideAdvertisePage()">← Back to listings</button>
+    <div class="adpage-badge">💼 For Business Owners</div>
+    <h1>Reach <span>Thousands of Parents</span><br>in Your City</h1>
+    <p>KiddBusy is where Charlotte families go to find their next adventure. Put your business front and center.</p>
+  </div>
+
+  <div class="adpage-content">
+
+    <!-- STATS BAR -->
+    <!-- Stats bar hidden until verified data available -->
+
+    <!-- PRICING TIERS -->
+    <div class="adpage-section">
+      <h2 class="adpage-section-title">Simple, <span>Transparent</span> Pricing</h2>
+      <p class="adpage-section-sub">No hidden fees. No long-term contracts. Just more families walking through your door.</p>
+
+      <div class="pricing-grid">
+
+        <!-- TIER 1: SPONSORED LISTING -->
+        <div class="pricing-card featured">
+          <div class="pricing-best">Most Popular</div>
+          <div class="pricing-icon">⭐</div>
+          <h3>Sponsored Listing</h3>
+          <div class="pricing-price">$49<span>/mo</span></div>
+          <p class="pricing-desc">Your listing appears pinned to the top of relevant search results with a golden "Sponsored" badge — the first thing parents see.</p>
+          <ul class="pricing-perks">
+            <li>✅ Pinned to top of category results</li>
+            <li>✅ Gold ⭐ Sponsored badge on your card</li>
+            <li>✅ Bold listing with your logo / photo</li>
+            <li>✅ Direct link to your website or booking page</li>
+            <li>✅ Featured in our weekly parent email</li>
+            <li>✅ Monthly performance report</li>
+          </ul>
+          <button class="pricing-cta" onclick="document.getElementById('advertise-form').scrollIntoView({behavior:'smooth'})">Get Started for $49/mo</button>
+        </div>
+
+        <!-- TIER 2: BANNER AD -->
+        <div class="pricing-card">
+          <div class="pricing-icon">📣</div>
+          <h3>Banner Ad</h3>
+          <div class="pricing-price">$199<span>/mo</span></div>
+          <p class="pricing-desc">A high-visibility banner displayed above the activity grid — seen by every parent who visits, regardless of what they're searching for.</p>
+          <ul class="pricing-perks">
+            <li>✅ Full-width banner above all results</li>
+            <li>✅ Custom image, headline & CTA button</li>
+            <li>✅ Reaches ALL visitors, not just category searchers</li>
+            <li>✅ Ideal for seasonal promos (summer camp, holiday shows)</li>
+            <li>✅ Swap your creative monthly at no charge</li>
+            <li>✅ Monthly impression & click report</li>
+          </ul>
+          <button class="pricing-cta secondary" onclick="document.getElementById('advertise-form').scrollIntoView({behavior:'smooth'})">Reserve a Banner</button>
+        </div>
+
+        <!-- TIER 3: BUNDLE -->
+        <div class="pricing-card bundle">
+          <div class="pricing-best best-value">Best Value</div>
+          <div class="pricing-icon">🚀</div>
+          <h3>Full Visibility Bundle</h3>
+          <div class="pricing-price">$219<span>/mo</span></div>
+          <div style="text-align:center;margin-top:-8px;margin-bottom:12px"><span style="text-decoration:line-through;color:var(--muted);font-size:.9rem">$248 separately</span> <span style="background:var(--grass);color:#fff;border-radius:50px;padding:2px 10px;font-size:.8rem;font-weight:800">Save $29</span></div>
+          <p class="pricing-desc">Everything in both tiers — sponsored listing AND banner ad — for maximum exposure across all of KiddBusy.</p>
+          <ul class="pricing-perks">
+            <li>✅ Everything in Sponsored Listing</li>
+            <li>✅ Everything in Banner Ad</li>
+            <li>✅ Priority placement over single-tier sponsors</li>
+
+          </ul>
+          <button class="pricing-cta" onclick="document.getElementById('advertise-form').scrollIntoView({behavior:'smooth'})">Get the Bundle</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- HOW IT WORKS -->
+    <div class="adpage-howit">
+      <h2 class="adpage-section-title" style="text-align:center;margin-bottom:10px">How It <span>Works</span></h2>
+      <p class="adpage-section-sub" style="text-align:center">From signup to your first parent click in under 48 hours.</p>
+      <div class="howit-steps">
+        <div class="howit-step"><div class="step-num">1</div><strong>Fill out the form below</strong><p>Tell us about your business and pick your plan.</p></div>
+        <div class="howit-arrow">→</div>
+        <div class="howit-step"><div class="step-num">2</div><strong>We set up your listing</strong><p>Our team reviews and goes live within 48 hours.</p></div>
+        <div class="howit-arrow">→</div>
+        <div class="howit-step"><div class="step-num">3</div><strong>Parents find you</strong><p>Your business reaches thousands of local families immediately.</p></div>
+        <div class="howit-arrow">→</div>
+        <div class="howit-step"><div class="step-num">4</div><strong>Track your results</strong><p>Monthly reports show impressions, clicks & new reviews.</p></div>
+      </div>
+    </div>
+
+    <!-- SIGN UP FORM -->
+    <div class="adpage-form-wrap" id="advertise-form">
+      <h2 class="adpage-section-title" style="margin-bottom:8px">Reserve Your <span>Spot</span></h2>
+      <p class="adpage-section-sub" style="margin-bottom:32px">Fill in your details and we'll be in touch within one business day to confirm your placement and billing.</p>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Business Name *</label>
+          <input type="text" id="ad-bizname" placeholder="e.g. Bounce World Charlotte" />
+        </div>
+        <div class="form-group">
+          <label>Plan *</label>
+          <select id="ad-plan">
+            <option value="">Select a plan…</option>
+            <option value="sponsored">⭐ Sponsored Listing — $49/mo</option>
+            <option value="banner">📣 Banner Ad — $199/mo</option>
+            <option value="bundle">🚀 Full Visibility Bundle — $219/mo</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Contact First Name *</label>
+          <input type="text" id="ad-fname" placeholder="First name" />
+        </div>
+        <div class="form-group">
+          <label>Contact Last Name *</label>
+          <input type="text" id="ad-lname" placeholder="Last name" />
+        </div>
+        <div class="form-group">
+          <label>Business Email *</label>
+          <input type="email" id="ad-email" placeholder="you@yourbusiness.com" />
+        </div>
+        <div class="form-group">
+          <label>Phone Number *</label>
+          <input type="tel" id="ad-phone" placeholder="(704) 555-0000" />
+        </div>
+        <div class="form-group">
+          <label>Business Address *</label>
+          <input type="text" id="ad-addr" placeholder="Street address" />
+        </div>
+        <div class="form-group">
+          <label>City & State *</label>
+          <input type="text" id="ad-city" placeholder="e.g. Charlotte, NC" />
+        </div>
+        <div class="form-group">
+          <label>Business Website</label>
+          <input type="url" id="ad-url" placeholder="https://..." />
+        </div>
+        <div class="form-group">
+          <label>Category</label>
+          <select id="ad-category">
+            <option value="">Select category…</option>
+            <option>🏃 Indoor Play</option>
+            <option>🌳 Park / Outdoor</option>
+            <option>🎨 Arts & Crafts</option>
+            <option>🎭 Theater / Shows</option>
+            <option>🦁 Zoo / Animals</option>
+            <option>🏊 Swimming</option>
+            <option>🎮 Arcade / Gaming</option>
+            <option>📚 Library / Education</option>
+            <option>🎪 Festival / Fair</option>
+            <option>🍦 Food & Treats</option>
+            <option>🏆 Sports / Fitness</option>
+            <option>💃 Dance / Music</option>
+          </select>
+        </div>
+
+        <!-- BILLING INFO -->
+        <div class="form-group full">
+          <div class="owner-divider"><span>Billing Information</span></div>
+        </div>
+        <div class="form-group">
+          <label>Billing Name (on card) *</label>
+          <input type="text" id="ad-bill-name" placeholder="Full name as it appears on card" />
+        </div>
+        <div class="form-group">
+          <label>Billing Address *</label>
+          <input type="text" id="ad-bill-addr" placeholder="Billing street address" />
+        </div>
+        <div class="form-group">
+          <label>Billing City *</label>
+          <input type="text" id="ad-bill-city" placeholder="City" />
+        </div>
+        <div class="form-group">
+          <label>Billing State *</label>
+          <input type="text" id="ad-bill-state" placeholder="State (e.g. NC)" />
+        </div>
+        <div class="form-group">
+          <label>ZIP Code *</label>
+          <input type="text" id="ad-bill-zip" placeholder="e.g. 28201" maxlength="10" />
+        </div>
+        <div class="form-group">
+          <label>Company / LLC Name <span style="color:var(--muted);font-weight:500;font-size:.8rem">(if applicable)</span></label>
+          <input type="text" id="ad-company" placeholder="Legal entity name" />
+        </div>
+
+        <div class="form-group full">
+          <label>Anything else we should know?</label>
+          <textarea id="ad-notes" placeholder="Seasonal promotions, preferred go-live date, special requests…"></textarea>
+        </div>
+
+        <div class="form-group full">
+          <label class="checkbox-label">
+            <input type="checkbox" id="ad-agree" />
+            <span class="checkbox-custom"></span>
+            <span>I understand this is a monthly subscription. Payment details will be collected separately before activation. I can cancel anytime with 30 days notice.</span>
+          </label>
+        </div>
+      </div>
+
+      <button class="submit-btn" style="font-size:1.1rem;padding:16px 44px" onclick="submitAdvertise()">Reserve My Spot 🚀</button>
+      <div class="success-msg" id="advertiseSuccess">🎉 Got it! We'll reach out within one business day to confirm your plan and next steps.</div>
+    </div>
+
+  </div><!-- /adpage-content -->
+</div><!-- /advertisePage -->
+
+<footer>
+  <p>Made with ❤️ for families everywhere · <strong>KiddBusy</strong> · &copy; 2025</p>
+  <p style="margin-top:6px;font-size:.8rem">Listings are community-sourced and AI-assisted. Always verify hours before visiting.</p>
+  <p style="margin-top:10px;font-size:.78rem;opacity:.6">
+    <a href="#" onclick="showLegalPage('privacy');return false;" style="color:rgba(255,255,255,.6);text-decoration:none">Privacy Policy</a>
+    &nbsp;·&nbsp;
+    <a href="#" onclick="showLegalPage('terms');return false;" style="color:rgba(255,255,255,.6);text-decoration:none">Terms of Service</a>
+    &nbsp;·&nbsp;
+    <a href="#" onclick="showLegalPage('404');return false;" style="color:rgba(255,255,255,.6);text-decoration:none">Contact</a>
+  </p>
+</footer>
+
+<!-- ── COOKIE BANNER ── -->
+<div class="cookie-banner" id="cookieBanner">
+  <div class="cookie-text">
+    🍪 We use cookies to remember your city and improve your experience.
+    <a href="#" onclick="showLegalPage('privacy');return false;">Privacy Policy</a>
+  </div>
+  <div class="cookie-actions">
+    <button class="cookie-btn decline" onclick="dismissCookie(false)">Decline</button>
+    <button class="cookie-btn accept" onclick="dismissCookie(true)">Accept</button>
+  </div>
+</div>
+
+<!-- ── CORRECTION MODAL ── -->
+<div class="modal-overlay" id="correctionModal">
+  <div class="modal" style="max-width:460px">
+    <button class="modal-close" onclick="document.getElementById('correctionModal').classList.remove('open')">✕</button>
+    <h3 style="margin-bottom:6px">🚩 Suggest a Correction</h3>
+    <p style="color:var(--muted);font-size:.85rem;font-weight:600;margin-bottom:20px" id="correctionPlaceName"></p>
+    <div style="margin-bottom:14px">
+      <label style="display:block;margin-bottom:6px;font-weight:800;font-size:.88rem">What needs correcting? *</label>
+      <select id="correctionType" style="width:100%">
+        <option value="">Select issue…</option>
+        <option>❌ Business is permanently closed</option>
+        <option>🕐 Hours are wrong</option>
+        <option>📍 Address is incorrect</option>
+        <option>💰 Pricing info is outdated</option>
+        <option>📝 Description is inaccurate</option>
+        <option>🔞 Not actually kid-friendly</option>
+        <option>Other</option>
+      </select>
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="display:block;margin-bottom:6px;font-weight:800;font-size:.88rem">Details <span style="font-weight:500;color:var(--muted)">(optional)</span></label>
+      <textarea id="correctionDetails" placeholder="e.g. They closed in January 2025, the correct hours are 9am–6pm…" style="width:100%;min-height:80px"></textarea>
+    </div>
+    <button class="submit-btn" style="width:100%" onclick="submitCorrection()">Send Correction ✓</button>
+    <div class="success-msg" id="correctionSuccess">✅ Got it — we'll review and update within 24 hours. Thank you!</div>
+  </div>
+</div>
+
+<!-- ── PRIVACY POLICY PAGE ── -->
+<div class="legal-page" id="page-privacy">
+  <button class="legal-back" onclick="hideLegalPage()">← Back</button>
+  <h1>Privacy Policy</h1>
+  <p class="legal-date">Last updated: March 2025</p>
+
+  <h2>Who We Are</h2>
+  <p>KiddBusy ("we," "us," or "our") operates KiddBusy.com, a platform that helps parents find kid-friendly activities, events, and businesses in their city.</p>
+
+  <h2>Information We Collect</h2>
+  <p>We collect information you provide directly to us, including:</p>
+  <ul>
+    <li><strong>Email addresses</strong> when you sign up for our newsletter or submit a review</li>
+    <li><strong>Business information</strong> when you submit a listing or sponsor inquiry</li>
+    <li><strong>Review content</strong> including your name, rating, written review, and your child's age range</li>
+    <li><strong>Billing information</strong> when you purchase a sponsored placement (processed securely by Stripe — we never store card numbers)</li>
+  </ul>
+  <p>We also automatically collect standard web data including your IP address, browser type, pages visited, and time spent on pages through analytics tools (Google Analytics or Plausible).</p>
+
+  <h2>How We Use Your Information</h2>
+  <ul>
+    <li>To send you our weekly KiddBusy newsletter (you can unsubscribe at any time)</li>
+    <li>To process and display business listings and reviews</li>
+    <li>To contact sponsor leads about advertising opportunities</li>
+    <li>To improve the app and understand which cities and listings are most useful</li>
+    <li>To comply with legal obligations</li>
+  </ul>
+
+  <h2>Cookies</h2>
+  <p>We use cookies to remember your city preference and to understand how parents use our site. We do not use advertising cookies or sell data to ad networks. You can decline non-essential cookies using the banner at the bottom of our site.</p>
+
+  <h2>Data Sharing</h2>
+  <p>We do not sell your personal data. We share data only with:</p>
+  <ul>
+    <li><strong>Supabase</strong> — our database provider (data stored in the US)</li>
+    <li><strong>Stripe</strong> — payment processing for sponsor subscriptions</li>
+    <li><strong>Resend</strong> — email delivery for newsletters and notifications</li>
+    <li><strong>Anthropic</strong> — AI processing of submitted content for review and moderation (no personal data is used to train AI models)</li>
+  </ul>
+
+  <h2>Your Rights</h2>
+  <p>You have the right to access, correct, or delete your personal data at any time. California residents have additional rights under CCPA. To make a request, email <strong>privacy [at] kiddbusy.com</strong>.</p>
+
+  <h2>Children's Privacy</h2>
+  <p>KiddBusy is a platform <em>for</em> parents — we do not knowingly collect personal information directly from children under 13. Reviews ask for a child's age range only to help other parents, not to identify any individual child.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about this policy? Email <strong>privacy [at] kiddbusy.com</strong>.</p>
+</div>
+
+<!-- ── TERMS OF SERVICE PAGE ── -->
+<div class="legal-page" id="page-terms">
+  <button class="legal-back" onclick="hideLegalPage()">← Back</button>
+  <h1>Terms of Service</h1>
+  <p class="legal-date">Last updated: March 2025</p>
+
+  <h2>Acceptance of Terms</h2>
+  <p>By accessing or using KiddBusy.com, you agree to be bound by these Terms of Service. If you do not agree, please do not use our platform.</p>
+
+  <h2>What KiddBusy Provides</h2>
+  <p>KiddBusy is a community-powered discovery platform that helps parents find kid-friendly businesses and events. Listings are a combination of community submissions, AI-assisted research, and sponsor placements. We do not operate, endorse, or guarantee any listed business.</p>
+  <p><strong>Always verify hours, pricing, and availability directly with a business before visiting.</strong> Listings may contain outdated information.</p>
+
+  <h2>Submitting a Listing</h2>
+  <p>By submitting a business or event, you confirm that you have the right to share the information provided, that it is accurate to the best of your knowledge, and that the business is genuinely appropriate for families with children. We reserve the right to reject, edit, or remove any submission at our discretion.</p>
+
+  <h2>Reviews</h2>
+  <p>Reviews must be based on genuine personal experience. You may not submit reviews for businesses you own or are affiliated with, fake reviews, or reviews containing defamatory, offensive, or misleading content. We may remove reviews that violate these guidelines. By submitting a review, you grant KiddBusy a non-exclusive, royalty-free license to display your review on our platform.</p>
+
+  <h2>Sponsored Listings and Advertising</h2>
+  <p>Sponsored placements are paid advertising products. Sponsors are clearly labeled. KiddBusy does not guarantee any specific number of clicks, impressions, or new customers from sponsored placements. Subscriptions are billed monthly and may be cancelled with 30 days' written notice. Refunds are not provided for partial months.</p>
+
+  <h2>Intellectual Property</h2>
+  <p>The KiddBusy name, logo, and platform design are our intellectual property. You may not reproduce, copy, or redistribute any part of KiddBusy without our written permission. User-submitted content remains owned by the submitter, subject to the license granted above.</p>
+
+  <h2>Limitation of Liability</h2>
+  <p>KiddBusy is provided "as is." We are not liable for any damages arising from your use of the platform, reliance on listing information, or interactions with businesses found through KiddBusy. Our total liability to you shall not exceed the amount you paid us in the 3 months preceding any claim.</p>
+
+  <h2>Governing Law</h2>
+  <p>These terms are governed by the laws of the State of North Carolina, without regard to conflict of law principles.</p>
+
+  <h2>Changes to These Terms</h2>
+  <p>We may update these terms from time to time. We will notify newsletter subscribers of material changes. Continued use of KiddBusy after changes constitutes acceptance of the updated terms.</p>
+
+  <h2>Contact</h2>
+  <p>Questions? Email <strong>legal [at] kiddbusy.com</strong>.</p>
+</div>
+
+<!-- ── 404 PAGE ── -->
+<div class="page-404" id="page-404">
+  <div class="emoji-404">🗺️</div>
+  <h1>Looks Like You're Lost!</h1>
+  <p>We couldn't find what you were looking for — but there's plenty of fun on the main page.</p>
+  <button class="submit-btn" onclick="hideLegalPage()">Take Me Home 🏠</button>
+</div>
+
+<script>
+// ── SUPABASE ──
+const SUPABASE_URL = 'https://wgwexzyqaiwosgraaczi.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indnd2V4enlxYWl3b3NncmFhY3ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODEwNzUsImV4cCI6MjA4ODI1NzA3NX0.IS8u4SL1XeLh9KgD4c2Pl9BiGNg0zkiNauUzu_QtKH8';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ── UPSERT LISTING & GET STABLE ID ──
+async function upsertListing(activity, city) {
+  const cityParts = city.split(',');
+  const cityName = cityParts[0]?.trim() || city;
+  const stateName = cityParts[1]?.trim() || '';
+  const now = new Date().toISOString();
+
+  // Check if listing already exists
+  const { data: existing } = await sb
+    .from('listings')
+    .select('id')
+    .ilike('name', activity.name)
+    .ilike('city', cityName)
+    .maybeSingle();
+
+  if (existing) {
+    // Update description + last_refreshed on existing listing
+    await sb.from('listings').update({
+      description: activity.desc,
+      is_open: activity.open ?? true,
+      last_refreshed: now,
+    }).eq('id', existing.id);
+    return existing.id;
+  }
+
+  // Create new listing
+  const { data: created, error } = await sb
+    .from('listings')
+    .insert({
+      name: activity.name,
+      category: activity.category,
+      description: activity.desc,
+      address: activity.addr,
+      city: cityName,
+      state: stateName,
+      emoji: activity.emoji,
+      ages: activity.ages?.join(',') || '',
+      tags: activity.tags?.join(',') || '',
+      is_open: activity.open ?? true,
+      is_sponsored: false,
+      rating: activity.rating || 0,
+      review_count: activity.reviewCount || 0,
+      status: 'active',
+      last_refreshed: now,
+    })
+    .select('id')
+    .single();
+
+  if (error) { console.warn('Listing upsert error:', error); return null; }
+  return created.id;
+}
+
+// ── LOAD REVIEWS FROM SUPABASE ──
+async function loadReviewsFromDB(listingId) {
+  const { data, error } = await sb
+    .from('reviews')
+    .select('*')
+    .eq('listing_id', listingId)
+    .eq('status', 'approved')
+    .order('created_at', { ascending: false });
+  if (error) { console.warn('Load reviews error:', error); return []; }
+  return (data || []).map(r => ({
+    rating: r.rating,
+    name: r.reviewer_name,
+    text: r.review_text || '(no comment)',
+    ageRange: r.age_range,
+    date: new Date(r.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
+  }));
+}
+const sampleActivities = [
+  { id:1, name:"Discovery Place Science", category:"Children's Museum", emoji:"🔬", desc:"Hands-on STEM exhibits, a live aquarium with jellyfish & tree frogs, a toddler KidScience zone, and the Carolinas' largest IMAX dome theater.", addr:"301 N Tryon St, Uptown Charlotte", open:true, ages:["toddler","school","teens"], tags:["indoor","paid"], rating:4.8, reviewCount:1 },
+  { id:2, name:"ImaginOn Library", category:"Library / Education", emoji:"📚", desc:"Totally free interactive library and play space with a children's theater, puppet shows, hands-on exhibits, and dedicated teen and under-11 zones.", addr:"300 E 7th St, Charlotte", open:true, ages:["toddler","school","teens"], tags:["indoor","free"], rating:4.9, reviewCount:1 },
+  { id:3, name:"Big Air Trampoline Park", category:"Indoor Play", emoji:"🏃", desc:"Wall-to-wall trampolines, dodgeball courts, ninja warrior courses, foam pits, a climbing wall, and a dedicated kid jump zone for younger jumpers.", addr:"2408 Sardis Rd N, Charlotte", open:true, ages:["toddler","school","teens"], tags:["indoor","paid"], rating:4.5, reviewCount:1 },
+  { id:4, name:"US National Whitewater Center", category:"Outdoor", emoji:"🌊", desc:"2-acre Wildwoods nature play area for young kids, plus hiking, zip lines, and flatwater paddling. Activity pass is $18; parking $12. Opens daily at 9am.", addr:"5000 Whitewater Center Pkwy", open:true, ages:["toddler","school","teens"], tags:["outdoor","paid"], rating:4.7, reviewCount:1 },
+  { id:5, name:"Ray's Splash Planet", category:"Swimming", emoji:"💦", desc:"Indoor waterpark with a 3-story Blue Comet slide, Lazy River, toddler Saturation Station, and wave pool. County residents pay just $8 for kids.", addr:"215 N Sycamore St, Charlotte", open:false, ages:["toddler","school"], tags:["indoor","paid"], rating:4.4, reviewCount:1 },
+  { id:6, name:"Freedom Park", category:"Outdoor", emoji:"🌳", desc:"Beloved Charlotte park with a huge playground, shaded walking trails, duck pond, NFL Play 60 playground, and free open green space for picnics.", addr:"1900 East Blvd, Dilworth", open:true, ages:["toddler","school","teens"], tags:["outdoor","free"], rating:4.8, reviewCount:1 },
+  { id:7, name:"Sky Zone Trampoline Park", category:"Indoor Play", emoji:"🎯", desc:"Freestyle jumping, SkySlam basketball, foam zone, and special Toddler Time for kids 7 and under. Birthday party packages available.", addr:"7325 Smith Corners Blvd, Charlotte", open:true, ages:["toddler","school","teens"], tags:["indoor","paid"], rating:4.3, reviewCount:1 },
+  { id:8, name:"Camp North End", category:"Arts & Crafts", emoji:"🎨", desc:"Creative outdoor hub with free art workshops by Broken Crayon every other month, live music, life-size Legos on the lawn, and family story time at That's Novel Books.", addr:"1801 N Graham St, Charlotte", open:true, ages:["toddler","school","teens"], tags:["outdoor","free"], rating:4.6, reviewCount:1 },
+];
+
+// ── REVIEWS STORE ──
+let reviews = {};
+let currentModalId = null;
+let modalRating = 0;
+let submitRating = 0;
+let activeFilters = new Set(['all']);
+let currentListings = []; // tracks whatever city is currently loaded
+
+// Ratings store (persisted in memory)
+let userRatings = {};
+
+// ── RENDER ACTIVITIES ──
+function renderActivities(list) {
+  const grid = document.getElementById('activitiesGrid');
+  grid.innerHTML = list.map(a => {
+    const stars = renderStars(a.id, a.rating);
+    const tagHtml = a.ages.map(t => `<span class="card-age-tag">${t}</span>`).join('');
+    const bg = { '🏃':'#FFE8E8','🌳':'#E8FFE8','🎨':'#E8EAFF','🎮':'#FFF3E0','🦁':'#FFF8E0','🖌️':'#FCE4EC' }[a.emoji] || '#F5F0FF';
+    const catKey = a.category.toLowerCase().replace(/[^a-z]/g,'');
+    return `
+    <div class="activity-card">
+      <div class="card-thumb" style="background:${bg}">
+        <span style="filter:drop-shadow(2px 4px 6px rgba(0,0,0,.15))">${a.emoji}</span>
+        
+      </div>
+      <div class="card-body">
+        <div class="card-category category-filter" onclick="filterByCategory('${a.category}')" title="Filter by ${a.category}">${a.category} <span style="font-size:.7rem;opacity:.6">▼</span></div>
+        <div class="card-name">${a.name}</div>
+        <div class="card-tags">${tagHtml}</div>
+        <div class="card-desc">${a.desc}</div>
+        <div class="card-addr" style="margin-bottom:12px">📍 ${a.addr}</div>
+        <div class="card-footer">
+          <div class="stars" id="stars-${a.id}">${stars}</div>
+          <button class="review-btn" onclick="openReview(${a.id},'${a.name.replace(/'/g,"\\'")}')">✍️ Review</button>
+        </div>
+        <button class="correction-btn" onclick="openCorrection(${a.id},'${a.name.replace(/'/g,"\\'")}')">🚩 Suggest a correction</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderStars(id, rating) {
+  const a = currentListings.find(x => x.id === id) || sampleActivities.find(x => x.id === id);
+  const r = a ? parseFloat(a.rating) : rating;
+  let starsHtml = '';
+  for (let i=1;i<=5;i++) {
+    starsHtml += `<span class="star${i<=Math.round(r)?' filled':''}">★</span>`;
+  }
+  return `<span class="stars-clickable" onclick="event.stopPropagation();openReviewSummary(${id})" title="See reviews" style="cursor:pointer;display:inline-flex;align-items:center;gap:2px">${starsHtml}<span class="star-count">(${a?.reviewCount||0})</span></span>`;
+}
+
+function showAllActivities() {
+  // Clear any active category filter
+  const banner = document.getElementById('categoryBanner');
+  if (banner) banner.style.display = 'none';
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  document.querySelector('.filter-chip').classList.add('active');
+  if (currentListings.length) {
+    const isDbRow = currentListings[0].description !== undefined && currentListings[0].desc === undefined;
+    isDbRow ? renderCachedListings(currentListings) : renderActivities(currentListings);
+  }
+  document.getElementById('activities').scrollIntoView({ behavior: 'smooth' });
+}
+
+// ── CATEGORY FILTER FROM CARD ──
+function filterByCategory(category) {
+  // Deactivate all chips and activate 'all' as fallback visual
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  document.querySelector('.filter-chip').classList.add('active'); // reset to "All" visually
+
+  const list = currentListings.filter(a => a.category === category);
+  const isDbRow = list.length && list[0].description !== undefined && list[0].desc === undefined;
+  isDbRow ? renderCachedListings(list) : renderActivities(list);
+
+  // Show a small banner indicating the active category filter
+  let banner = document.getElementById('categoryBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'categoryBanner';
+    banner.style.cssText = 'background:var(--plum);color:#fff;border-radius:50px;padding:8px 20px;font-weight:800;font-size:.88rem;display:inline-flex;align-items:center;gap:10px;margin-bottom:16px;';
+    document.getElementById('activitiesGrid').before(banner);
+  }
+  banner.innerHTML = `Filtering: <strong>${category}</strong> &nbsp;<span onclick="clearCategoryFilter()" style="cursor:pointer;background:rgba(255,255,255,0.25);border-radius:50px;padding:2px 10px;font-size:.8rem;">✕ Clear</span>`;
+  banner.style.display = 'inline-flex';
+}
+
+function clearCategoryFilter() {
+  const banner = document.getElementById('categoryBanner');
+  if (banner) banner.style.display = 'none';
+  const isDbRow = currentListings.length && currentListings[0].description !== undefined && currentListings[0].desc === undefined;
+  isDbRow ? renderCachedListings(currentListings) : renderActivities(currentListings);
+}
+
+// ── FILTERS ──
+function toggleFilter(btn, val) {
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  activeFilters = new Set([val]);
+  const banner = document.getElementById('categoryBanner');
+  if (banner) banner.style.display = 'none';
+  applyFilters();
+}
+
+function applyFilters() {
+  const f = [...activeFilters][0];
+  const hasTag = (a, tag) => Array.isArray(a.tags) ? a.tags.includes(tag) : (a.tags || '').includes(tag);
+  const hasAge = (a, age) => Array.isArray(a.ages) ? a.ages.includes(age) : (a.ages || '').includes(age);
+  const hasCategory = (a, cat) => (a.category || '').toLowerCase() === cat.toLowerCase();
+
+  let list = currentListings;
+  if (f === 'open')         list = list.filter(a => a.open !== undefined ? a.open : a.is_open);
+  else if (f === 'outdoor') list = list.filter(a => hasTag(a, 'outdoor'));
+  else if (f === 'indoor')  list = list.filter(a => hasTag(a, 'indoor'));
+  else if (f === 'free')    list = list.filter(a => hasTag(a, 'free'));
+  else if (f === 'parks')        list = list.filter(a => hasCategory(a, 'Parks'));
+  else if (f === 'playgrounds')  list = list.filter(a => hasCategory(a, 'Playgrounds'));
+  else if (f === 'splashpads')   list = list.filter(a => hasCategory(a, 'Splash Pads'));
+  else if (f === 'toddler') list = list.filter(a => hasAge(a, 'toddler'));
+  else if (f === 'school')  list = list.filter(a => hasAge(a, 'school'));
+  else if (f === 'teens')   list = list.filter(a => hasAge(a, 'teens'));
+
+  const isDbRow = list.length && list[0].description !== undefined && list[0].desc === undefined;
+  isDbRow ? renderCachedListings(list) : renderActivities(list);
+}
+
+// ── SEED REVIEWS ──
+const seedReviews = {
+  1: [{ rating:5, name:"Jessica T.", text:"My 7-year-old absolutely loved it — the exhibits are hands-on and genuinely engaging for kids of all ages.", date:"Feb 14, 2025" }],
+  2: [{ rating:5, name:"Amanda K.", text:"We go almost every week. Free, air-conditioned, amazing — what more could you want? The puppet theater is a hidden gem.", date:"Feb 28, 2025" }],
+  3: [{ rating:4, name:"Brittany S.", text:"My kids are obsessed. Lines move fast and staff is super friendly.", date:"Mar 2, 2025" }],
+  4: [{ rating:5, name:"Tina L.", text:"Wildwoods is incredible for 3–8 year olds. Huge nature play structures — my kids could spend hours there.", date:"Feb 22, 2025" }],
+  5: [{ rating:4, name:"Sofia A.", text:"The lazy river is a huge hit with my toddler. The Blue Comet slide is intense — older kids will love it.", date:"Jan 25, 2025" }],
+  6: [{ rating:5, name:"Rachel B.", text:"Freedom Park is our Sunday tradition. Huge shaded playground, duck pond, and totally free!", date:"Mar 3, 2025" }],
+  7: [{ rating:4, name:"Nicole F.", text:"Toddler Time is great — calm, less crowded, and my 4-year-old felt completely safe.", date:"Feb 27, 2025" }],
+  8: [{ rating:5, name:"Danielle C.", text:"The free art workshops are magical. My daughter painted a tote bag and talked about it for weeks.", date:"Mar 1, 2025" }],
+};
+
+// ── REVIEWS SUMMARY MODAL ──
+function openReviewSummary(id) {
+  currentModalId = id;
+  const a = currentListings.find(x => x.id === id) || sampleActivities.find(x => x.id === id);
+  const name = a ? (a.name || 'This Place') : 'This Place';
+  document.getElementById('summaryTitle').textContent = `⭐ Reviews: ${name}`;
+
+  // Avg stars display
+  const allR = (reviews[id] || []).concat(seedReviews[id] || []);
+  const avg = allR.length ? (allR.reduce((s,r)=>s+r.rating,0)/allR.length).toFixed(1) : a.rating;
+  let starsHtml = '';
+  for(let i=1;i<=5;i++) starsHtml += `<span style="color:${i<=Math.round(avg)?'var(--sun)':'#ddd'};font-size:1.4rem">★</span>`;
+  document.getElementById('summaryStarsDisplay').innerHTML = `${starsHtml}<span style="font-family:'Fredoka One',cursive;font-size:1.3rem;color:var(--ink)">${avg}</span><span style="color:var(--muted);font-size:.85rem;font-weight:700">&nbsp;(${allR.length} reviews)</span>`;
+
+  // List reviews
+  const list = document.getElementById('summaryList');
+  if (!allR.length) {
+    list.innerHTML = `<p style="color:var(--muted);font-weight:600;text-align:center;padding:20px 0">No reviews yet — be the first!</p>`;
+  } else {
+    list.innerHTML = allR.map(r => {
+      let s = '';
+      for(let i=1;i<=5;i++) s += `<span style="color:${i<=r.rating?'var(--sun)':'#ddd'};font-size:.9rem">★</span>`;
+      const ageTag = r.ageRange ? `<span style="background:#EEE5FF;color:var(--plum);border-radius:50px;padding:2px 10px;font-size:.75rem;font-weight:800">${r.ageRange}</span>` : '';
+      return `<div style="border:2px solid var(--border);border-radius:14px;padding:14px 16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="display:flex;gap:2px">${s}</div>
+          <span style="font-size:.78rem;color:var(--muted);font-weight:700">${r.date}</span>
+        </div>
+        ${ageTag ? `<div style="margin-bottom:8px">${ageTag}</div>` : ''}
+        <p style="font-size:.88rem;color:var(--ink);line-height:1.5;margin-bottom:4px">${r.text}</p>
+        <span style="font-size:.8rem;font-weight:800;color:var(--plum)">— ${r.name}</span>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('summaryModal').classList.add('open');
+}
+
+function closeSummaryModal() {
+  document.getElementById('summaryModal').classList.remove('open');
+}
+
+function switchToWriteReview() {
+  closeSummaryModal();
+  const a = currentListings.find(x => x.id === currentModalId);
+  const name = a ? (a.name || '') : '';
+  openReview(currentModalId, name);
+}
+
+// ── WRITE REVIEW MODAL ──
+function openReview(id, name) {
+  currentModalId = id;
+  modalRating = 0;
+  document.getElementById('modalTitle').textContent = `Review: ${name}`;
+  document.getElementById('modalReview').value = '';
+  document.getElementById('modalName').value = '';
+  document.getElementById('modalAgeRange').value = '';
+  document.getElementById('modalEmail').value = '';
+  document.getElementById('reviewSuccess').classList.remove('visible');
+  setModalRating(0);
+  document.getElementById('reviewModal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('reviewModal').classList.remove('open');
+}
+
+function setModalRating(r) {
+  modalRating = r;
+  document.querySelectorAll('#modalStars span').forEach((s,i) => {
+    s.classList.toggle('active', i < r);
+  });
+}
+
+async function submitReview() {
+  if (!modalRating) { alert('Please select a star rating!'); return; }
+  const ageRange = document.getElementById('modalAgeRange').value;
+  if (!ageRange) { alert('Please select your kid\'s age range!'); return; }
+  const name = document.getElementById('modalName').value.trim() || 'Anonymous';
+  const text = document.getElementById('modalReview').value.trim();
+  const email = document.getElementById('modalEmail').value.trim();
+
+  const today = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  const reviewObj = { rating: modalRating, name, text: text || '(no comment)', ageRange, date: today };
+
+  // Always save to in-memory store for immediate UI update
+  if (!reviews[currentModalId]) reviews[currentModalId] = [];
+  reviews[currentModalId].push(reviewObj);
+
+  // Save to Supabase if we have a DB-backed listing ID (numeric, not sample data 1-8)
+  const listingId = currentModalId;
+  if (listingId > 8) {
+    const { error } = await sb.from('reviews').insert({
+      listing_id: listingId,
+      reviewer_name: name,
+      rating: modalRating,
+      review_text: text || null,
+      age_range: ageRange,
+      reviewer_email: email || null,
+      status: 'pending'
+    });
+    if (error) console.warn('Review save error:', error);
+  }
+
+  // Update rating display on the card in the grid
+  const a = currentListings.find(x => x.id === currentModalId) || sampleActivities.find(x => x.id === currentModalId);
+  if (a) {
+    const allR = (reviews[currentModalId] || []).concat(seedReviews[currentModalId] || []);
+    a.rating = (allR.reduce((s,r)=>s+r.rating,0)/allR.length).toFixed(1);
+    a.reviewCount = allR.length;
+    a.review_count = allR.length; // also update DB field name
+    const starsEl = document.getElementById(`stars-${currentModalId}`);
+    if (starsEl) starsEl.innerHTML = renderDynamicStars(a.rating, allR.length, currentModalId);
+  }
+
+  const successMsg = email ? `🌟 Review posted! We'll send updates to ${email}.` : '🌟 Review posted! Thank you!';
+  const successEl = document.getElementById('reviewSuccess');
+  successEl.textContent = successMsg;
+  successEl.classList.add('visible');
+  setTimeout(closeModal, 2200);
+}
+
+// ── EMAIL CAPTURE ──
+async function captureEmail() {
+  const email = document.getElementById('emailInput').value.trim();
+  if (!email || !email.includes('@')) { alert('Please enter a valid email!'); return; }
+  const citySelect = document.getElementById('citySelect');
+  const city = (citySelect && citySelect.value) ? citySelect.value : 'Unknown';
+
+  try {
+    const { error } = await sb.from('email_leads').insert({
+      email,
+      city,
+      source: 'homepage_signup'
+    });
+    if (error && error.code !== '23505') {
+      console.warn('Email capture error:', error);
+    }
+  } catch(e) {
+    console.warn('Email capture exception:', e);
+  }
+
+  // Always show success to user regardless of DB result
+  document.getElementById('emailSuccess').classList.add('visible');
+  document.getElementById('emailInput').value = '';
+}
+
+// ── SUBMISSION FORM ──
+function setSubmitRating(r) {
+  submitRating = r;
+  document.querySelectorAll('#submitStars span').forEach((s,i) => {
+    s.classList.toggle('active', i < r);
+  });
+}
+
+async function submitPlace() {
+  const name = document.getElementById('sb-name').value.trim();
+  const type = document.getElementById('sb-type').value;
+  const city = document.getElementById('sb-city').value.trim();
+  if (!name || !type || !city) { alert('Please fill in Name, Type, and City!'); return; }
+
+  try {
+    const { error } = await sb.from('submissions').insert({
+      business_name: name,
+      type,
+      city,
+      address: document.getElementById('sb-addr').value.trim() || null,
+      url: document.getElementById('sb-url').value.trim() || null,
+      description: document.getElementById('sb-desc').value.trim() || null,
+      submitter_name: document.getElementById('sb-submitter').value.trim() || null,
+      submitter_email: document.getElementById('sb-email').value.trim() || null,
+      age_range: document.getElementById('sb-age').value || null,
+      is_owner: document.getElementById('sb-isowner')?.checked || false,
+      wants_sponsorship: false,
+      status: 'pending'
+    });
+    if (error) console.warn('Submission DB error:', error);
+  } catch(e) {
+    console.warn('Submission exception:', e);
+  }
+
+  // Always show success and reset form
+  document.getElementById('submitSuccess').classList.add('visible');
+  ['sb-name','sb-city','sb-addr','sb-url','sb-desc','sb-submitter','sb-email'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('sb-type').value = '';
+  document.getElementById('sb-age').value = '';
+  submitRating = 0;
+  document.querySelectorAll('#submitStars span').forEach(s => s.classList.remove('active'));
+  setTimeout(() => document.getElementById('submitSuccess').classList.remove('visible'), 5000);
+}
+
+// ── ADVERTISE PAGE ──
+const mainContent = () => document.querySelectorAll('nav, .hero, .filters-bar, .main-content, footer, .cookie-banner');
+
+function showAdvertisePage() {
+  hideLegalPage();
+  mainContent().forEach(el => el.style.display = 'none');
+  document.getElementById('advertisePage').style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function hideAdvertisePage() {
+  document.getElementById('advertisePage').style.display = 'none';
+  mainContent().forEach(el => el.style.display = '');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function toggleSponsorBox() {
+  const checked = document.getElementById('sb-isowner').checked;
+  document.getElementById('sponsorBox').style.display = checked ? 'block' : 'none';
+}
+
+function submitAdvertise() {
+  const required = ['ad-bizname','ad-plan','ad-fname','ad-lname','ad-email','ad-phone','ad-addr','ad-city','ad-bill-name','ad-bill-addr','ad-bill-city','ad-bill-state','ad-bill-zip'];
+  for (const id of required) {
+    if (!document.getElementById(id).value.trim()) {
+      alert('Please fill in all required fields.');
+      document.getElementById(id).focus();
+      return;
+    }
+  }
+  if (!document.getElementById('ad-agree').checked) {
+    alert('Please confirm you agree to the subscription terms.');
+    return;
+  }
+  document.getElementById('advertiseSuccess').classList.add('visible');
+  required.forEach(id => document.getElementById(id).value = '');
+  ['ad-url','ad-category','ad-company','ad-notes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('ad-agree').checked = false;
+  document.getElementById('advertise-form').scrollIntoView({ behavior: 'smooth' });
+}
+
+// ── COOKIE BANNER ──
+(function() {
+  if (!localStorage.getItem('kb_cookie_choice')) {
+    setTimeout(() => document.getElementById('cookieBanner').classList.add('visible'), 1400);
+  }
+})();
+
+function dismissCookie(accepted) {
+  localStorage.setItem('kb_cookie_choice', accepted ? 'accepted' : 'declined');
+  const banner = document.getElementById('cookieBanner');
+  banner.style.transform = 'translateY(110%)';
+  setTimeout(() => banner.style.display = 'none', 350);
+}
+
+// ── CORRECTION MODAL ──
+let currentCorrectionId = null;
+
+function openCorrection(id, name) {
+  currentCorrectionId = id;
+  document.getElementById('correctionPlaceName').textContent = name;
+  document.getElementById('correctionType').value = '';
+  document.getElementById('correctionDetails').value = '';
+  document.getElementById('correctionSuccess').classList.remove('visible');
+  document.getElementById('correctionModal').classList.add('open');
+}
+
+function submitCorrection() {
+  if (!document.getElementById('correctionType').value) {
+    alert('Please select what needs correcting.');
+    return;
+  }
+  document.getElementById('correctionSuccess').classList.add('visible');
+  setTimeout(() => document.getElementById('correctionModal').classList.remove('open'), 2200);
+}
+
+document.getElementById('correctionModal').addEventListener('click', function(e) {
+  if (e.target === this) this.classList.remove('open');
+});
+
+// ── LEGAL PAGES ──
+function showLegalPage(id) {
+  document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
+  document.querySelectorAll('nav, .hero, .filters-bar, .main-content, footer, #advertisePage').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('.legal-page, .page-404').forEach(p => p.style.display = 'none');
+  const target = id === '404' ? document.getElementById('page-404') : document.getElementById('page-' + id);
+  if (target) target.style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function hideLegalPage() {
+  document.querySelectorAll('.legal-page, .page-404').forEach(p => p.style.display = 'none');
+  document.querySelectorAll('nav, .hero, .filters-bar, .main-content, footer').forEach(el => el.style.display = '');
+  document.getElementById('advertisePage').style.display = 'none';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ── MODAL OVERLAY CLOSE ──
+document.getElementById('reviewModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+document.getElementById('summaryModal').addEventListener('click', function(e) {
+  if (e.target === this) closeSummaryModal();
+});
+
+async function loadTopPicksForCity(cityLabel) {
+  // Update UI
+  document.getElementById('topPicksCity').textContent = cityLabel;
+
+  // Show activities section with skeleton grid while loading
+  document.getElementById('activities').style.display = 'block';
+  const grid = document.getElementById('activitiesGrid');
+  grid.innerHTML = Array(8).fill(0).map(() => `
+    <div class="activity-card" style="pointer-events:none">
+      <div class="card-thumb" style="background:#F0EAFF">
+        <div style="width:60px;height:60px;border-radius:50%;background:linear-gradient(90deg,#e0d9f0,#ede8fa,#e0d9f0);background-size:200% 100%;animation:shimmer 1.4s infinite"></div>
+      </div>
+      <div class="card-body">
+        <div style="height:12px;border-radius:6px;background:linear-gradient(90deg,#e0d9f0,#ede8fa,#e0d9f0);background-size:200% 100%;animation:shimmer 1.4s infinite;margin-bottom:10px;width:50%"></div>
+        <div style="height:18px;border-radius:6px;background:linear-gradient(90deg,#e0d9f0,#ede8fa,#e0d9f0);background-size:200% 100%;animation:shimmer 1.4s infinite;margin-bottom:10px;width:80%"></div>
+        <div style="height:12px;border-radius:6px;background:linear-gradient(90deg,#e0d9f0,#ede8fa,#e0d9f0);background-size:200% 100%;animation:shimmer 1.4s infinite;width:65%"></div>
+      </div>
+    </div>`).join('');
+
+  const today = new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+
+  try {
+    const res = await fetch('/api/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ city: cityLabel, type: 'activities' })
+    });
+
+    console.log(`[KiddBusy] /api/search status: ${res.status}`);
+    const data = await res.json();
+    console.log(`[KiddBusy] /api/search response:`, data);
+
+    if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+
+    const textBlocks = (data.content || []).filter(b => b.type === 'text');
+    const raw = textBlocks[textBlocks.length - 1]?.text || '';
+    console.log(`[KiddBusy] Raw AI text (last block):`, raw.slice(0, 200));
+    const match = raw.match(/\[[\s\S]*\]/);
+    if (!match) throw new Error('No JSON array in response');
+    const activities = JSON.parse(match[0]);
+
+    // Upsert each listing to Supabase to get stable IDs for reviews
+    const enriched = await Promise.all(activities.map(async (a) => {
+      const dbId = await upsertListing(a, cityLabel);
+      return { ...a, id: dbId || (Math.floor(Math.random() * 90000) + 10000) };
+    }));
+
+    // Store as current listings for filter operations
+    currentListings = enriched;
+
+    // Render them with full review support
+    const gridEl = document.getElementById('activitiesGrid');
+    gridEl.innerHTML = enriched.map(a => {
+      const stars = renderDynamicStars(a.rating, a.reviewCount, a.id);
+      const tagHtml = a.ages.map(t => `<span class="card-age-tag">${t}</span>`).join('');
+      const bg = { '🏃':'#FFE8E8','🌳':'#E8FFE8','🎨':'#E8EAFF','🎮':'#FFF3E0','🦁':'#FFF8E0','💦':'#E0F7FF','🎭':'#FFF0F5','📚':'#FFFBE0','🍦':'#FFF0E0','🏆':'#E8FFEF','💃':'#F9E8FF','🔬':'#E8F4FF' }[a.emoji] || '#F5F0FF';
+      const safeName = a.name.replace(/'/g, "\\'");
+      return `
+      <div class="activity-card">
+        <div class="card-thumb" style="background:${bg}">
+          <span style="filter:drop-shadow(2px 4px 6px rgba(0,0,0,.15))">${a.emoji}</span>
+          
+        </div>
+        <div class="card-body">
+          <div class="card-category">${a.category}</div>
+          <div class="card-name">${a.name}</div>
+          <div class="card-tags">${tagHtml}</div>
+          <div class="card-desc">${a.desc}</div>
+          <div class="card-addr" style="margin-bottom:12px">📍 ${a.addr}</div>
+          <div class="card-footer">
+            <div class="stars" id="stars-${a.id}">${stars}</div>
+            <button class="review-btn" onclick="openReview(${a.id},'${safeName}')">✍️ Review</button>
+          </div>
+          <div style="margin-top:8px;font-size:.75rem;color:var(--muted);font-weight:600">🤖 AI-sourced · verify before visiting</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Reveal activities section, hide loader
+    document.getElementById('loaderArea').classList.remove('visible');
+    document.getElementById('activities').style.display = 'block';
+    document.getElementById('activities').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  } catch (err) {
+    console.error('Top Picks failed:', err);
+    document.getElementById('loaderArea').classList.remove('visible');
+    document.getElementById('activities').style.display = 'none';
+    document.getElementById('splashState').style.display = 'block';
+    document.getElementById('splashState').innerHTML = `
+      <div style="font-size:3rem;margin-bottom:16px">😕</div>
+      <h2 style="font-family:'Fredoka One',cursive;font-size:1.6rem;color:var(--ink);margin-bottom:10px">Couldn't load results</h2>
+      <p style="color:var(--muted);font-weight:600;margin-bottom:8px">Something went wrong. Please try selecting your city again.</p>
+      <p style="color:#e04449;font-size:.8rem;font-weight:700;margin-bottom:20px;font-family:monospace">${err.message}</p>
+      <button class="submit-btn" onclick="location.reload()">Try Again</button>`;
+  }
+}
+
+function renderDynamicStars(rating, count, id) {
+  let html = '';
+  for (let i = 1; i <= 5; i++) {
+    html += `<span class="star${i <= Math.round(rating) ? ' filled' : ''}">★</span>`;
+  }
+  const clickAttr = id ? `onclick="openDynamicReviewSummary(${id})" style="cursor:pointer;display:inline-flex;align-items:center;gap:2px" title="See reviews"` : `style="display:inline-flex;align-items:center;gap:2px"`;
+  return `<span class="stars-clickable" ${clickAttr}>${html}<span class="star-count">(${count})</span></span>`;
+}
+
+async function openDynamicReviewSummary(id) {
+  currentModalId = id;
+  const dbReviews = await loadReviewsFromDB(id);
+  const memReviews = reviews[id] || [];
+  const allR = [...dbReviews, ...memReviews];
+
+  // Find card name from DOM
+  const card = document.querySelector(`#stars-${id}`)?.closest('.activity-card');
+  const name = card?.querySelector('.card-name')?.textContent || 'This Place';
+  document.getElementById('summaryTitle').textContent = `⭐ Reviews: ${name}`;
+
+  const avg = allR.length ? (allR.reduce((s,r)=>s+r.rating,0)/allR.length).toFixed(1) : '—';
+  let starsHtml = '';
+  for(let i=1;i<=5;i++) starsHtml += `<span style="color:${i<=Math.round(avg)?'var(--sun)':'#ddd'};font-size:1.4rem">★</span>`;
+  document.getElementById('summaryStarsDisplay').innerHTML = `${starsHtml}<span style="font-family:'Fredoka One',cursive;font-size:1.3rem;color:var(--ink)">${avg}</span><span style="color:var(--muted);font-size:.85rem;font-weight:700">&nbsp;(${allR.length} reviews)</span>`;
+
+  const list = document.getElementById('summaryList');
+  if (!allR.length) {
+    list.innerHTML = `<p style="color:var(--muted);font-weight:600;text-align:center;padding:20px 0">No reviews yet — be the first!</p>`;
+  } else {
+    list.innerHTML = allR.map(r => {
+      let s = '';
+      for(let i=1;i<=5;i++) s += `<span style="color:${i<=r.rating?'var(--sun)':'#ddd'};font-size:.9rem">★</span>`;
+      const ageTag = r.ageRange ? `<span style="background:#EEE5FF;color:var(--plum);border-radius:50px;padding:2px 10px;font-size:.75rem;font-weight:800">${r.ageRange}</span>` : '';
+      return `<div style="border:2px solid var(--border);border-radius:14px;padding:14px 16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="display:flex;gap:2px">${s}</div>
+          <span style="font-size:.78rem;color:var(--muted);font-weight:700">${r.date}</span>
+        </div>
+        ${ageTag ? `<div style="margin-bottom:8px">${ageTag}</div>` : ''}
+        <p style="font-size:.88rem;color:var(--ink);line-height:1.5;margin-bottom:4px">${r.text}</p>
+        <span style="font-size:.8rem;font-weight:800;color:var(--plum)">— ${r.name}</span>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('summaryModal').classList.add('open');
+}
+
+// ── RENDER LISTINGS FROM DB ROWS ──
+function renderCachedListings(rows) {
+  currentListings = rows;
+  const bg = { '🏃':'#FFE8E8','🌳':'#E8FFE8','🎨':'#E8EAFF','🎮':'#FFF3E0','🦁':'#FFF8E0','💦':'#E0F7FF','🎭':'#FFF0F5','📚':'#FFFBE0','🍦':'#FFF0E0','🏆':'#E8FFEF','💃':'#F9E8FF','🔬':'#E8F4FF' };
+  document.getElementById('activitiesGrid').innerHTML = rows.map(a => {
+    const stars = renderDynamicStars(a.rating || 0, a.review_count || 1, a.id);
+    const ages = (a.ages || '').split(',').filter(Boolean);
+    const tagHtml = ages.map(t => `<span class="card-age-tag">${t.trim()}</span>`).join('');
+    const cardBg = bg[a.emoji] || '#F5F0FF';
+    const safeName = (a.name || '').replace(/'/g, "\\'");
+    return `
+    <div class="activity-card">
+      <div class="card-thumb" style="background:${cardBg}">
+        <span style="filter:drop-shadow(2px 4px 6px rgba(0,0,0,.15))">${a.emoji || '🎉'}</span>
+        
+      </div>
+      <div class="card-body">
+        <div class="card-category">${a.category || ''}</div>
+        <div class="card-name">${a.name}</div>
+        <div class="card-tags">${tagHtml}</div>
+        <div class="card-desc">${a.description || ''}</div>
+        <div class="card-addr" style="margin-bottom:12px">📍 ${a.address || ''}</div>
+        <div class="card-footer">
+          <div class="stars" id="stars-${a.id}">${stars}</div>
+          <button class="review-btn" onclick="openReview(${a.id},'${safeName}')">✍️ Review</button>
+        </div>
+        <div style="margin-top:8px;font-size:.75rem;color:var(--muted);font-weight:600">🤖 AI-sourced · verify before visiting</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── EVENTS ──
+const EVENTS_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function renderEvents(events) {
+  document.getElementById('eventsList').innerHTML = events.map(e => `
+    <div class="event-card">
+      <div class="event-date-box">
+        <div class="event-month">${e.month || e.event_month || ''}</div>
+        <div class="event-day">${e.day || e.event_day || ''}</div>
+      </div>
+      <div class="event-info">
+        <div class="event-name">${e.name}</div>
+        <div class="event-detail">📌 ${e.detail || ''}</div>
+      </div>
+      <span class="${(e.free || e.is_free) ? 'event-free' : 'event-paid'}">${(e.free || e.is_free) ? 'FREE' : 'Paid'}</span>
+    </div>`).join('');
+}
+
+function showEventsSkeletons() {
+  document.getElementById('eventsList').innerHTML = Array(4).fill(0).map(() => `
+    <div class="event-card" style="pointer-events:none">
+      <div class="event-date-box" style="background:#c9b8f0;min-width:60px"></div>
+      <div class="event-info" style="flex:1">
+        <div style="height:16px;border-radius:6px;background:linear-gradient(90deg,#e0d9f0,#ede8fa,#e0d9f0);background-size:200% 100%;animation:shimmer 1.4s infinite;margin-bottom:10px;width:60%"></div>
+        <div style="height:12px;border-radius:6px;background:linear-gradient(90deg,#e0d9f0,#ede8fa,#e0d9f0);background-size:200% 100%;animation:shimmer 1.4s infinite;width:85%"></div>
+      </div>
+      <div style="width:48px;height:24px;border-radius:50px;background:linear-gradient(90deg,#e0d9f0,#ede8fa,#e0d9f0);background-size:200% 100%;animation:shimmer 1.4s infinite"></div>
+    </div>`).join('');
+}
+
+async function loadEventsForCity(cityLabel) {
+  const eventsSection = document.getElementById('events');
+  const freshnessEl = document.getElementById('eventsFreshness');
+  document.getElementById('eventsCity').textContent = cityLabel;
+  eventsSection.style.display = 'block';
+  showEventsSkeletons();
+
+  // ── CHECK EVENTS CACHE (24h) ──
+  const { data: cached } = await sb
+    .from('events')
+    .select('*')
+    .ilike('city', cityLabel)
+    .order('last_refreshed', { ascending: false })
+    .limit(1);
+
+  const lastRefreshed = cached?.[0]?.last_refreshed;
+  const isFresh = lastRefreshed && (Date.now() - new Date(lastRefreshed)) < EVENTS_TTL_MS;
+
+  if (isFresh) {
+    const { data: events } = await sb
+      .from('events')
+      .select('*')
+      .ilike('city', cityLabel)
+      .order('id', { ascending: true });
+
+    if (events && events.length >= 2) {
+      renderEvents(events);
+      const age = Math.round((Date.now() - new Date(lastRefreshed)) / 3600000);
+      freshnessEl.textContent = age < 1 ? 'Just updated' : `Updated ${age}h ago`;
+      console.log(`[KiddBusy] Events served from cache (${events.length} events, ${age}h old)`);
+      return;
+    }
+  }
+
+  // ── CACHE MISS — fetch from AI ──
+  console.log(`[KiddBusy] Events cache miss for "${cityLabel}", fetching from AI…`);
+  freshnessEl.textContent = 'Searching for events…';
+
+  try {
+    const res = await fetch('/api/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ city: cityLabel, type: 'events' })
+    });
+
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    const textBlocks = (data.content || []).filter(b => b.type === 'text');
+    const raw = textBlocks[textBlocks.length - 1]?.text || '';
+    const match = raw.match(/\[[\s\S]*\]/);
+    if (!match) throw new Error('No JSON array in response');
+    const events = JSON.parse(match[0]);
+
+    // Upsert to Supabase — delete old events for this city first, then insert fresh ones
+    await sb.from('events').delete().ilike('city', cityLabel);
+    const rows = events.map(e => ({
+      city: cityLabel,
+      month: e.month,
+      day: e.day,
+      name: e.name,
+      detail: e.detail,
+      is_free: e.free,
+      last_refreshed: new Date().toISOString()
+    }));
+    await sb.from('events').insert(rows);
+
+    renderEvents(events);
+    freshnessEl.textContent = 'Just updated';
+    console.log(`[KiddBusy] Events saved to cache (${events.length} events)`);
+
+  } catch (err) {
+    console.warn('Events load failed:', err);
+    document.getElementById('eventsList').innerHTML = `
+      <div style="text-align:center;padding:32px;color:var(--muted);font-weight:600">
+        😕 Couldn't load events right now. Check back soon!
+      </div>`;
+    freshnessEl.textContent = '';
+  }
+}
+
+// ── CITY SELECTION FLOW ──
+const CACHE_TTL_MS = 3 * 60 * 60 * 1000; // 3 hours
+
+async function onCitySelected(city) {
+  if (!city) return;
+
+  const cityName = city.split(',')[0].trim();
+
+  // Hide splash, show loader
+  document.getElementById('splashState').style.display = 'none';
+  document.getElementById('activities').style.display = 'none';
+  document.getElementById('loaderArea').classList.add('visible');
+  document.getElementById('activitiesGrid').innerHTML = '';
+  document.getElementById('topPicksCity').textContent = city;
+
+  // Track this city search for the edge function to refresh
+  sb.from('city_searches').upsert({ city, last_searched: new Date().toISOString() }, { onConflict: 'city' }).then(() => {});
+
+  try {
+    // ── CHECK CACHE ──
+    const cutoff = new Date(Date.now() - CACHE_TTL_MS).toISOString();
+    const { data: cached, error: cacheError } = await sb
+      .from('listings')
+      .select('*')
+      .ilike('city', cityName)
+      .eq('status', 'active')
+      .order('rating', { ascending: false })
+      .limit(20);
+
+    console.log(`[KiddBusy] Cache check for "${cityName}": ${cached?.length ?? 0} rows found`, cacheError || '');
+
+    // Filter fresh rows client-side (handles null last_refreshed gracefully)
+    const fresh = (cached || []).filter(r => {
+      if (!r.last_refreshed) return false;
+      return new Date(r.last_refreshed) >= new Date(Date.now() - CACHE_TTL_MS);
+    });
+
+    console.log(`[KiddBusy] Fresh rows (within 3h): ${fresh.length}`);
+
+    if (fresh.length >= 5) {
+      // ── SERVE FROM CACHE ── fast path
+      document.getElementById('loaderMsg').textContent = `Loading ${city}…`;
+      renderCachedListings(fresh);
+      document.getElementById('loaderArea').classList.remove('visible');
+      document.getElementById('activities').style.display = 'block';
+      document.getElementById('activities').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      loadEventsForCity(city); // non-blocking
+      return;
+    }
+
+    // ── CACHE MISS — fire live AI search ──
+    document.getElementById('loaderMsg').textContent = `Finding the best spots in ${city}…`;
+    await loadTopPicksForCity(city);
+    loadEventsForCity(city); // non-blocking — loads in background
+
+  } catch(err) {
+    console.error('City load failed:', err);
+    document.getElementById('loaderArea').classList.remove('visible');
+    document.getElementById('splashState').style.display = 'block';
+  }
+}
+
+// ── CITY DATA & STACKED PICKER ──
+const STATE_ABBR = {"Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA","Colorado":"CO","Connecticut":"CT","Delaware":"DE","Florida":"FL","Georgia":"GA","Hawaii":"HI","Idaho":"ID","Illinois":"IL","Indiana":"IN","Iowa":"IA","Kansas":"KS","Kentucky":"KY","Louisiana":"LA","Maine":"ME","Maryland":"MD","Massachusetts":"MA","Michigan":"MI","Minnesota":"MN","Mississippi":"MS","Missouri":"MO","Montana":"MT","Nebraska":"NE","Nevada":"NV","New Hampshire":"NH","New Jersey":"NJ","New Mexico":"NM","New York":"NY","North Carolina":"NC","North Dakota":"ND","Ohio":"OH","Oklahoma":"OK","Oregon":"OR","Pennsylvania":"PA","Rhode Island":"RI","South Carolina":"SC","South Dakota":"SD","Tennessee":"TN","Texas":"TX","Utah":"UT","Vermont":"VT","Virginia":"VA","Washington":"WA","West Virginia":"WV","Wisconsin":"WI","Wyoming":"WY"};
+const CITIES_BY_STATE = {"Alabama":["Birmingham","Huntsville","Montgomery"],"Alaska":["Anchorage","Fairbanks"],"Arizona":["Phoenix","Tucson","Scottsdale","Mesa","Chandler"],"Arkansas":["Little Rock","Fayetteville"],"California":["Los Angeles","San Diego","San Francisco","San Jose","Sacramento","Fresno","Oakland","Long Beach"],"Colorado":["Denver","Colorado Springs","Aurora","Fort Collins","Boulder"],"Connecticut":["Bridgeport","Hartford","New Haven"],"Delaware":["Wilmington","Dover"],"Florida":["Jacksonville","Miami","Tampa","Orlando","St. Petersburg","Fort Lauderdale","Tallahassee","Gainesville"],"Georgia":["Atlanta","Augusta","Savannah","Columbus","Athens"],"Hawaii":["Honolulu","Hilo"],"Idaho":["Boise","Nampa","Meridian"],"Illinois":["Chicago","Aurora","Naperville","Rockford","Springfield"],"Indiana":["Indianapolis","Fort Wayne","Evansville","South Bend"],"Iowa":["Des Moines","Cedar Rapids","Davenport"],"Kansas":["Wichita","Overland Park","Kansas City"],"Kentucky":["Louisville","Lexington","Bowling Green"],"Louisiana":["New Orleans","Baton Rouge","Shreveport"],"Maine":["Portland","Augusta"],"Maryland":["Baltimore","Frederick","Annapolis"],"Massachusetts":["Boston","Worcester","Springfield","Cambridge"],"Michigan":["Detroit","Grand Rapids","Warren","Ann Arbor","Lansing"],"Minnesota":["Minneapolis","Saint Paul","Rochester","Duluth"],"Mississippi":["Jackson","Gulfport","Biloxi"],"Missouri":["Kansas City","St. Louis","Springfield","Columbia"],"Montana":["Billings","Missoula","Bozeman"],"Nebraska":["Omaha","Lincoln"],"Nevada":["Las Vegas","Henderson","Reno"],"New Hampshire":["Manchester","Nashua","Concord"],"New Jersey":["Newark","Jersey City","Paterson","Trenton"],"New Mexico":["Albuquerque","Santa Fe","Las Cruces"],"New York":["New York City","Buffalo","Rochester","Yonkers","Syracuse","Albany"],"North Carolina":["Charlotte","Raleigh","Greensboro","Durham","Winston-Salem","Fayetteville","Cary","Asheville"],"North Dakota":["Fargo","Bismarck"],"Ohio":["Columbus","Cleveland","Cincinnati","Toledo","Akron","Dayton"],"Oklahoma":["Oklahoma City","Tulsa","Norman"],"Oregon":["Portland","Salem","Eugene","Bend"],"Pennsylvania":["Philadelphia","Pittsburgh","Allentown","Erie","Reading"],"Rhode Island":["Providence","Warwick"],"South Carolina":["Columbia","Charleston","Greenville","Rock Hill"],"South Dakota":["Sioux Falls","Rapid City"],"Tennessee":["Nashville","Memphis","Knoxville","Chattanooga","Clarksville"],"Texas":["Houston","San Antonio","Dallas","Austin","Fort Worth","El Paso","Arlington","Plano","Lubbock","Corpus Christi"],"Utah":["Salt Lake City","West Valley City","Provo","St. George"],"Vermont":["Burlington","Montpelier"],"Virginia":["Virginia Beach","Norfolk","Chesapeake","Richmond","Alexandria","Arlington"],"Washington":["Seattle","Spokane","Tacoma","Vancouver","Bellevue"],"West Virginia":["Charleston","Huntington"],"Wisconsin":["Milwaukee","Madison","Green Bay","Kenosha"],"Wyoming":["Cheyenne","Casper"]};
+
+function onStateSelected(state) {
+  const cityRow = document.getElementById('cityRow');
+  const cityEl = document.getElementById('citySelect');
+  const findBtn = document.getElementById('findBtn');
+
+  // Reset city
+  cityEl.innerHTML = '<option value="">Choose a city…</option>';
+  findBtn.disabled = true;
+  findBtn.classList.remove('active');
+
+  if (!state) {
+    cityRow.style.opacity = '.45';
+    cityRow.style.pointerEvents = 'none';
+    cityEl.disabled = true;
+    return;
+  }
+
+  // Populate cities
+  (CITIES_BY_STATE[state] || []).forEach(c => {
+    const o = document.createElement('option');
+    o.value = c; o.textContent = c;
+    cityEl.appendChild(o);
+  });
+  cityEl.disabled = false;
+  cityRow.style.opacity = '1';
+  cityRow.style.pointerEvents = 'all';
+
+  // Wire city change
+  cityEl.onchange = function() {
+    if (this.value) {
+      findBtn.disabled = false;
+      findBtn.classList.add('active');
+    } else {
+      findBtn.disabled = true;
+      findBtn.classList.remove('active');
+    }
+  };
+}
+
+function onFindClicked() {
+  const state = document.getElementById('stateSelect').value;
+  const city = document.getElementById('citySelect').value;
+  if (!state || !city) return;
+  const abbr = STATE_ABBR[state] || state;
+  onCitySelected(`${city}, ${abbr}`);
+}
+
+// ── INIT ──
+document.addEventListener('DOMContentLoaded', function() {
+  // Populate state dropdown
+  const stateEl = document.getElementById('stateSelect');
+  Object.keys(CITIES_BY_STATE).sort().forEach(s => {
+    const o = document.createElement('option');
+    o.value = s; o.textContent = s;
+    stateEl.appendChild(o);
+  });
+});
+</script>
+</body>
+</html>

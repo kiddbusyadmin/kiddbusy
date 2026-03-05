@@ -1,0 +1,8 @@
+{
+  "name": "kiddbusy",
+  "version": "1.0.0",
+  "description": "KiddBusy family activity finder",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
