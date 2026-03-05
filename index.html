@@ -1434,11 +1434,11 @@ async function upsertListing(activity, city) {
       status: 'active',
       last_refreshed: now,
     })
-    .select('id')
+    .select()
     .single();
 
   if (error) { console.warn('Listing upsert error:', error); return null; }
-  return created.id;
+  return created?.listing_id || created?.id || null;
 }
 
 // ── LOAD REVIEWS FROM SUPABASE ──
@@ -1938,7 +1938,8 @@ async function loadTopPicksForCity(cityLabel) {
     const textBlocks = (data.content || []).filter(b => b.type === 'text');
     const raw = textBlocks[textBlocks.length - 1]?.text || '';
     console.log(`[KiddBusy] Raw AI text (last block):`, raw.slice(0, 200));
-    const match = raw.match(/\[[\s\S]*\]/);
+    const clean = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+    const match = clean.match(/\[[\s\S]*\]/);
     if (!match) throw new Error('No JSON array in response');
     const activities = JSON.parse(match[0]);
 
@@ -2157,7 +2158,8 @@ async function loadEventsForCity(cityLabel) {
 
     const textBlocks = (data.content || []).filter(b => b.type === 'text');
     const raw = textBlocks[textBlocks.length - 1]?.text || '';
-    const match = raw.match(/\[[\s\S]*\]/);
+    const clean = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+    const match = clean.match(/\[[\s\S]*\]/);
     if (!match) throw new Error('No JSON array in response');
     const events = JSON.parse(match[0]);
 
