@@ -26,7 +26,7 @@ exports.handler = async (event, context) => {
   if (!city || typeof city !== 'string' || city.length > 100) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid city' }) };
   }
-  if (!['activities', 'events'].includes(type)) {
+  if (!['activities', 'events', 'reviews'].includes(type)) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid type' }) };
   }
 
@@ -55,17 +55,22 @@ Each object must have these exact keys:
 - detail (string, format: "Venue · Address · Time · Brief description")
 - free (boolean)`;
 
+  const REVIEWS_SYSTEM = `You are generating realistic parent reviews for a family activity finder. Return ONLY a JSON array of strings. No markdown, no explanation, just raw JSON. Reviews should sound like real parents — casual, specific, varied length. No emojis. No fake enthusiasm. Mix of 1-3 sentences.`;
+
   const isActivities = type === 'activities';
+  const isReviews = type === 'reviews';
 
   const requestBody = {
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: isActivities ? 4000 : 2000,
-    tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-    system: isActivities ? ACTIVITIES_SYSTEM : EVENTS_SYSTEM,
+    max_tokens: isActivities ? 4000 : isReviews ? 1500 : 2000,
+    ...(isActivities ? { tools: [{ type: 'web_search_20250305', name: 'web_search' }] } : {}),
+    system: isActivities ? ACTIVITIES_SYSTEM : isReviews ? REVIEWS_SYSTEM : EVENTS_SYSTEM,
     messages: [{
       role: 'user',
       content: isActivities
         ? `Find 20 real, well-known kid-friendly activities in "${city}" good to visit today (${today}). Search the web for accurate, current places. Include a good variety of categories. Return only the JSON array.`
+        : isReviews
+        ? body.prompt
         : `Find 8 real upcoming kid-friendly events in "${city}" happening soon after today (${today}). Include story times, workshops, festivals, museum events. Use real upcoming dates. Return only the JSON array.`
     }]
   };
