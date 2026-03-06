@@ -3,21 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KiddBusy – Find Kid-Friendly Fun Near You</title>
+<title>KiddBusy â Find Kid-Friendly Fun Near You</title>
 <meta name="description" content="Discover kid-friendly businesses open today, local events, and hidden gems in your city. The parent-powered activity finder." />
 
-<!-- ── OPEN GRAPH (Facebook, iMessage, LinkedIn) ── -->
+<!-- ââ OPEN GRAPH (Facebook, iMessage, LinkedIn) ââ -->
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://kiddbusy.com/" />
-<meta property="og:title" content="KiddBusy – Find Kid-Friendly Fun Near You" />
+<meta property="og:title" content="KiddBusy â Find Kid-Friendly Fun Near You" />
 <meta property="og:description" content="Discover kid-friendly businesses open today, local events, and hidden gems in your city. The parent-powered activity finder." />
 <meta property="og:image" content="https://kiddbusy.com/og-image.png" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
 
-<!-- ── TWITTER CARD ── -->
+<!-- ââ TWITTER CARD ââ -->
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="KiddBusy – Find Kid-Friendly Fun Near You" />
+<meta name="twitter:title" content="KiddBusy â Find Kid-Friendly Fun Near You" />
 <meta name="twitter:description" content="Discover kid-friendly businesses open today, local events, and hidden gems in your city." />
 <meta name="twitter:image" content="https://kiddbusy.com/og-image.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -48,7 +48,7 @@
     overflow-x: hidden;
   }
 
-  /* ── NAV ── */
+  /* ââ NAV ââ */
   nav {
     display: flex; align-items: center; justify-content: space-between;
     padding: 18px 40px;
@@ -69,7 +69,7 @@
   }
   .nav-cta:hover { background: #5730A8; transform: translateY(-1px); }
 
-  /* ── HERO ── */
+  /* ââ HERO ââ */
   .hero {
     background: linear-gradient(135deg, #6C3FC5 0%, #4AC6FF 100%);
     padding: 80px 40px 100px;
@@ -197,7 +197,7 @@
     50% { transform: translateY(-14px); }
   }
 
-  /* ── FILTERS ── */
+  /* ââ FILTERS ââ */
   .filters-bar {
     display: flex; gap: 10px; flex-wrap: wrap;
     padding: 24px 40px;
@@ -218,7 +218,7 @@
   }
   .filter-chip .chip-icon { font-size: 1.1rem; }
 
-  /* ── MAIN LAYOUT ── */
+  /* ââ MAIN LAYOUT ââ */
   .main-content {
     max-width: 1200px;
     margin: 0 auto;
@@ -236,7 +236,7 @@
   .see-all { color: var(--plum); font-weight: 800; text-decoration: none; font-size: 0.9rem; }
   .see-all:hover { text-decoration: underline; }
 
-  /* ── ACTIVITY GRID ── */
+  /* ââ ACTIVITY GRID ââ */
   .activities-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -302,6 +302,15 @@
     display: inline-flex; align-items: center; gap: 4px;
   }
   .share-btn:hover { border-color: var(--plum); color: var(--plum); transform: scale(1.05); }
+  .sponsored-badge {
+    position: absolute; top: 10px; left: 10px;
+    background: linear-gradient(135deg, #F59E0B, #D97706);
+    color: white; font-size: 0.72rem; font-weight: 900;
+    padding: 3px 10px; border-radius: 50px;
+    letter-spacing: 0.3px; z-index: 2;
+    box-shadow: 0 2px 8px rgba(245,158,11,0.4);
+  }
+  .activity-card { position: relative; }
   .share-btn.copied { border-color: #22c55e; color: #22c55e; }
   .card-actions { display: flex; align-items: center; gap: 8px; }
   .category-filter {
@@ -324,7 +333,7 @@
   }
   .card-tags { margin-bottom: 10px; }
 
-  /* ── EVENTS SECTION ── */
+  /* ââ EVENTS SECTION ââ */
   .events-list { display: flex; flex-direction: column; gap: 16px; margin-bottom: 60px; }
   .event-card {
     background: var(--card);
@@ -351,7 +360,7 @@
   .event-free { background: var(--grass); color: #fff; border-radius: 50px; padding: 4px 12px; font-size: 0.78rem; font-weight: 800; }
   .event-paid { background: var(--sky); color: #fff; border-radius: 50px; padding: 4px 12px; font-size: 0.78rem; font-weight: 800; }
 
-  /* ── LOADING ── */
+  /* ââ LOADING ââ */
   .loader {
     text-align: center; padding: 60px 20px;
     display: none;
@@ -382,7 +391,7 @@
   }
   .ai-response h3 { font-family: 'Fredoka One', cursive; color: var(--plum); margin-bottom: 12px; font-size: 1.3rem; }
 
-  /* ── SUBMISSION FORM ── */
+  /* ââ SUBMISSION FORM ââ */
   .submit-section {
     background: linear-gradient(135deg, #EEE5FF, #E0F7FF);
     border-radius: 28px;
@@ -425,12 +434,12 @@
   }
   .success-msg.visible { display: block; }
 
-  /* ── STAR RATING INPUT ── */
+  /* ââ STAR RATING INPUT ââ */
   .star-input { display: flex; gap: 6px; }
   .star-input span { font-size: 1.8rem; cursor: pointer; color: #ddd; transition: color .1s; }
   .star-input span:hover, .star-input span.active { color: var(--sun); }
 
-  /* ── EMAIL CAPTURE ── */
+  /* ââ EMAIL CAPTURE ââ */
   .email-capture {
     background: var(--ink);
     border-radius: 28px;
@@ -441,7 +450,7 @@
     overflow: hidden;
   }
   .email-capture::before {
-    content: '🎈🎡🎠🎪';
+    content: 'ðð¡ð ðª';
     position: absolute; top: 20px; font-size: 1.5rem;
     left: 50%; transform: translateX(-50%);
     opacity: 0.3; letter-spacing: 16px;
@@ -478,7 +487,7 @@
   .email-success { display: none; color: var(--sun); font-weight: 800; font-size: 1.1rem; margin-top: 16px; }
   .email-success.visible { display: block; }
 
-  /* ── REVIEW MODAL ── */
+  /* ââ REVIEW MODAL ââ */
   .modal-overlay {
     display: none; position: fixed; inset: 0;
     background: rgba(26,18,48,0.6); z-index: 1000;
@@ -501,7 +510,7 @@
   }
   .modal { position: relative; }
 
-  /* ── CHECKBOX ── */
+  /* ââ CHECKBOX ââ */
   .checkbox-label {
     display: flex; align-items: flex-start; gap: 12px;
     cursor: pointer; font-weight: 700; font-size: .92rem; color: var(--ink);
@@ -519,7 +528,7 @@
     background: var(--plum); border-color: var(--plum);
   }
   .checkbox-label input:checked + .checkbox-custom::after {
-    content: '✓'; color: #fff; font-size: .85rem; font-weight: 900;
+    content: 'â'; color: #fff; font-size: .85rem; font-weight: 900;
   }
   .owner-divider {
     display: flex; align-items: center; gap: 12px;
@@ -544,7 +553,7 @@
   .sponsor-learn-more { font-size: .83rem; font-weight: 800; color: var(--plum); text-decoration: none; }
   .sponsor-learn-more:hover { text-decoration: underline; }
 
-  /* ── ADVERTISE PAGE ── */
+  /* ââ ADVERTISE PAGE ââ */
   .adpage-hero {
     background: linear-gradient(135deg, #1A1230 0%, #3A1F7A 100%);
     padding: 70px 40px 80px; text-align: center;
@@ -649,7 +658,7 @@
     .adpage-stats { grid-template-columns: 1fr 1fr; }
     .howit-arrow { display: none; }
   }
-  /* ── COOKIE BANNER ── */
+  /* ââ COOKIE BANNER ââ */
   .cookie-banner {
     position: fixed; bottom: 0; left: 0; right: 0;
     background: var(--ink);
@@ -676,7 +685,7 @@
   .cookie-btn.decline { background: transparent; color: rgba(255,255,255,.5); border: 1px solid rgba(255,255,255,.15); }
   .cookie-btn.decline:hover { color: rgba(255,255,255,.8); }
 
-  /* ── CORRECTION MODAL ── */
+  /* ââ CORRECTION MODAL ââ */
   .correction-btn {
     background: none; border: none; cursor: pointer;
     font-size: .75rem; color: var(--muted); font-family: 'Nunito', sans-serif;
@@ -686,7 +695,7 @@
   }
   .correction-btn:hover { color: var(--tomato); }
 
-  /* ── LEGAL PAGES ── */
+  /* ââ LEGAL PAGES ââ */
   .legal-page {
     display: none;
     max-width: 780px; margin: 0 auto; padding: 50px 24px 80px;
@@ -706,14 +715,14 @@
   .legal-page ul li { margin-bottom: 6px; }
   .legal-page a { color: var(--plum); }
 
-  /* ── 404 PAGE ── */
+  /* ââ 404 PAGE ââ */
   .page-404 {
     display: none;
     text-align: center; padding: 100px 24px;
   }
   .page-404 .emoji-404 { font-size: 5rem; margin-bottom: 20px; }
   .page-404 h1 { font-family: 'Fredoka One', cursive; font-size: 2.8rem; color: var(--ink); margin-bottom: 12px; }
-  /* ── FOOTER ── */
+  /* ââ FOOTER ââ */
   footer {
     background: var(--ink); color: rgba(255,255,255,0.6);
     text-align: center; padding: 32px 24px;
@@ -721,7 +730,7 @@
   }
   footer strong { color: var(--sun); }
 
-  /* ── RESPONSIVE ── */
+  /* ââ RESPONSIVE ââ */
   @media (max-width: 640px) {
     nav { padding: 14px 20px; }
     .nav-links { display: none; }
@@ -766,53 +775,53 @@
   <div class="logo">Kidd<span>Busy</span></div>
   <ul class="nav-links">
     <li><a href="#submit" onclick="document.getElementById('submit').scrollIntoView({behavior:'smooth'});return false;">Submit a Place</a></li>
-    <li><a href="#" onclick="showAdvertisePage(); return false;" style="color:var(--sun);font-weight:800">📣 Advertise</a></li>
+    <li><a href="#" onclick="showAdvertisePage(); return false;" style="color:var(--sun);font-weight:800">ð£ Advertise</a></li>
   </ul>
   <button class="nav-cta" onclick="document.getElementById('email-section').scrollIntoView({behavior:'smooth'})">Get Updates</button>
 </nav>
 
 <!-- HERO -->
 <section class="hero">
-  <div class="hero-emojis" style="left:5%;top:20%;animation-delay:.5s">🎠</div>
-  <div class="hero-emojis" style="right:6%;top:15%;animation-delay:1.2s">🎡</div>
-  <div class="hero-emojis" style="left:12%;bottom:15%;animation-delay:.2s">🎈</div>
-  <div class="hero-emojis" style="right:10%;bottom:10%;animation-delay:.8s">🦁</div>
-  <div class="hero-badge">🌟 Parent-Powered Activity Finder</div>
+  <div class="hero-emojis" style="left:5%;top:20%;animation-delay:.5s">ð </div>
+  <div class="hero-emojis" style="right:6%;top:15%;animation-delay:1.2s">ð¡</div>
+  <div class="hero-emojis" style="left:12%;bottom:15%;animation-delay:.2s">ð</div>
+  <div class="hero-emojis" style="right:10%;bottom:10%;animation-delay:.8s">ð¦</div>
+  <div class="hero-badge">ð Parent-Powered Activity Finder</div>
   <h1>Find <span class="highlight">Fun Things</span><br>To Do With Your Kids</h1>
-  <p>Discover kid-friendly activities, local gems, and family fun — just pick your city.</p>
+  <p>Discover kid-friendly activities, local gems, and family fun â just pick your city.</p>
   <div class="city-picker-wrap">
     <div class="stacked-picker">
       <div class="pick-row">
-        <label for="stateSelect">📍 State</label>
+        <label for="stateSelect">ð State</label>
         <select id="stateSelect" onchange="onStateSelected(this.value)">
-          <option value="">Choose a state…</option>
+          <option value="">Choose a stateâ¦</option>
         </select>
-        <span class="pick-arrow">▾</span>
+        <span class="pick-arrow">â¾</span>
       </div>
       <div class="pick-row" id="cityRow" style="opacity:.45;pointer-events:none">
-        <label for="citySelect">🏙️ City</label>
+        <label for="citySelect">ðï¸ City</label>
         <select id="citySelect" disabled>
-          <option value="">Choose a city…</option>
+          <option value="">Choose a cityâ¦</option>
         </select>
-        <span class="pick-arrow">▾</span>
+        <span class="pick-arrow">â¾</span>
       </div>
-      <button class="find-btn" id="findBtn" disabled onclick="onFindClicked()">Find Activities 🎉</button>
+      <button class="find-btn" id="findBtn" disabled onclick="onFindClicked()">Find Activities ð</button>
     </div>
   </div>
 </section>
 
 <!-- FILTERS -->
 <div class="filters-bar" id="filtersBar">
-  <button class="filter-chip active" onclick="toggleFilter(this,'all')"><span class="chip-icon">✨</span> All</button>
-  <button class="filter-chip" onclick="toggleFilter(this,'outdoor')"><span class="chip-icon">🌳</span> Outdoor</button>
-  <button class="filter-chip" onclick="toggleFilter(this,'indoor')"><span class="chip-icon">🏠</span> Indoor</button>
-  <button class="filter-chip" onclick="toggleFilter(this,'free')"><span class="chip-icon">🆓</span> Free</button>
-  <button class="filter-chip" onclick="toggleFilter(this,'parks')"><span class="chip-icon">🌿</span> Parks</button>
-  <button class="filter-chip" onclick="toggleFilter(this,'playgrounds')"><span class="chip-icon">🛝</span> Playgrounds</button>
-  <button class="filter-chip" onclick="toggleFilter(this,'splashpads')"><span class="chip-icon">💦</span> Splash Pads</button>
-  <button class="filter-chip" onclick="toggleFilter(this,'toddler')"><span class="chip-icon">🍼</span> Toddlers</button>
-  <button class="filter-chip" onclick="toggleFilter(this,'school')"><span class="chip-icon">🎒</span> School Age</button>
-  <button class="filter-chip" onclick="toggleFilter(this,'teens')"><span class="chip-icon">🎮</span> Teens</button>
+  <button class="filter-chip active" onclick="toggleFilter(this,'all')"><span class="chip-icon">â¨</span> All</button>
+  <button class="filter-chip" onclick="toggleFilter(this,'outdoor')"><span class="chip-icon">ð³</span> Outdoor</button>
+  <button class="filter-chip" onclick="toggleFilter(this,'indoor')"><span class="chip-icon">ð </span> Indoor</button>
+  <button class="filter-chip" onclick="toggleFilter(this,'free')"><span class="chip-icon">ð</span> Free</button>
+  <button class="filter-chip" onclick="toggleFilter(this,'parks')"><span class="chip-icon">ð¿</span> Parks</button>
+  <button class="filter-chip" onclick="toggleFilter(this,'playgrounds')"><span class="chip-icon">ð</span> Playgrounds</button>
+  <button class="filter-chip" onclick="toggleFilter(this,'splashpads')"><span class="chip-icon">ð¦</span> Splash Pads</button>
+  <button class="filter-chip" onclick="toggleFilter(this,'toddler')"><span class="chip-icon">ð¼</span> Toddlers</button>
+  <button class="filter-chip" onclick="toggleFilter(this,'school')"><span class="chip-icon">ð</span> School Age</button>
+  <button class="filter-chip" onclick="toggleFilter(this,'teens')"><span class="chip-icon">ð®</span> Teens</button>
 </div>
 
 <!-- MAIN CONTENT -->
@@ -821,30 +830,30 @@
   <!-- AI RESULTS AREA -->
   <div id="loaderArea" class="loader">
     <div class="spinner"></div>
-    <p id="loaderMsg">Finding kid-friendly fun…</p>
+    <p id="loaderMsg">Finding kid-friendly funâ¦</p>
   </div>
   <div id="aiResultArea" style="display:none"></div>
 
-  <!-- SPLASH STATE – shown before city is selected -->
+  <!-- SPLASH STATE â shown before city is selected -->
   <div id="splashState" style="text-align:center;padding:80px 24px 60px">
-    <div style="font-size:4rem;margin-bottom:20px">🗺️</div>
+    <div style="font-size:4rem;margin-bottom:20px">ðºï¸</div>
     <h2 style="font-family:'Fredoka One',cursive;font-size:2rem;color:var(--ink);margin-bottom:12px">Where are you exploring?</h2>
     <p style="color:var(--muted);font-weight:600;font-size:1.05rem;max-width:420px;margin:0 auto 32px">Pick your city above and we'll find the best kid-friendly spots near you.</p>
     <div style="display:flex;justify-content:center;gap:20px;flex-wrap:wrap;font-size:2rem">
-      <span style="animation:float 3s ease-in-out infinite;animation-delay:0s">🎪</span>
-      <span style="animation:float 3s ease-in-out infinite;animation-delay:.4s">🎨</span>
-      <span style="animation:float 3s ease-in-out infinite;animation-delay:.8s">🏊</span>
-      <span style="animation:float 3s ease-in-out infinite;animation-delay:1.2s">🌳</span>
-      <span style="animation:float 3s ease-in-out infinite;animation-delay:1.6s">🎢</span>
-      <span style="animation:float 3s ease-in-out infinite;animation-delay:2s">🦁</span>
+      <span style="animation:float 3s ease-in-out infinite;animation-delay:0s">ðª</span>
+      <span style="animation:float 3s ease-in-out infinite;animation-delay:.4s">ð¨</span>
+      <span style="animation:float 3s ease-in-out infinite;animation-delay:.8s">ð</span>
+      <span style="animation:float 3s ease-in-out infinite;animation-delay:1.2s">ð³</span>
+      <span style="animation:float 3s ease-in-out infinite;animation-delay:1.6s">ð¢</span>
+      <span style="animation:float 3s ease-in-out infinite;animation-delay:2s">ð¦</span>
     </div>
   </div>
 
   <!-- ACTIVITIES -->
   <section id="activities" style="display:none">
     <div class="section-header">
-      <h2 class="section-title"><span>Top Picks</span> in <span id="topPicksCity" style="color:var(--plum)">…</span></h2>
-      <a href="#" class="see-all" onclick="event.preventDefault(); showAllActivities()">See all →</a>
+      <h2 class="section-title"><span>Top Picks</span> in <span id="topPicksCity" style="color:var(--plum)">â¦</span></h2>
+      <a href="#" class="see-all" onclick="event.preventDefault(); showAllActivities()">See all â</a>
     </div>
     <div class="activities-grid" id="activitiesGrid"></div>
   </section>
@@ -852,7 +861,7 @@
   <!-- EVENTS -->
   <section id="events" style="display:none">
     <div class="section-header">
-      <h2 class="section-title"><span>Upcoming Events</span> in <span id="eventsCity" style="color:var(--plum)">…</span></h2>
+      <h2 class="section-title"><span>Upcoming Events</span> in <span id="eventsCity" style="color:var(--plum)">â¦</span></h2>
       <span id="eventsFreshness" style="font-size:.78rem;color:var(--muted);font-weight:700"></span>
     </div>
     <div class="events-list" id="eventsList"></div>
@@ -860,24 +869,24 @@
 
   <!-- EMAIL CAPTURE -->
   <section class="email-capture" id="email-section">
-    <h2>Never Miss the <span>Fun</span> 🎉</h2>
+    <h2>Never Miss the <span>Fun</span> ð</h2>
     <p>Get a weekly roundup of new places and events for families in your city.</p>
     <div class="email-form">
       <input type="email" id="emailInput" placeholder="your@email.com" />
       <button onclick="captureEmail()">Count Me In!</button>
     </div>
     <div class="email-perks">
-      <span class="email-perk">✅ Weekly picks</span>
-      <span class="email-perk">✅ Free events first</span>
-      <span class="email-perk">✅ No spam ever</span>
+      <span class="email-perk">â Weekly picks</span>
+      <span class="email-perk">â Free events first</span>
+      <span class="email-perk">â No spam ever</span>
     </div>
-    <div class="email-success" id="emailSuccess">🎊 You're in! Check your inbox for a welcome note.</div>
+    <div class="email-success" id="emailSuccess">ð You're in! Check your inbox for a welcome note.</div>
   </section>
 
   <!-- SUBMIT A PLACE -->
   <section class="submit-section" id="submit">
-    <h2>🗺️ Know a Great Spot?</h2>
-    <p>Submit a business or event for review — help other parents discover awesome places!</p>
+    <h2>ðºï¸ Know a Great Spot?</h2>
+    <p>Submit a business or event for review â help other parents discover awesome places!</p>
     <div class="form-grid">
       <div class="form-group">
         <label>Business / Event Name *</label>
@@ -886,19 +895,19 @@
       <div class="form-group">
         <label>Type *</label>
         <select id="sb-type">
-          <option value="">Select type…</option>
-          <option>🏃 Indoor Play</option>
-          <option>🌳 Park / Outdoor</option>
-          <option>🎨 Arts & Crafts</option>
-          <option>🎭 Theater / Shows</option>
-          <option>🦁 Zoo / Animals</option>
-          <option>🏊 Swimming</option>
-          <option>🎮 Arcade / Gaming</option>
-          <option>📚 Library / Education</option>
-          <option>🎪 Festival / Fair</option>
-          <option>🍦 Food & Treats</option>
-          <option>🏆 Sports</option>
-          <option>💃 Dance / Music</option>
+          <option value="">Select typeâ¦</option>
+          <option>ð Indoor Play</option>
+          <option>ð³ Park / Outdoor</option>
+          <option>ð¨ Arts & Crafts</option>
+          <option>ð­ Theater / Shows</option>
+          <option>ð¦ Zoo / Animals</option>
+          <option>ð Swimming</option>
+          <option>ð® Arcade / Gaming</option>
+          <option>ð Library / Education</option>
+          <option>ðª Festival / Fair</option>
+          <option>ð¦ Food & Treats</option>
+          <option>ð Sports</option>
+          <option>ð Dance / Music</option>
           <option>Other</option>
         </select>
       </div>
@@ -918,9 +927,9 @@
         <label>Age Range</label>
         <select id="sb-age">
           <option value="">All ages</option>
-          <option>0–2 (Toddler)</option>
-          <option>3–5 (Preschool)</option>
-          <option>6–12 (School Age)</option>
+          <option>0â2 (Toddler)</option>
+          <option>3â5 (Preschool)</option>
+          <option>6â12 (School Age)</option>
           <option>13+ (Teen)</option>
           <option>All ages</option>
         </select>
@@ -932,11 +941,11 @@
       <div class="form-group full">
         <label>Your Rating</label>
         <div class="star-input" id="submitStars">
-          <span onclick="setSubmitRating(1)">★</span>
-          <span onclick="setSubmitRating(2)">★</span>
-          <span onclick="setSubmitRating(3)">★</span>
-          <span onclick="setSubmitRating(4)">★</span>
-          <span onclick="setSubmitRating(5)">★</span>
+          <span onclick="setSubmitRating(1)">â</span>
+          <span onclick="setSubmitRating(2)">â</span>
+          <span onclick="setSubmitRating(3)">â</span>
+          <span onclick="setSubmitRating(4)">â</span>
+          <span onclick="setSubmitRating(5)">â</span>
         </div>
       </div>
       <div class="form-group">
@@ -961,22 +970,22 @@
       </div>
       <div class="form-group full sponsor-box" id="sponsorBox" style="display:none">
         <div class="sponsor-pitch">
-          <div class="sponsor-pitch-icon">⭐</div>
+          <div class="sponsor-pitch-icon">â­</div>
           <div>
             <strong>Get featured as a Sponsored Location</strong>
             <p>Sponsored listings appear at the top of search results with a highlighted badge, reaching thousands of local parents each month. Starting at just $49/month.</p>
-            <a href="#" onclick="showAdvertisePage(); return false;" class="sponsor-learn-more">Learn more about sponsorship →</a>
+            <a href="#" onclick="showAdvertisePage(); return false;" class="sponsor-learn-more">Learn more about sponsorship â</a>
           </div>
         </div>
         <label class="checkbox-label" style="margin-top:14px">
           <input type="checkbox" id="sb-sponsor" />
           <span class="checkbox-custom" style="--cb-color:#FFCF2F"></span>
-          <span>Yes, I'm interested in a <strong>Sponsored Listing</strong> — contact me with details</span>
+          <span>Yes, I'm interested in a <strong>Sponsored Listing</strong> â contact me with details</span>
         </label>
       </div>
     </div>
-    <button class="submit-btn" onclick="submitPlace()">Submit for Review 🚀</button>
-    <div class="success-msg" id="submitSuccess">🎉 Thanks! Our team will review your submission within 24 hours.</div>
+    <button class="submit-btn" onclick="submitPlace()">Submit for Review ð</button>
+    <div class="success-msg" id="submitSuccess">ð Thanks! Our team will review your submission within 24 hours.</div>
   </section>
 
 </main>
@@ -984,28 +993,28 @@
 <!-- REVIEWS SUMMARY MODAL -->
 <div class="modal-overlay" id="summaryModal">
   <div class="modal" style="max-width:520px">
-    <button class="modal-close" onclick="closeSummaryModal()">✕</button>
+    <button class="modal-close" onclick="closeSummaryModal()">â</button>
     <h3 id="summaryTitle">Reviews</h3>
     <div id="summaryStarsDisplay" style="display:flex;align-items:center;gap:8px;margin:8px 0 20px"></div>
     <div id="summaryList" style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:14px"></div>
-    <button class="submit-btn" style="width:100%;margin-top:20px" onclick="switchToWriteReview()">✍️ Write a Review</button>
+    <button class="submit-btn" style="width:100%;margin-top:20px" onclick="switchToWriteReview()">âï¸ Write a Review</button>
   </div>
 </div>
 
 <!-- WRITE REVIEW MODAL -->
 <div class="modal-overlay" id="reviewModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeModal()">✕</button>
+    <button class="modal-close" onclick="closeModal()">â</button>
     <h3 id="modalTitle">Leave a Review</h3>
     <p style="color:var(--muted);margin-bottom:20px;font-weight:600;font-size:.9rem">Share your experience with other families</p>
     <div style="margin-bottom:16px">
       <label style="display:block;margin-bottom:8px;font-weight:800;font-size:.88rem">Your Rating</label>
       <div class="star-input" id="modalStars">
-        <span onclick="setModalRating(1)">★</span>
-        <span onclick="setModalRating(2)">★</span>
-        <span onclick="setModalRating(3)">★</span>
-        <span onclick="setModalRating(4)">★</span>
-        <span onclick="setModalRating(5)">★</span>
+        <span onclick="setModalRating(1)">â</span>
+        <span onclick="setModalRating(2)">â</span>
+        <span onclick="setModalRating(3)">â</span>
+        <span onclick="setModalRating(4)">â</span>
+        <span onclick="setModalRating(5)">â</span>
       </div>
     </div>
     <div style="margin-bottom:16px">
@@ -1019,31 +1028,31 @@
     <div style="margin-bottom:16px">
       <label style="display:block;margin-bottom:6px;font-weight:800;font-size:.88rem">Kid's Age Range <span style="color:var(--tomato)">*</span></label>
       <select id="modalAgeRange" style="width:100%">
-        <option value="">Select age range…</option>
-        <option>👶 0–2 (Baby / Toddler)</option>
-        <option>🧒 3–5 (Preschool)</option>
-        <option>🎒 6–9 (Early School Age)</option>
-        <option>🏃 10–12 (Tween)</option>
-        <option>🎮 13+ (Teen)</option>
+        <option value="">Select age rangeâ¦</option>
+        <option>ð¶ 0â2 (Baby / Toddler)</option>
+        <option>ð§ 3â5 (Preschool)</option>
+        <option>ð 6â9 (Early School Age)</option>
+        <option>ð 10â12 (Tween)</option>
+        <option>ð® 13+ (Teen)</option>
       </select>
     </div>
     <div style="margin-bottom:20px">
-      <label style="display:block;margin-bottom:6px;font-weight:800;font-size:.88rem">Email <span style="color:var(--muted);font-weight:600;font-size:.8rem">(optional — get notified of new places near you)</span></label>
+      <label style="display:block;margin-bottom:6px;font-weight:800;font-size:.88rem">Email <span style="color:var(--muted);font-weight:600;font-size:.8rem">(optional â get notified of new places near you)</span></label>
       <input type="email" id="modalEmail" placeholder="your@email.com" style="width:100%" />
     </div>
-    <button class="submit-btn" style="width:100%" onclick="submitReview()">Post Review ✨</button>
-    <div class="success-msg" id="reviewSuccess">🌟 Review posted! Thank you!</div>
+    <button class="submit-btn" style="width:100%" onclick="submitReview()">Post Review â¨</button>
+    <div class="success-msg" id="reviewSuccess">ð Review posted! Thank you!</div>
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════
+<!-- ââââââââââââââââââââââââââââââââââââââââââ
      ADVERTISE PAGE (hidden by default)
-══════════════════════════════════════════ -->
+ââââââââââââââââââââââââââââââââââââââââââ -->
 <div id="advertisePage" style="display:none">
 
   <div class="adpage-hero">
-    <button class="adpage-back" onclick="hideAdvertisePage()">← Back to listings</button>
-    <div class="adpage-badge">💼 For Business Owners</div>
+    <button class="adpage-back" onclick="hideAdvertisePage()">â Back to listings</button>
+    <div class="adpage-badge">ð¼ For Business Owners</div>
     <h1>Reach <span>Thousands of Parents</span><br>in Your City</h1>
     <p>KiddBusy is where Charlotte families go to find their next adventure. Put your business front and center.</p>
   </div>
@@ -1063,34 +1072,34 @@
         <!-- TIER 1: SPONSORED LISTING -->
         <div class="pricing-card featured">
           <div class="pricing-best">Most Popular</div>
-          <div class="pricing-icon">⭐</div>
+          <div class="pricing-icon">â­</div>
           <h3>Sponsored Listing</h3>
           <div class="pricing-price">$49<span>/mo</span></div>
-          <p class="pricing-desc">Your listing appears pinned to the top of relevant search results with a golden "Sponsored" badge — the first thing parents see.</p>
+          <p class="pricing-desc">Your listing appears pinned to the top of relevant search results with a golden "Sponsored" badge â the first thing parents see.</p>
           <ul class="pricing-perks">
-            <li>✅ Pinned to top of category results</li>
-            <li>✅ Gold ⭐ Sponsored badge on your card</li>
-            <li>✅ Bold listing with your logo / photo</li>
-            <li>✅ Direct link to your website or booking page</li>
-            <li>✅ Featured in our weekly parent email</li>
-            <li>✅ Monthly performance report</li>
+            <li>â Pinned to top of category results</li>
+            <li>â Gold â­ Sponsored badge on your card</li>
+            <li>â Bold listing with your logo / photo</li>
+            <li>â Direct link to your website or booking page</li>
+            <li>â Featured in our weekly parent email</li>
+            <li>â Monthly performance report</li>
           </ul>
           <button class="pricing-cta" onclick="document.getElementById('advertise-form').scrollIntoView({behavior:'smooth'})">Get Started for $49/mo</button>
         </div>
 
         <!-- TIER 2: BANNER AD -->
         <div class="pricing-card">
-          <div class="pricing-icon">📣</div>
+          <div class="pricing-icon">ð£</div>
           <h3>Banner Ad</h3>
           <div class="pricing-price">$199<span>/mo</span></div>
-          <p class="pricing-desc">A high-visibility banner displayed above the activity grid — seen by every parent who visits, regardless of what they're searching for.</p>
+          <p class="pricing-desc">A high-visibility banner displayed above the activity grid â seen by every parent who visits, regardless of what they're searching for.</p>
           <ul class="pricing-perks">
-            <li>✅ Full-width banner above all results</li>
-            <li>✅ Custom image, headline & CTA button</li>
-            <li>✅ Reaches ALL visitors, not just category searchers</li>
-            <li>✅ Ideal for seasonal promos (summer camp, holiday shows)</li>
-            <li>✅ Swap your creative monthly at no charge</li>
-            <li>✅ Monthly impression & click report</li>
+            <li>â Full-width banner above all results</li>
+            <li>â Custom image, headline & CTA button</li>
+            <li>â Reaches ALL visitors, not just category searchers</li>
+            <li>â Ideal for seasonal promos (summer camp, holiday shows)</li>
+            <li>â Swap your creative monthly at no charge</li>
+            <li>â Monthly impression & click report</li>
           </ul>
           <button class="pricing-cta secondary" onclick="document.getElementById('advertise-form').scrollIntoView({behavior:'smooth'})">Reserve a Banner</button>
         </div>
@@ -1098,15 +1107,15 @@
         <!-- TIER 3: BUNDLE -->
         <div class="pricing-card bundle">
           <div class="pricing-best best-value">Best Value</div>
-          <div class="pricing-icon">🚀</div>
+          <div class="pricing-icon">ð</div>
           <h3>Full Visibility Bundle</h3>
           <div class="pricing-price">$219<span>/mo</span></div>
           <div style="text-align:center;margin-top:-8px;margin-bottom:12px"><span style="text-decoration:line-through;color:var(--muted);font-size:.9rem">$248 separately</span> <span style="background:var(--grass);color:#fff;border-radius:50px;padding:2px 10px;font-size:.8rem;font-weight:800">Save $29</span></div>
-          <p class="pricing-desc">Everything in both tiers — sponsored listing AND banner ad — for maximum exposure across all of KiddBusy.</p>
+          <p class="pricing-desc">Everything in both tiers â sponsored listing AND banner ad â for maximum exposure across all of KiddBusy.</p>
           <ul class="pricing-perks">
-            <li>✅ Everything in Sponsored Listing</li>
-            <li>✅ Everything in Banner Ad</li>
-            <li>✅ Priority placement over single-tier sponsors</li>
+            <li>â Everything in Sponsored Listing</li>
+            <li>â Everything in Banner Ad</li>
+            <li>â Priority placement over single-tier sponsors</li>
 
           </ul>
           <button class="pricing-cta" onclick="document.getElementById('advertise-form').scrollIntoView({behavior:'smooth'})">Get the Bundle</button>
@@ -1121,11 +1130,11 @@
       <p class="adpage-section-sub" style="text-align:center">From signup to your first parent click in under 48 hours.</p>
       <div class="howit-steps">
         <div class="howit-step"><div class="step-num">1</div><strong>Fill out the form below</strong><p>Tell us about your business and pick your plan.</p></div>
-        <div class="howit-arrow">→</div>
+        <div class="howit-arrow">â</div>
         <div class="howit-step"><div class="step-num">2</div><strong>We set up your listing</strong><p>Our team reviews and goes live within 48 hours.</p></div>
-        <div class="howit-arrow">→</div>
+        <div class="howit-arrow">â</div>
         <div class="howit-step"><div class="step-num">3</div><strong>Parents find you</strong><p>Your business reaches thousands of local families immediately.</p></div>
-        <div class="howit-arrow">→</div>
+        <div class="howit-arrow">â</div>
         <div class="howit-step"><div class="step-num">4</div><strong>Track your results</strong><p>Monthly reports show impressions, clicks & new reviews.</p></div>
       </div>
     </div>
@@ -1143,10 +1152,10 @@
         <div class="form-group">
           <label>Plan *</label>
           <select id="ad-plan">
-            <option value="">Select a plan…</option>
-            <option value="sponsored">⭐ Sponsored Listing — $49/mo</option>
-            <option value="banner">📣 Banner Ad — $199/mo</option>
-            <option value="bundle">🚀 Full Visibility Bundle — $219/mo</option>
+            <option value="">Select a planâ¦</option>
+            <option value="sponsored">â­ Sponsored Listing â $49/mo</option>
+            <option value="banner">ð£ Banner Ad â $199/mo</option>
+            <option value="bundle">ð Full Visibility Bundle â $219/mo</option>
           </select>
         </div>
         <div class="form-group">
@@ -1180,19 +1189,19 @@
         <div class="form-group">
           <label>Category</label>
           <select id="ad-category">
-            <option value="">Select category…</option>
-            <option>🏃 Indoor Play</option>
-            <option>🌳 Park / Outdoor</option>
-            <option>🎨 Arts & Crafts</option>
-            <option>🎭 Theater / Shows</option>
-            <option>🦁 Zoo / Animals</option>
-            <option>🏊 Swimming</option>
-            <option>🎮 Arcade / Gaming</option>
-            <option>📚 Library / Education</option>
-            <option>🎪 Festival / Fair</option>
-            <option>🍦 Food & Treats</option>
-            <option>🏆 Sports / Fitness</option>
-            <option>💃 Dance / Music</option>
+            <option value="">Select categoryâ¦</option>
+            <option>ð Indoor Play</option>
+            <option>ð³ Park / Outdoor</option>
+            <option>ð¨ Arts & Crafts</option>
+            <option>ð­ Theater / Shows</option>
+            <option>ð¦ Zoo / Animals</option>
+            <option>ð Swimming</option>
+            <option>ð® Arcade / Gaming</option>
+            <option>ð Library / Education</option>
+            <option>ðª Festival / Fair</option>
+            <option>ð¦ Food & Treats</option>
+            <option>ð Sports / Fitness</option>
+            <option>ð Dance / Music</option>
           </select>
         </div>
 
@@ -1227,7 +1236,7 @@
 
         <div class="form-group full">
           <label>Anything else we should know?</label>
-          <textarea id="ad-notes" placeholder="Seasonal promotions, preferred go-live date, special requests…"></textarea>
+          <textarea id="ad-notes" placeholder="Seasonal promotions, preferred go-live date, special requestsâ¦"></textarea>
         </div>
 
         <div class="form-group full">
@@ -1239,29 +1248,29 @@
         </div>
       </div>
 
-      <button class="submit-btn" style="font-size:1.1rem;padding:16px 44px" onclick="submitAdvertise()">Reserve My Spot 🚀</button>
-      <div class="success-msg" id="advertiseSuccess">🎉 Got it! We'll reach out within one business day to confirm your plan and next steps.</div>
+      <button class="submit-btn" style="font-size:1.1rem;padding:16px 44px" onclick="submitAdvertise()">Reserve My Spot ð</button>
+      <div class="success-msg" id="advertiseSuccess">ð Got it! We'll reach out within one business day to confirm your plan and next steps.</div>
     </div>
 
   </div><!-- /adpage-content -->
 </div><!-- /advertisePage -->
 
 <footer>
-  <p>Made with ❤️ for families everywhere · <strong>KiddBusy</strong> · &copy; 2025</p>
+  <p>Made with â¤ï¸ for families everywhere Â· <strong>KiddBusy</strong> Â· &copy; 2025</p>
   <p style="margin-top:6px;font-size:.8rem">Listings are community-sourced and AI-assisted. Always verify hours before visiting.</p>
   <p style="margin-top:10px;font-size:.78rem;opacity:.6">
     <a href="#" onclick="showLegalPage('privacy');return false;" style="color:rgba(255,255,255,.6);text-decoration:none">Privacy Policy</a>
-    &nbsp;·&nbsp;
+    &nbsp;Â·&nbsp;
     <a href="#" onclick="showLegalPage('terms');return false;" style="color:rgba(255,255,255,.6);text-decoration:none">Terms of Service</a>
-    &nbsp;·&nbsp;
+    &nbsp;Â·&nbsp;
     <a href="#" onclick="showLegalPage('404');return false;" style="color:rgba(255,255,255,.6);text-decoration:none">Contact</a>
   </p>
 </footer>
 
-<!-- ── COOKIE BANNER ── -->
+<!-- ââ COOKIE BANNER ââ -->
 <div class="cookie-banner" id="cookieBanner">
   <div class="cookie-text">
-    🍪 We use cookies to remember your city and improve your experience.
+    ðª We use cookies to remember your city and improve your experience.
     <a href="#" onclick="showLegalPage('privacy');return false;">Privacy Policy</a>
   </div>
   <div class="cookie-actions">
@@ -1270,37 +1279,37 @@
   </div>
 </div>
 
-<!-- ── CORRECTION MODAL ── -->
+<!-- ââ CORRECTION MODAL ââ -->
 <div class="modal-overlay" id="correctionModal">
   <div class="modal" style="max-width:460px">
-    <button class="modal-close" onclick="document.getElementById('correctionModal').classList.remove('open')">✕</button>
-    <h3 style="margin-bottom:6px">🚩 Suggest a Correction</h3>
+    <button class="modal-close" onclick="document.getElementById('correctionModal').classList.remove('open')">â</button>
+    <h3 style="margin-bottom:6px">ð© Suggest a Correction</h3>
     <p style="color:var(--muted);font-size:.85rem;font-weight:600;margin-bottom:20px" id="correctionPlaceName"></p>
     <div style="margin-bottom:14px">
       <label style="display:block;margin-bottom:6px;font-weight:800;font-size:.88rem">What needs correcting? *</label>
       <select id="correctionType" style="width:100%">
-        <option value="">Select issue…</option>
-        <option>❌ Business is permanently closed</option>
-        <option>🕐 Hours are wrong</option>
-        <option>📍 Address is incorrect</option>
-        <option>💰 Pricing info is outdated</option>
-        <option>📝 Description is inaccurate</option>
-        <option>🔞 Not actually kid-friendly</option>
+        <option value="">Select issueâ¦</option>
+        <option>â Business is permanently closed</option>
+        <option>ð Hours are wrong</option>
+        <option>ð Address is incorrect</option>
+        <option>ð° Pricing info is outdated</option>
+        <option>ð Description is inaccurate</option>
+        <option>ð Not actually kid-friendly</option>
         <option>Other</option>
       </select>
     </div>
     <div style="margin-bottom:20px">
       <label style="display:block;margin-bottom:6px;font-weight:800;font-size:.88rem">Details <span style="font-weight:500;color:var(--muted)">(optional)</span></label>
-      <textarea id="correctionDetails" placeholder="e.g. They closed in January 2025, the correct hours are 9am–6pm…" style="width:100%;min-height:80px"></textarea>
+      <textarea id="correctionDetails" placeholder="e.g. They closed in January 2025, the correct hours are 9amâ6pmâ¦" style="width:100%;min-height:80px"></textarea>
     </div>
-    <button class="submit-btn" style="width:100%" onclick="submitCorrection()">Send Correction ✓</button>
-    <div class="success-msg" id="correctionSuccess">✅ Got it — we'll review and update within 24 hours. Thank you!</div>
+    <button class="submit-btn" style="width:100%" onclick="submitCorrection()">Send Correction â</button>
+    <div class="success-msg" id="correctionSuccess">â Got it â we'll review and update within 24 hours. Thank you!</div>
   </div>
 </div>
 
-<!-- ── PRIVACY POLICY PAGE ── -->
+<!-- ââ PRIVACY POLICY PAGE ââ -->
 <div class="legal-page" id="page-privacy">
-  <button class="legal-back" onclick="hideLegalPage()">← Back</button>
+  <button class="legal-back" onclick="hideLegalPage()">â Back</button>
   <h1>Privacy Policy</h1>
   <p class="legal-date">Last updated: March 2025</p>
 
@@ -1313,7 +1322,7 @@
     <li><strong>Email addresses</strong> when you sign up for our newsletter or submit a review</li>
     <li><strong>Business information</strong> when you submit a listing or sponsor inquiry</li>
     <li><strong>Review content</strong> including your name, rating, written review, and your child's age range</li>
-    <li><strong>Billing information</strong> when you purchase a sponsored placement (processed securely by Stripe — we never store card numbers)</li>
+    <li><strong>Billing information</strong> when you purchase a sponsored placement (processed securely by Stripe â we never store card numbers)</li>
   </ul>
   <p>We also automatically collect standard web data including your IP address, browser type, pages visited, and time spent on pages through analytics tools (Google Analytics or Plausible).</p>
 
@@ -1332,25 +1341,25 @@
   <h2>Data Sharing</h2>
   <p>We do not sell your personal data. We share data only with:</p>
   <ul>
-    <li><strong>Supabase</strong> — our database provider (data stored in the US)</li>
-    <li><strong>Stripe</strong> — payment processing for sponsor subscriptions</li>
-    <li><strong>Resend</strong> — email delivery for newsletters and notifications</li>
-    <li><strong>Anthropic</strong> — AI processing of submitted content for review and moderation (no personal data is used to train AI models)</li>
+    <li><strong>Supabase</strong> â our database provider (data stored in the US)</li>
+    <li><strong>Stripe</strong> â payment processing for sponsor subscriptions</li>
+    <li><strong>Resend</strong> â email delivery for newsletters and notifications</li>
+    <li><strong>Anthropic</strong> â AI processing of submitted content for review and moderation (no personal data is used to train AI models)</li>
   </ul>
 
   <h2>Your Rights</h2>
   <p>You have the right to access, correct, or delete your personal data at any time. California residents have additional rights under CCPA. To make a request, email <strong>privacy [at] kiddbusy.com</strong>.</p>
 
   <h2>Children's Privacy</h2>
-  <p>KiddBusy is a platform <em>for</em> parents — we do not knowingly collect personal information directly from children under 13. Reviews ask for a child's age range only to help other parents, not to identify any individual child.</p>
+  <p>KiddBusy is a platform <em>for</em> parents â we do not knowingly collect personal information directly from children under 13. Reviews ask for a child's age range only to help other parents, not to identify any individual child.</p>
 
   <h2>Contact</h2>
   <p>Questions about this policy? Email <strong>privacy [at] kiddbusy.com</strong>.</p>
 </div>
 
-<!-- ── TERMS OF SERVICE PAGE ── -->
+<!-- ââ TERMS OF SERVICE PAGE ââ -->
 <div class="legal-page" id="page-terms">
-  <button class="legal-back" onclick="hideLegalPage()">← Back</button>
+  <button class="legal-back" onclick="hideLegalPage()">â Back</button>
   <h1>Terms of Service</h1>
   <p class="legal-date">Last updated: March 2025</p>
 
@@ -1386,21 +1395,21 @@
   <p>Questions? Email <strong>legal [at] kiddbusy.com</strong>.</p>
 </div>
 
-<!-- ── 404 PAGE ── -->
+<!-- ââ 404 PAGE ââ -->
 <div class="page-404" id="page-404">
-  <div class="emoji-404">🗺️</div>
+  <div class="emoji-404">ðºï¸</div>
   <h1>Looks Like You're Lost!</h1>
-  <p>We couldn't find what you were looking for — but there's plenty of fun on the main page.</p>
-  <button class="submit-btn" onclick="hideLegalPage()">Take Me Home 🏠</button>
+  <p>We couldn't find what you were looking for â but there's plenty of fun on the main page.</p>
+  <button class="submit-btn" onclick="hideLegalPage()">Take Me Home ð </button>
 </div>
 
 <script>
-// ── SUPABASE ──
+// ââ SUPABASE ââ
 const SUPABASE_URL = 'https://wgwexzyqaiwosgraaczi.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indnd2V4enlxYWl3b3NncmFhY3ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODEwNzUsImV4cCI6MjA4ODI1NzA3NX0.IS8u4SL1XeLh9KgD4c2Pl9BiGNg0zkiNauUzu_QtKH8';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// ── ANALYTICS ──
+// ââ ANALYTICS ââ
 const SESSION_ID = (() => {
   let id = sessionStorage.getItem('kb_session');
   if (!id) { id = Math.random().toString(36).slice(2) + Date.now().toString(36); sessionStorage.setItem('kb_session', id); }
@@ -1412,23 +1421,23 @@ function track(event, city = null, value = null) {
   sb.from('analytics').insert({ event, city, value, session_id: SESSION_ID }).then(() => {});
 }
 
-// ── SHARE ──
+// ââ SHARE ââ
 function sharePlace(btn, name, address, desc) {
-  const text = `🎉 Check out ${name}!\n📍 ${address}\n${desc ? desc.split('|')[0].trim() + '\n' : ''}🔗 ${window.location.href}`;
+  const text = `ð Check out ${name}!\nð ${address}\n${desc ? desc.split('|')[0].trim() + '\n' : ''}ð ${window.location.href}`;
   if (navigator.share) {
     navigator.share({ title: name, text, url: window.location.href })
       .catch(() => {});
   } else {
     navigator.clipboard.writeText(text).then(() => {
-      btn.innerHTML = '✅ Copied!';
+      btn.innerHTML = 'â Copied!';
       btn.classList.add('copied');
-      setTimeout(() => { btn.innerHTML = '📤 Share'; btn.classList.remove('copied'); }, 2000);
+      setTimeout(() => { btn.innerHTML = 'ð¤ Share'; btn.classList.remove('copied'); }, 2000);
     });
   }
   track('share_click', null, name);
 }
 
-// ── UPSERT LISTING & GET STABLE ID ──
+// ââ UPSERT LISTING & GET STABLE ID ââ
 async function upsertListing(activity, city, source = 'ai_generated') {
   const cityParts = city.split(',');
   const cityName = cityParts[0]?.trim() || city;
@@ -1481,7 +1490,7 @@ async function upsertListing(activity, city, source = 'ai_generated') {
   return created?.listing_id || created?.id || null;
 }
 
-// ── LOAD REVIEWS FROM SUPABASE ──
+// ââ LOAD REVIEWS FROM SUPABASE ââ
 async function loadReviewsFromDB(listingId) {
   const { data, error } = await sb
     .from('reviews')
@@ -1499,17 +1508,17 @@ async function loadReviewsFromDB(listingId) {
   }));
 }
 const sampleActivities = [
-  { id:1, name:"Discovery Place Science", category:"Children's Museum", emoji:"🔬", desc:"Hands-on STEM exhibits, a live aquarium with jellyfish & tree frogs, a toddler KidScience zone, and the Carolinas' largest IMAX dome theater.", addr:"301 N Tryon St, Uptown Charlotte", open:true, ages:["toddler","school","teens"], tags:["indoor","paid"], rating:4.8, reviewCount:1 },
-  { id:2, name:"ImaginOn Library", category:"Library / Education", emoji:"📚", desc:"Totally free interactive library and play space with a children's theater, puppet shows, hands-on exhibits, and dedicated teen and under-11 zones.", addr:"300 E 7th St, Charlotte", open:true, ages:["toddler","school","teens"], tags:["indoor","free"], rating:4.9, reviewCount:1 },
-  { id:3, name:"Big Air Trampoline Park", category:"Indoor Play", emoji:"🏃", desc:"Wall-to-wall trampolines, dodgeball courts, ninja warrior courses, foam pits, a climbing wall, and a dedicated kid jump zone for younger jumpers.", addr:"2408 Sardis Rd N, Charlotte", open:true, ages:["toddler","school","teens"], tags:["indoor","paid"], rating:4.5, reviewCount:1 },
-  { id:4, name:"US National Whitewater Center", category:"Outdoor", emoji:"🌊", desc:"2-acre Wildwoods nature play area for young kids, plus hiking, zip lines, and flatwater paddling. Activity pass is $18; parking $12. Opens daily at 9am.", addr:"5000 Whitewater Center Pkwy", open:true, ages:["toddler","school","teens"], tags:["outdoor","paid"], rating:4.7, reviewCount:1 },
-  { id:5, name:"Ray's Splash Planet", category:"Swimming", emoji:"💦", desc:"Indoor waterpark with a 3-story Blue Comet slide, Lazy River, toddler Saturation Station, and wave pool. County residents pay just $8 for kids.", addr:"215 N Sycamore St, Charlotte", open:false, ages:["toddler","school"], tags:["indoor","paid"], rating:4.4, reviewCount:1 },
-  { id:6, name:"Freedom Park", category:"Outdoor", emoji:"🌳", desc:"Beloved Charlotte park with a huge playground, shaded walking trails, duck pond, NFL Play 60 playground, and free open green space for picnics.", addr:"1900 East Blvd, Dilworth", open:true, ages:["toddler","school","teens"], tags:["outdoor","free"], rating:4.8, reviewCount:1 },
-  { id:7, name:"Sky Zone Trampoline Park", category:"Indoor Play", emoji:"🎯", desc:"Freestyle jumping, SkySlam basketball, foam zone, and special Toddler Time for kids 7 and under. Birthday party packages available.", addr:"7325 Smith Corners Blvd, Charlotte", open:true, ages:["toddler","school","teens"], tags:["indoor","paid"], rating:4.3, reviewCount:1 },
-  { id:8, name:"Camp North End", category:"Arts & Crafts", emoji:"🎨", desc:"Creative outdoor hub with free art workshops by Broken Crayon every other month, live music, life-size Legos on the lawn, and family story time at That's Novel Books.", addr:"1801 N Graham St, Charlotte", open:true, ages:["toddler","school","teens"], tags:["outdoor","free"], rating:4.6, reviewCount:1 },
+  { id:1, name:"Discovery Place Science", category:"Children's Museum", emoji:"ð¬", desc:"Hands-on STEM exhibits, a live aquarium with jellyfish & tree frogs, a toddler KidScience zone, and the Carolinas' largest IMAX dome theater.", addr:"301 N Tryon St, Uptown Charlotte", open:true, ages:["toddler","school","teens"], tags:["indoor","paid"], rating:4.8, reviewCount:1 },
+  { id:2, name:"ImaginOn Library", category:"Library / Education", emoji:"ð", desc:"Totally free interactive library and play space with a children's theater, puppet shows, hands-on exhibits, and dedicated teen and under-11 zones.", addr:"300 E 7th St, Charlotte", open:true, ages:["toddler","school","teens"], tags:["indoor","free"], rating:4.9, reviewCount:1 },
+  { id:3, name:"Big Air Trampoline Park", category:"Indoor Play", emoji:"ð", desc:"Wall-to-wall trampolines, dodgeball courts, ninja warrior courses, foam pits, a climbing wall, and a dedicated kid jump zone for younger jumpers.", addr:"2408 Sardis Rd N, Charlotte", open:true, ages:["toddler","school","teens"], tags:["indoor","paid"], rating:4.5, reviewCount:1 },
+  { id:4, name:"US National Whitewater Center", category:"Outdoor", emoji:"ð", desc:"2-acre Wildwoods nature play area for young kids, plus hiking, zip lines, and flatwater paddling. Activity pass is $18; parking $12. Opens daily at 9am.", addr:"5000 Whitewater Center Pkwy", open:true, ages:["toddler","school","teens"], tags:["outdoor","paid"], rating:4.7, reviewCount:1 },
+  { id:5, name:"Ray's Splash Planet", category:"Swimming", emoji:"ð¦", desc:"Indoor waterpark with a 3-story Blue Comet slide, Lazy River, toddler Saturation Station, and wave pool. County residents pay just $8 for kids.", addr:"215 N Sycamore St, Charlotte", open:false, ages:["toddler","school"], tags:["indoor","paid"], rating:4.4, reviewCount:1 },
+  { id:6, name:"Freedom Park", category:"Outdoor", emoji:"ð³", desc:"Beloved Charlotte park with a huge playground, shaded walking trails, duck pond, NFL Play 60 playground, and free open green space for picnics.", addr:"1900 East Blvd, Dilworth", open:true, ages:["toddler","school","teens"], tags:["outdoor","free"], rating:4.8, reviewCount:1 },
+  { id:7, name:"Sky Zone Trampoline Park", category:"Indoor Play", emoji:"ð¯", desc:"Freestyle jumping, SkySlam basketball, foam zone, and special Toddler Time for kids 7 and under. Birthday party packages available.", addr:"7325 Smith Corners Blvd, Charlotte", open:true, ages:["toddler","school","teens"], tags:["indoor","paid"], rating:4.3, reviewCount:1 },
+  { id:8, name:"Camp North End", category:"Arts & Crafts", emoji:"ð¨", desc:"Creative outdoor hub with free art workshops by Broken Crayon every other month, live music, life-size Legos on the lawn, and family story time at That's Novel Books.", addr:"1801 N Graham St, Charlotte", open:true, ages:["toddler","school","teens"], tags:["outdoor","free"], rating:4.6, reviewCount:1 },
 ];
 
-// ── REVIEWS STORE ──
+// ââ REVIEWS STORE ââ
 let reviews = {};
 let currentModalId = null;
 let modalRating = 0;
@@ -1520,13 +1529,13 @@ let currentListings = []; // tracks whatever city is currently loaded
 // Ratings store (persisted in memory)
 let userRatings = {};
 
-// ── RENDER ACTIVITIES ──
+// ââ RENDER ACTIVITIES ââ
 function renderActivities(list) {
   const grid = document.getElementById('activitiesGrid');
   grid.innerHTML = list.map(a => {
     const stars = renderStars(a.id, a.rating);
     const tagHtml = a.ages.map(t => `<span class="card-age-tag">${t}</span>`).join('');
-    const bg = { '🏃':'#FFE8E8','🌳':'#E8FFE8','🎨':'#E8EAFF','🎮':'#FFF3E0','🦁':'#FFF8E0','🖌️':'#FCE4EC' }[a.emoji] || '#F5F0FF';
+    const bg = { 'ð':'#FFE8E8','ð³':'#E8FFE8','ð¨':'#E8EAFF','ð®':'#FFF3E0','ð¦':'#FFF8E0','ðï¸':'#FCE4EC' }[a.emoji] || '#F5F0FF';
     const catKey = a.category.toLowerCase().replace(/[^a-z]/g,'');
     return `
     <div class="activity-card">
@@ -1535,19 +1544,19 @@ function renderActivities(list) {
         
       </div>
       <div class="card-body">
-        <div class="card-category category-filter" onclick="filterByCategory('${a.category}')" title="Filter by ${a.category}">${a.category} <span style="font-size:.7rem;opacity:.6">▼</span></div>
+        <div class="card-category category-filter" onclick="filterByCategory('${a.category}')" title="Filter by ${a.category}">${a.category} <span style="font-size:.7rem;opacity:.6">â¼</span></div>
         <div class="card-name">${a.name}</div>
         <div class="card-tags">${tagHtml}</div>
         <div class="card-desc">${a.desc}</div>
-        <div class="card-addr" style="margin-bottom:12px">📍 ${a.addr}</div>
+        <div class="card-addr" style="margin-bottom:12px">ð ${a.addr}</div>
         <div class="card-footer">
           <div class="stars" id="stars-${a.id}">${stars}</div>
           <div class="card-actions">
-            <button class="share-btn" onclick="sharePlace(this,'${a.name.replace(/'/g,"\\'")}','${(a.addr||'').replace(/'/g,"\\'")}','${(a.desc||'').replace(/'/g,"\\'")}')">📤 Share</button>
-            <button class="review-btn" onclick="openReview(${a.id},'${a.name.replace(/'/g,"\\'")}')">✍️ Review</button>
+            <button class="share-btn" onclick="sharePlace(this,'${a.name.replace(/'/g,"\\'")}','${(a.addr||'').replace(/'/g,"\\'")}','${(a.desc||'').replace(/'/g,"\\'")}')">ð¤ Share</button>
+            <button class="review-btn" onclick="openReview(${a.id},'${a.name.replace(/'/g,"\\'")}')">âï¸ Review</button>
           </div>
         </div>
-        <button class="correction-btn" onclick="openCorrection(${a.id},'${a.name.replace(/'/g,"\\'")}')">🚩 Suggest a correction</button>
+        <button class="correction-btn" onclick="openCorrection(${a.id},'${a.name.replace(/'/g,"\\'")}')">ð© Suggest a correction</button>
       </div>
     </div>`;
   }).join('');
@@ -1558,7 +1567,7 @@ function renderStars(id, rating) {
   const r = a ? parseFloat(a.rating) : rating;
   let starsHtml = '';
   for (let i=1;i<=5;i++) {
-    starsHtml += `<span class="star${i<=Math.round(r)?' filled':''}">★</span>`;
+    starsHtml += `<span class="star${i<=Math.round(r)?' filled':''}">â</span>`;
   }
   return `<span class="stars-clickable" onclick="event.stopPropagation();openReviewSummary(${id})" title="See reviews" style="cursor:pointer;display:inline-flex;align-items:center;gap:2px">${starsHtml}<span class="star-count">(${a?.reviewCount||0})</span></span>`;
 }
@@ -1576,7 +1585,7 @@ function showAllActivities() {
   document.getElementById('activities').scrollIntoView({ behavior: 'smooth' });
 }
 
-// ── CATEGORY FILTER FROM CARD ──
+// ââ CATEGORY FILTER FROM CARD ââ
 function filterByCategory(category) {
   // Deactivate all chips and activate 'all' as fallback visual
   document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
@@ -1594,7 +1603,7 @@ function filterByCategory(category) {
     banner.style.cssText = 'background:var(--plum);color:#fff;border-radius:50px;padding:8px 20px;font-weight:800;font-size:.88rem;display:inline-flex;align-items:center;gap:10px;margin-bottom:16px;';
     document.getElementById('activitiesGrid').before(banner);
   }
-  banner.innerHTML = `Filtering: <strong>${category}</strong> &nbsp;<span onclick="clearCategoryFilter()" style="cursor:pointer;background:rgba(255,255,255,0.25);border-radius:50px;padding:2px 10px;font-size:.8rem;">✕ Clear</span>`;
+  banner.innerHTML = `Filtering: <strong>${category}</strong> &nbsp;<span onclick="clearCategoryFilter()" style="cursor:pointer;background:rgba(255,255,255,0.25);border-radius:50px;padding:2px 10px;font-size:.8rem;">â Clear</span>`;
   banner.style.display = 'inline-flex';
 }
 
@@ -1605,7 +1614,7 @@ function clearCategoryFilter() {
   isDbRow ? renderCachedListings(currentListings) : renderActivities(currentListings);
 }
 
-// ── FILTERS ──
+// ââ FILTERS ââ
 function toggleFilter(btn, val) {
   document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
   btn.classList.add('active');
@@ -1638,40 +1647,40 @@ function applyFilters() {
   isDbRow ? renderCachedListings(list) : renderActivities(list);
 }
 
-// ── SEED REVIEWS ──
+// ââ SEED REVIEWS ââ
 const seedReviews = {
-  1: [{ rating:5, name:"Jessica T.", text:"My 7-year-old absolutely loved it — the exhibits are hands-on and genuinely engaging for kids of all ages.", date:"Feb 14, 2025" }],
-  2: [{ rating:5, name:"Amanda K.", text:"We go almost every week. Free, air-conditioned, amazing — what more could you want? The puppet theater is a hidden gem.", date:"Feb 28, 2025" }],
+  1: [{ rating:5, name:"Jessica T.", text:"My 7-year-old absolutely loved it â the exhibits are hands-on and genuinely engaging for kids of all ages.", date:"Feb 14, 2025" }],
+  2: [{ rating:5, name:"Amanda K.", text:"We go almost every week. Free, air-conditioned, amazing â what more could you want? The puppet theater is a hidden gem.", date:"Feb 28, 2025" }],
   3: [{ rating:4, name:"Brittany S.", text:"My kids are obsessed. Lines move fast and staff is super friendly.", date:"Mar 2, 2025" }],
-  4: [{ rating:5, name:"Tina L.", text:"Wildwoods is incredible for 3–8 year olds. Huge nature play structures — my kids could spend hours there.", date:"Feb 22, 2025" }],
-  5: [{ rating:4, name:"Sofia A.", text:"The lazy river is a huge hit with my toddler. The Blue Comet slide is intense — older kids will love it.", date:"Jan 25, 2025" }],
+  4: [{ rating:5, name:"Tina L.", text:"Wildwoods is incredible for 3â8 year olds. Huge nature play structures â my kids could spend hours there.", date:"Feb 22, 2025" }],
+  5: [{ rating:4, name:"Sofia A.", text:"The lazy river is a huge hit with my toddler. The Blue Comet slide is intense â older kids will love it.", date:"Jan 25, 2025" }],
   6: [{ rating:5, name:"Rachel B.", text:"Freedom Park is our Sunday tradition. Huge shaded playground, duck pond, and totally free!", date:"Mar 3, 2025" }],
-  7: [{ rating:4, name:"Nicole F.", text:"Toddler Time is great — calm, less crowded, and my 4-year-old felt completely safe.", date:"Feb 27, 2025" }],
+  7: [{ rating:4, name:"Nicole F.", text:"Toddler Time is great â calm, less crowded, and my 4-year-old felt completely safe.", date:"Feb 27, 2025" }],
   8: [{ rating:5, name:"Danielle C.", text:"The free art workshops are magical. My daughter painted a tote bag and talked about it for weeks.", date:"Mar 1, 2025" }],
 };
 
-// ── REVIEWS SUMMARY MODAL ──
+// ââ REVIEWS SUMMARY MODAL ââ
 function openReviewSummary(id) {
   currentModalId = id;
   const a = currentListings.find(x => x.id === id) || sampleActivities.find(x => x.id === id);
   const name = a ? (a.name || 'This Place') : 'This Place';
-  document.getElementById('summaryTitle').textContent = `⭐ Reviews: ${name}`;
+  document.getElementById('summaryTitle').textContent = `â­ Reviews: ${name}`;
 
   // Avg stars display
   const allR = (reviews[id] || []).concat(seedReviews[id] || []);
   const avg = allR.length ? (allR.reduce((s,r)=>s+r.rating,0)/allR.length).toFixed(1) : a.rating;
   let starsHtml = '';
-  for(let i=1;i<=5;i++) starsHtml += `<span style="color:${i<=Math.round(avg)?'var(--sun)':'#ddd'};font-size:1.4rem">★</span>`;
+  for(let i=1;i<=5;i++) starsHtml += `<span style="color:${i<=Math.round(avg)?'var(--sun)':'#ddd'};font-size:1.4rem">â</span>`;
   document.getElementById('summaryStarsDisplay').innerHTML = `${starsHtml}<span style="font-family:'Fredoka One',cursive;font-size:1.3rem;color:var(--ink)">${avg}</span><span style="color:var(--muted);font-size:.85rem;font-weight:700">&nbsp;(${allR.length} reviews)</span>`;
 
   // List reviews
   const list = document.getElementById('summaryList');
   if (!allR.length) {
-    list.innerHTML = `<p style="color:var(--muted);font-weight:600;text-align:center;padding:20px 0">No reviews yet — be the first!</p>`;
+    list.innerHTML = `<p style="color:var(--muted);font-weight:600;text-align:center;padding:20px 0">No reviews yet â be the first!</p>`;
   } else {
     list.innerHTML = allR.map(r => {
       let s = '';
-      for(let i=1;i<=5;i++) s += `<span style="color:${i<=r.rating?'var(--sun)':'#ddd'};font-size:.9rem">★</span>`;
+      for(let i=1;i<=5;i++) s += `<span style="color:${i<=r.rating?'var(--sun)':'#ddd'};font-size:.9rem">â</span>`;
       const ageTag = r.ageRange ? `<span style="background:#EEE5FF;color:var(--plum);border-radius:50px;padding:2px 10px;font-size:.75rem;font-weight:800">${r.ageRange}</span>` : '';
       return `<div style="border:2px solid var(--border);border-radius:14px;padding:14px 16px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -1680,7 +1689,7 @@ function openReviewSummary(id) {
         </div>
         ${ageTag ? `<div style="margin-bottom:8px">${ageTag}</div>` : ''}
         <p style="font-size:.88rem;color:var(--ink);line-height:1.5;margin-bottom:4px">${r.text}</p>
-        <span style="font-size:.8rem;font-weight:800;color:var(--plum)">— ${r.name}</span>
+        <span style="font-size:.8rem;font-weight:800;color:var(--plum)">â ${r.name}</span>
       </div>`;
     }).join('');
   }
@@ -1698,7 +1707,7 @@ function switchToWriteReview() {
   openReview(currentModalId, name);
 }
 
-// ── WRITE REVIEW MODAL ──
+// ââ WRITE REVIEW MODAL ââ
 function openReview(id, name) {
   currentModalId = id;
   modalRating = 0;
@@ -1767,7 +1776,7 @@ async function submitReview() {
     if (starsEl) starsEl.innerHTML = renderDynamicStars(a.rating, allR.length, currentModalId);
   }
 
-  const successMsg = email ? `🌟 Review posted! We'll send updates to ${email}.` : '🌟 Review posted! Thank you!';
+  const successMsg = email ? `ð Review posted! We'll send updates to ${email}.` : 'ð Review posted! Thank you!';
   const successEl = document.getElementById('reviewSuccess');
   successEl.textContent = successMsg;
   successEl.classList.add('visible');
@@ -1775,7 +1784,7 @@ async function submitReview() {
   setTimeout(closeModal, 2200);
 }
 
-// ── EMAIL CAPTURE ──
+// ââ EMAIL CAPTURE ââ
 async function captureEmail() {
   const email = document.getElementById('emailInput').value.trim();
   if (!email || !email.includes('@')) { alert('Please enter a valid email!'); return; }
@@ -1801,7 +1810,7 @@ async function captureEmail() {
   track('email_capture', city);
 }
 
-// ── SUBMISSION FORM ──
+// ââ SUBMISSION FORM ââ
 function setSubmitRating(r) {
   submitRating = r;
   document.querySelectorAll('#submitStars span').forEach((s,i) => {
@@ -1846,7 +1855,7 @@ async function submitPlace() {
   setTimeout(() => document.getElementById('submitSuccess').classList.remove('visible'), 5000);
 }
 
-// ── ADVERTISE PAGE ──
+// ââ ADVERTISE PAGE ââ
 const mainContent = () => document.querySelectorAll('nav, .hero, .filters-bar, .main-content, footer, .cookie-banner');
 
 function showAdvertisePage() {
@@ -1888,7 +1897,7 @@ function submitAdvertise() {
   document.getElementById('advertise-form').scrollIntoView({ behavior: 'smooth' });
 }
 
-// ── COOKIE BANNER ──
+// ââ COOKIE BANNER ââ
 (function() {
   if (!localStorage.getItem('kb_cookie_choice')) {
     setTimeout(() => document.getElementById('cookieBanner').classList.add('visible'), 1400);
@@ -1902,7 +1911,7 @@ function dismissCookie(accepted) {
   setTimeout(() => banner.style.display = 'none', 350);
 }
 
-// ── CORRECTION MODAL ──
+// ââ CORRECTION MODAL ââ
 let currentCorrectionId = null;
 
 function openCorrection(id, name) {
@@ -1927,7 +1936,7 @@ document.getElementById('correctionModal').addEventListener('click', function(e)
   if (e.target === this) this.classList.remove('open');
 });
 
-// ── LEGAL PAGES ──
+// ââ LEGAL PAGES ââ
 function showLegalPage(id) {
   document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
   document.querySelectorAll('nav, .hero, .filters-bar, .main-content, footer, #advertisePage').forEach(el => el.style.display = 'none');
@@ -1944,7 +1953,7 @@ function hideLegalPage() {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// ── MODAL OVERLAY CLOSE ──
+// ââ MODAL OVERLAY CLOSE ââ
 document.getElementById('reviewModal').addEventListener('click', function(e) {
   if (e.target === this) closeModal();
 });
@@ -2011,7 +2020,7 @@ async function loadTopPicksForCity(cityLabel, source = 'ai_generated') {
     gridEl.innerHTML = enriched.map(a => {
       const stars = renderDynamicStars(a.rating, a.reviewCount, a.id);
       const tagHtml = a.ages.map(t => `<span class="card-age-tag">${t}</span>`).join('');
-      const bg = { '🏃':'#FFE8E8','🌳':'#E8FFE8','🎨':'#E8EAFF','🎮':'#FFF3E0','🦁':'#FFF8E0','💦':'#E0F7FF','🎭':'#FFF0F5','📚':'#FFFBE0','🍦':'#FFF0E0','🏆':'#E8FFEF','💃':'#F9E8FF','🔬':'#E8F4FF' }[a.emoji] || '#F5F0FF';
+      const bg = { 'ð':'#FFE8E8','ð³':'#E8FFE8','ð¨':'#E8EAFF','ð®':'#FFF3E0','ð¦':'#FFF8E0','ð¦':'#E0F7FF','ð­':'#FFF0F5','ð':'#FFFBE0','ð¦':'#FFF0E0','ð':'#E8FFEF','ð':'#F9E8FF','ð¬':'#E8F4FF' }[a.emoji] || '#F5F0FF';
       const safeName = a.name.replace(/'/g, "\\'");
       return `
       <div class="activity-card">
@@ -2024,15 +2033,15 @@ async function loadTopPicksForCity(cityLabel, source = 'ai_generated') {
           <div class="card-name">${a.name}</div>
           <div class="card-tags">${tagHtml}</div>
           <div class="card-desc">${a.desc}</div>
-          <div class="card-addr" style="margin-bottom:12px">📍 ${a.addr}</div>
+          <div class="card-addr" style="margin-bottom:12px">ð ${a.addr}</div>
           <div class="card-footer">
             <div class="stars" id="stars-${a.id}">${stars}</div>
             <div class="card-actions">
-              <button class="share-btn" onclick="sharePlace(this,'${safeName}','${(a.addr||'').replace(/'/g,"\\'")}','${(a.desc||'').replace(/'/g,"\\'")}')">📤 Share</button>
-              <button class="review-btn" onclick="openReview(${a.id},'${safeName}')">✍️ Review</button>
+              <button class="share-btn" onclick="sharePlace(this,'${safeName}','${(a.addr||'').replace(/'/g,"\\'")}','${(a.desc||'').replace(/'/g,"\\'")}')">ð¤ Share</button>
+              <button class="review-btn" onclick="openReview(${a.id},'${safeName}')">âï¸ Review</button>
             </div>
           </div>
-          <div style="margin-top:8px;font-size:.75rem;color:var(--muted);font-weight:600">🤖 AI-sourced · verify before visiting</div>
+          <div style="margin-top:8px;font-size:.75rem;color:var(--muted);font-weight:600">ð¤ AI-sourced Â· verify before visiting</div>
         </div>
       </div>`;
     }).join('');
@@ -2049,9 +2058,9 @@ async function loadTopPicksForCity(cityLabel, source = 'ai_generated') {
     document.getElementById('splashState').style.display = 'block';
     const isRateLimit = err.message === 'rate_limited';
     document.getElementById('splashState').innerHTML = `
-      <div style="font-size:3rem;margin-bottom:16px">${isRateLimit ? '⏳' : '😕'}</div>
+      <div style="font-size:3rem;margin-bottom:16px">${isRateLimit ? 'â³' : 'ð'}</div>
       <h2 style="font-family:'Fredoka One',cursive;font-size:1.6rem;color:var(--ink);margin-bottom:10px">${isRateLimit ? 'We\'re really busy right now!' : 'Couldn\'t load results'}</h2>
-      <p style="color:var(--muted);font-weight:600;margin-bottom:20px">${isRateLimit ? 'Lots of families searching at once — give it 30 seconds and try again.' : 'Something went wrong. Please try selecting your city again.'}</p>
+      <p style="color:var(--muted);font-weight:600;margin-bottom:20px">${isRateLimit ? 'Lots of families searching at once â give it 30 seconds and try again.' : 'Something went wrong. Please try selecting your city again.'}</p>
       <button class="submit-btn" onclick="location.reload()">Try Again</button>`;
   }
 }
@@ -2059,7 +2068,7 @@ async function loadTopPicksForCity(cityLabel, source = 'ai_generated') {
 function renderDynamicStars(rating, count, id) {
   let html = '';
   for (let i = 1; i <= 5; i++) {
-    html += `<span class="star${i <= Math.round(rating) ? ' filled' : ''}">★</span>`;
+    html += `<span class="star${i <= Math.round(rating) ? ' filled' : ''}">â</span>`;
   }
   const clickAttr = id ? `onclick="openDynamicReviewSummary(${id})" style="cursor:pointer;display:inline-flex;align-items:center;gap:2px" title="See reviews"` : `style="display:inline-flex;align-items:center;gap:2px"`;
   return `<span class="stars-clickable" ${clickAttr}>${html}<span class="star-count">(${count})</span></span>`;
@@ -2074,20 +2083,20 @@ async function openDynamicReviewSummary(id) {
   // Find card name from DOM
   const card = document.querySelector(`#stars-${id}`)?.closest('.activity-card');
   const name = card?.querySelector('.card-name')?.textContent || 'This Place';
-  document.getElementById('summaryTitle').textContent = `⭐ Reviews: ${name}`;
+  document.getElementById('summaryTitle').textContent = `â­ Reviews: ${name}`;
 
-  const avg = allR.length ? (allR.reduce((s,r)=>s+r.rating,0)/allR.length).toFixed(1) : '—';
+  const avg = allR.length ? (allR.reduce((s,r)=>s+r.rating,0)/allR.length).toFixed(1) : 'â';
   let starsHtml = '';
-  for(let i=1;i<=5;i++) starsHtml += `<span style="color:${i<=Math.round(avg)?'var(--sun)':'#ddd'};font-size:1.4rem">★</span>`;
+  for(let i=1;i<=5;i++) starsHtml += `<span style="color:${i<=Math.round(avg)?'var(--sun)':'#ddd'};font-size:1.4rem">â</span>`;
   document.getElementById('summaryStarsDisplay').innerHTML = `${starsHtml}<span style="font-family:'Fredoka One',cursive;font-size:1.3rem;color:var(--ink)">${avg}</span><span style="color:var(--muted);font-size:.85rem;font-weight:700">&nbsp;(${allR.length} reviews)</span>`;
 
   const list = document.getElementById('summaryList');
   if (!allR.length) {
-    list.innerHTML = `<p style="color:var(--muted);font-weight:600;text-align:center;padding:20px 0">No reviews yet — be the first!</p>`;
+    list.innerHTML = `<p style="color:var(--muted);font-weight:600;text-align:center;padding:20px 0">No reviews yet â be the first!</p>`;
   } else {
     list.innerHTML = allR.map(r => {
       let s = '';
-      for(let i=1;i<=5;i++) s += `<span style="color:${i<=r.rating?'var(--sun)':'#ddd'};font-size:.9rem">★</span>`;
+      for(let i=1;i<=5;i++) s += `<span style="color:${i<=r.rating?'var(--sun)':'#ddd'};font-size:.9rem">â</span>`;
       const ageTag = r.ageRange ? `<span style="background:#EEE5FF;color:var(--plum);border-radius:50px;padding:2px 10px;font-size:.75rem;font-weight:800">${r.ageRange}</span>` : '';
       return `<div style="border:2px solid var(--border);border-radius:14px;padding:14px 16px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -2096,17 +2105,17 @@ async function openDynamicReviewSummary(id) {
         </div>
         ${ageTag ? `<div style="margin-bottom:8px">${ageTag}</div>` : ''}
         <p style="font-size:.88rem;color:var(--ink);line-height:1.5;margin-bottom:4px">${r.text}</p>
-        <span style="font-size:.8rem;font-weight:800;color:var(--plum)">— ${r.name}</span>
+        <span style="font-size:.8rem;font-weight:800;color:var(--plum)">â ${r.name}</span>
       </div>`;
     }).join('');
   }
   document.getElementById('summaryModal').classList.add('open');
 }
 
-// ── RENDER LISTINGS FROM DB ROWS ──
+// ââ RENDER LISTINGS FROM DB ROWS ââ
 function renderCachedListings(rows) {
   currentListings = rows;
-  const bg = { '🏃':'#FFE8E8','🌳':'#E8FFE8','🎨':'#E8EAFF','🎮':'#FFF3E0','🦁':'#FFF8E0','💦':'#E0F7FF','🎭':'#FFF0F5','📚':'#FFFBE0','🍦':'#FFF0E0','🏆':'#E8FFEF','💃':'#F9E8FF','🔬':'#E8F4FF' };
+  const bg = { 'ð':'#FFE8E8','ð³':'#E8FFE8','ð¨':'#E8EAFF','ð®':'#FFF3E0','ð¦':'#FFF8E0','ð¦':'#E0F7FF','ð­':'#FFF0F5','ð':'#FFFBE0','ð¦':'#FFF0E0','ð':'#E8FFEF','ð':'#F9E8FF','ð¬':'#E8F4FF' };
   document.getElementById('activitiesGrid').innerHTML = rows.map(a => {
     const stars = renderDynamicStars(a.rating || 0, a.review_count || 0, a.listing_id);
     const ages = (a.ages || '').split(',').filter(Boolean);
@@ -2116,7 +2125,7 @@ function renderCachedListings(rows) {
     return `
     <div class="activity-card">
       <div class="card-thumb" style="background:${cardBg}">
-        <span style="filter:drop-shadow(2px 4px 6px rgba(0,0,0,.15))">${a.emoji || '🎉'}</span>
+        <span style="filter:drop-shadow(2px 4px 6px rgba(0,0,0,.15))">${a.emoji || 'ð'}</span>
         
       </div>
       <div class="card-body">
@@ -2124,21 +2133,21 @@ function renderCachedListings(rows) {
         <div class="card-name">${a.name}</div>
         <div class="card-tags">${tagHtml}</div>
         <div class="card-desc">${a.description || ''}</div>
-        <div class="card-addr" style="margin-bottom:12px">📍 ${a.address || ''}</div>
+        <div class="card-addr" style="margin-bottom:12px">ð ${a.address || ''}</div>
         <div class="card-footer">
           <div class="stars" id="stars-${a.listing_id}">${stars}</div>
           <div class="card-actions">
-            <button class="share-btn" onclick="sharePlace(this,'${safeName}','${(a.address||'').replace(/'/g,"\\'")}','${(a.description||'').replace(/'/g,"\\'")}')">📤 Share</button>
-            <button class="review-btn" onclick="openReview(${a.listing_id},'${safeName}')">✍️ Review</button>
+            <button class="share-btn" onclick="sharePlace(this,'${safeName}','${(a.address||'').replace(/'/g,"\\'")}','${(a.description||'').replace(/'/g,"\\'")}')">ð¤ Share</button>
+            <button class="review-btn" onclick="openReview(${a.listing_id},'${safeName}')">âï¸ Review</button>
           </div>
         </div>
-        <div style="margin-top:8px;font-size:.75rem;color:var(--muted);font-weight:600">🤖 AI-sourced · verify before visiting</div>
+        <div style="margin-top:8px;font-size:.75rem;color:var(--muted);font-weight:600">ð¤ AI-sourced Â· verify before visiting</div>
       </div>
     </div>`;
   }).join('');
 }
 
-// ── EVENTS ──
+// ââ EVENTS ââ
 const EVENTS_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 function renderEvents(events) {
@@ -2150,7 +2159,7 @@ function renderEvents(events) {
       </div>
       <div class="event-info">
         <div class="event-name">${e.name}</div>
-        <div class="event-detail">📌 ${e.detail || ''}</div>
+        <div class="event-detail">ð ${e.detail || ''}</div>
       </div>
       <span class="${(e.free || e.is_free) ? 'event-free' : 'event-paid'}">${(e.free || e.is_free) ? 'FREE' : 'Paid'}</span>
     </div>`).join('');
@@ -2175,7 +2184,7 @@ async function loadEventsForCity(cityLabel) {
   eventsSection.style.display = 'block';
   showEventsSkeletons();
 
-  // ── CHECK EVENTS CACHE (24h) ──
+  // ââ CHECK EVENTS CACHE (24h) ââ
   const { data: cached } = await sb
     .from('events')
     .select('*')
@@ -2202,9 +2211,9 @@ async function loadEventsForCity(cityLabel) {
     }
   }
 
-  // ── CACHE MISS — fetch from AI ──
-  console.log(`[KiddBusy] Events cache miss for "${cityLabel}", fetching from AI…`);
-  freshnessEl.textContent = 'Searching for events…';
+  // ââ CACHE MISS â fetch from AI ââ
+  console.log(`[KiddBusy] Events cache miss for "${cityLabel}", fetching from AIâ¦`);
+  freshnessEl.textContent = 'Searching for eventsâ¦';
 
   try {
     const res = await fetch('/api/search', {
@@ -2223,7 +2232,7 @@ async function loadEventsForCity(cityLabel) {
     if (!match) throw new Error('No JSON array in response');
     const events = JSON.parse(match[0]);
 
-    // Upsert to Supabase — delete old events for this city first, then insert fresh ones
+    // Upsert to Supabase â delete old events for this city first, then insert fresh ones
     await sb.from('events').delete().ilike('city', cityLabel);
     const rows = events.map(e => ({
       city: cityLabel,
@@ -2244,13 +2253,13 @@ async function loadEventsForCity(cityLabel) {
     console.warn('Events load failed:', err);
     document.getElementById('eventsList').innerHTML = `
       <div style="text-align:center;padding:32px;color:var(--muted);font-weight:600">
-        😕 Couldn't load events right now. Check back soon!
+        ð Couldn't load events right now. Check back soon!
       </div>`;
     freshnessEl.textContent = '';
   }
 }
 
-// ── CITY SELECTION FLOW ──
+// ââ CITY SELECTION FLOW ââ
 const CACHE_TTL_MS = 3 * 60 * 60 * 1000; // 3 hours
 const _memCache = {}; // in-memory cache: cityName -> { rows, ts }
 
@@ -2259,7 +2268,7 @@ async function onCitySelected(city) {
 
   const cityName = city.split(',')[0].trim();
 
-  // ── INSTANT RENDER from in-memory cache (zero network) ──
+  // ââ INSTANT RENDER from in-memory cache (zero network) ââ
   if (_memCache[cityName] && _memCache[cityName].rows.length >= 5) {
     document.getElementById('splashState').style.display = 'none';
     document.getElementById('loaderArea').classList.remove('visible');
@@ -2290,12 +2299,13 @@ async function onCitySelected(city) {
   if (_sessionCities.length === 2) track('multi_city_session', city, _sessionCities[0]);
 
   try {
-    // ── CHECK SUPABASE CACHE — serve ANY cached data, refresh stale in background ──
+    // ââ CHECK SUPABASE CACHE â serve ANY cached data, refresh stale in background ââ
     const { data: cached } = await sb
       .from('listings')
       .select('*')
       .ilike('city', cityName)
       .eq('status', 'active')
+      .order('is_sponsored', { ascending: false })
       .order('rating', { ascending: false })
       .limit(20);
 
@@ -2312,7 +2322,7 @@ async function onCitySelected(city) {
       loadEventsForCity(city);
       track('cache_hit', city);
 
-      // ── BACKGROUND REFRESH if stale ──
+      // ââ BACKGROUND REFRESH if stale ââ
       const oldest = cached.reduce((min, r) => {
         if (!r.last_refreshed) return min;
         return new Date(r.last_refreshed) < new Date(min) ? r.last_refreshed : min;
@@ -2320,7 +2330,7 @@ async function onCitySelected(city) {
       const isStale = !oldest || (Date.now() - new Date(oldest)) > CACHE_TTL_MS;
 
       if (isStale) {
-        console.log(`[KiddBusy] Stale cache for "${cityName}", refreshing in background…`);
+        console.log(`[KiddBusy] Stale cache for "${cityName}", refreshing in backgroundâ¦`);
         loadTopPicksForCity(city, 'background_refresh').then(() => {
           console.log(`[KiddBusy] Background refresh complete for "${cityName}"`);
         });
@@ -2328,9 +2338,9 @@ async function onCitySelected(city) {
       return;
     }
 
-    // ── NO CACHE — fire live AI search ──
+    // ââ NO CACHE â fire live AI search ââ
     track('cache_miss', city);
-    document.getElementById('loaderMsg').textContent = `Finding the best spots in ${city}…`;
+    document.getElementById('loaderMsg').textContent = `Finding the best spots in ${city}â¦`;
     await loadTopPicksForCity(city);
     loadEventsForCity(city);
 
@@ -2341,7 +2351,7 @@ async function onCitySelected(city) {
   }
 }
 
-// ── CITY DATA & STACKED PICKER ──
+// ââ CITY DATA & STACKED PICKER ââ
 const STATE_ABBR = {"Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA","Colorado":"CO","Connecticut":"CT","Delaware":"DE","Florida":"FL","Georgia":"GA","Hawaii":"HI","Idaho":"ID","Illinois":"IL","Indiana":"IN","Iowa":"IA","Kansas":"KS","Kentucky":"KY","Louisiana":"LA","Maine":"ME","Maryland":"MD","Massachusetts":"MA","Michigan":"MI","Minnesota":"MN","Mississippi":"MS","Missouri":"MO","Montana":"MT","Nebraska":"NE","Nevada":"NV","New Hampshire":"NH","New Jersey":"NJ","New Mexico":"NM","New York":"NY","North Carolina":"NC","North Dakota":"ND","Ohio":"OH","Oklahoma":"OK","Oregon":"OR","Pennsylvania":"PA","Rhode Island":"RI","South Carolina":"SC","South Dakota":"SD","Tennessee":"TN","Texas":"TX","Utah":"UT","Vermont":"VT","Virginia":"VA","Washington":"WA","West Virginia":"WV","Wisconsin":"WI","Wyoming":"WY"};
 const CITIES_BY_STATE = {"Alabama":["Birmingham","Huntsville","Montgomery"],"Alaska":["Anchorage","Fairbanks"],"Arizona":["Phoenix","Tucson","Scottsdale","Mesa","Chandler"],"Arkansas":["Little Rock","Fayetteville"],"California":["Los Angeles","San Diego","San Francisco","San Jose","Sacramento","Fresno","Oakland","Long Beach"],"Colorado":["Denver","Colorado Springs","Aurora","Fort Collins","Boulder"],"Connecticut":["Bridgeport","Hartford","New Haven"],"Delaware":["Wilmington","Dover"],"Florida":["Jacksonville","Miami","Tampa","Orlando","St. Petersburg","Fort Lauderdale","Tallahassee","Gainesville"],"Georgia":["Atlanta","Augusta","Savannah","Columbus","Athens"],"Hawaii":["Honolulu","Hilo"],"Idaho":["Boise","Nampa","Meridian"],"Illinois":["Chicago","Aurora","Naperville","Rockford","Springfield"],"Indiana":["Indianapolis","Fort Wayne","Evansville","South Bend"],"Iowa":["Des Moines","Cedar Rapids","Davenport"],"Kansas":["Wichita","Overland Park","Kansas City"],"Kentucky":["Louisville","Lexington","Bowling Green"],"Louisiana":["New Orleans","Baton Rouge","Shreveport"],"Maine":["Portland","Augusta"],"Maryland":["Baltimore","Frederick","Annapolis"],"Massachusetts":["Boston","Worcester","Springfield","Cambridge"],"Michigan":["Detroit","Grand Rapids","Warren","Ann Arbor","Lansing"],"Minnesota":["Minneapolis","Saint Paul","Rochester","Duluth"],"Mississippi":["Jackson","Gulfport","Biloxi"],"Missouri":["Kansas City","St. Louis","Springfield","Columbia"],"Montana":["Billings","Missoula","Bozeman"],"Nebraska":["Omaha","Lincoln"],"Nevada":["Las Vegas","Henderson","Reno"],"New Hampshire":["Manchester","Nashua","Concord"],"New Jersey":["Newark","Jersey City","Paterson","Trenton"],"New Mexico":["Albuquerque","Santa Fe","Las Cruces"],"New York":["New York City","Buffalo","Rochester","Yonkers","Syracuse","Albany"],"North Carolina":["Charlotte","Raleigh","Greensboro","Durham","Winston-Salem","Fayetteville","Cary","Asheville"],"North Dakota":["Fargo","Bismarck"],"Ohio":["Columbus","Cleveland","Cincinnati","Toledo","Akron","Dayton"],"Oklahoma":["Oklahoma City","Tulsa","Norman"],"Oregon":["Portland","Salem","Eugene","Bend"],"Pennsylvania":["Philadelphia","Pittsburgh","Allentown","Erie","Reading"],"Rhode Island":["Providence","Warwick"],"South Carolina":["Columbia","Charleston","Greenville","Rock Hill"],"South Dakota":["Sioux Falls","Rapid City"],"Tennessee":["Nashville","Memphis","Knoxville","Chattanooga","Clarksville"],"Texas":["Houston","San Antonio","Dallas","Austin","Fort Worth","El Paso","Arlington","Plano","Lubbock","Corpus Christi"],"Utah":["Salt Lake City","West Valley City","Provo","St. George"],"Vermont":["Burlington","Montpelier"],"Virginia":["Virginia Beach","Norfolk","Chesapeake","Richmond","Alexandria","Arlington"],"Washington":["Seattle","Spokane","Tacoma","Vancouver","Bellevue"],"West Virginia":["Charleston","Huntington"],"Wisconsin":["Milwaukee","Madison","Green Bay","Kenosha"],"Wyoming":["Cheyenne","Casper"]};
 
@@ -2351,7 +2361,7 @@ function onStateSelected(state) {
   const findBtn = document.getElementById('findBtn');
 
   // Reset city
-  cityEl.innerHTML = '<option value="">Choose a city…</option>';
+  cityEl.innerHTML = '<option value="">Choose a cityâ¦</option>';
   findBtn.disabled = true;
   findBtn.classList.remove('active');
 
@@ -2392,7 +2402,7 @@ function onFindClicked() {
   onCitySelected(`${city}, ${abbr}`);
 }
 
-// ── INIT ──
+// ââ INIT ââ
 document.addEventListener('DOMContentLoaded', function() {
   // Populate state dropdown
   const stateEl = document.getElementById('stateSelect');
@@ -2402,8 +2412,8 @@ document.addEventListener('DOMContentLoaded', function() {
     stateEl.appendChild(o);
   });
 
-  // ── PREFETCH all cached cities into memory on page load ──
-  // Runs silently in background — user never waits for this
+  // ââ PREFETCH all cached cities into memory on page load ââ
+  // Runs silently in background â user never waits for this
   (async () => {
     try {
       const { data } = await sb
@@ -2432,7 +2442,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
       console.log(`[KiddBusy] Prefetched ${count} cities into memory`);
     } catch(e) {
-      // Silent fail — prefetch is best-effort
+      // Silent fail â prefetch is best-effort
     }
   })();
 });
