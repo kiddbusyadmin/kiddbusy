@@ -293,6 +293,17 @@
     cursor: pointer; transition: background .2s, transform .1s;
   }
   .review-btn:hover { background: #5730A8; transform: scale(1.05); }
+  .share-btn {
+    background: transparent; color: var(--muted);
+    border: 2px solid #e8e0f5; border-radius: 50px;
+    padding: 5px 12px; font-family: 'Nunito', sans-serif;
+    font-weight: 800; font-size: 0.8rem;
+    cursor: pointer; transition: all .2s;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .share-btn:hover { border-color: var(--plum); color: var(--plum); transform: scale(1.05); }
+  .share-btn.copied { border-color: #22c55e; color: #22c55e; }
+  .card-actions { display: flex; align-items: center; gap: 8px; }
   .category-filter {
     cursor: pointer;
     transition: color .15s;
@@ -1401,6 +1412,22 @@ function track(event, city = null, value = null) {
   sb.from('analytics').insert({ event, city, value, session_id: SESSION_ID }).then(() => {});
 }
 
+// ── SHARE ──
+function sharePlace(btn, name, address, desc) {
+  const text = `🎉 Check out ${name}!\n📍 ${address}\n${desc ? desc.split('|')[0].trim() + '\n' : ''}🔗 ${window.location.href}`;
+  if (navigator.share) {
+    navigator.share({ title: name, text, url: window.location.href })
+      .catch(() => {});
+  } else {
+    navigator.clipboard.writeText(text).then(() => {
+      btn.innerHTML = '✅ Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.innerHTML = '📤 Share'; btn.classList.remove('copied'); }, 2000);
+    });
+  }
+  track('share_click', null, name);
+}
+
 // ── UPSERT LISTING & GET STABLE ID ──
 async function upsertListing(activity, city) {
   const cityParts = city.split(',');
@@ -1514,7 +1541,10 @@ function renderActivities(list) {
         <div class="card-addr" style="margin-bottom:12px">📍 ${a.addr}</div>
         <div class="card-footer">
           <div class="stars" id="stars-${a.id}">${stars}</div>
-          <button class="review-btn" onclick="openReview(${a.id},'${a.name.replace(/'/g,"\\'")}')">✍️ Review</button>
+          <div class="card-actions">
+            <button class="share-btn" onclick="sharePlace(this,'${a.name.replace(/'/g,"\\'")}','${(a.addr||'').replace(/'/g,"\\'")}','${(a.desc||'').replace(/'/g,"\\'")}')">📤 Share</button>
+            <button class="review-btn" onclick="openReview(${a.id},'${a.name.replace(/'/g,"\\'")}')">✍️ Review</button>
+          </div>
         </div>
         <button class="correction-btn" onclick="openCorrection(${a.id},'${a.name.replace(/'/g,"\\'")}')">🚩 Suggest a correction</button>
       </div>
@@ -1953,6 +1983,9 @@ async function loadTopPicksForCity(cityLabel) {
     const data = await res.json();
     console.log(`[KiddBusy] /api/search response:`, data);
 
+    if (data.error === 'rate_limited' || res.status === 503) {
+      throw new Error('rate_limited');
+    }
     if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
 
     const textBlocks = (data.content || []).filter(b => b.type === 'text');
@@ -1993,7 +2026,10 @@ async function loadTopPicksForCity(cityLabel) {
           <div class="card-addr" style="margin-bottom:12px">📍 ${a.addr}</div>
           <div class="card-footer">
             <div class="stars" id="stars-${a.id}">${stars}</div>
-            <button class="review-btn" onclick="openReview(${a.id},'${safeName}')">✍️ Review</button>
+            <div class="card-actions">
+              <button class="share-btn" onclick="sharePlace(this,'${safeName}','${(a.addr||'').replace(/'/g,"\\'")}','${(a.desc||'').replace(/'/g,"\\'")}')">📤 Share</button>
+              <button class="review-btn" onclick="openReview(${a.id},'${safeName}')">✍️ Review</button>
+            </div>
           </div>
           <div style="margin-top:8px;font-size:.75rem;color:var(--muted);font-weight:600">🤖 AI-sourced · verify before visiting</div>
         </div>
@@ -2010,11 +2046,11 @@ async function loadTopPicksForCity(cityLabel) {
     document.getElementById('loaderArea').classList.remove('visible');
     document.getElementById('activities').style.display = 'none';
     document.getElementById('splashState').style.display = 'block';
+    const isRateLimit = err.message === 'rate_limited';
     document.getElementById('splashState').innerHTML = `
-      <div style="font-size:3rem;margin-bottom:16px">😕</div>
-      <h2 style="font-family:'Fredoka One',cursive;font-size:1.6rem;color:var(--ink);margin-bottom:10px">Couldn't load results</h2>
-      <p style="color:var(--muted);font-weight:600;margin-bottom:8px">Something went wrong. Please try selecting your city again.</p>
-      <p style="color:#e04449;font-size:.8rem;font-weight:700;margin-bottom:20px;font-family:monospace">${err.message}</p>
+      <div style="font-size:3rem;margin-bottom:16px">${isRateLimit ? '⏳' : '😕'}</div>
+      <h2 style="font-family:'Fredoka One',cursive;font-size:1.6rem;color:var(--ink);margin-bottom:10px">${isRateLimit ? 'We\'re really busy right now!' : 'Couldn\'t load results'}</h2>
+      <p style="color:var(--muted);font-weight:600;margin-bottom:20px">${isRateLimit ? 'Lots of families searching at once — give it 30 seconds and try again.' : 'Something went wrong. Please try selecting your city again.'}</p>
       <button class="submit-btn" onclick="location.reload()">Try Again</button>`;
   }
 }
@@ -2090,7 +2126,10 @@ function renderCachedListings(rows) {
         <div class="card-addr" style="margin-bottom:12px">📍 ${a.address || ''}</div>
         <div class="card-footer">
           <div class="stars" id="stars-${a.id}">${stars}</div>
-          <button class="review-btn" onclick="openReview(${a.id},'${safeName}')">✍️ Review</button>
+          <div class="card-actions">
+            <button class="share-btn" onclick="sharePlace(this,'${safeName}','${(a.address||'').replace(/'/g,"\\'")}','${(a.description||'').replace(/'/g,"\\'")}')">📤 Share</button>
+            <button class="review-btn" onclick="openReview(${a.id},'${safeName}')">✍️ Review</button>
+          </div>
         </div>
         <div style="margin-top:8px;font-size:.75rem;color:var(--muted);font-weight:600">🤖 AI-sourced · verify before visiting</div>
       </div>
