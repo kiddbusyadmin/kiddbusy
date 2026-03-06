@@ -2108,7 +2108,7 @@ function renderCachedListings(rows) {
   currentListings = rows;
   const bg = { '🏃':'#FFE8E8','🌳':'#E8FFE8','🎨':'#E8EAFF','🎮':'#FFF3E0','🦁':'#FFF8E0','💦':'#E0F7FF','🎭':'#FFF0F5','📚':'#FFFBE0','🍦':'#FFF0E0','🏆':'#E8FFEF','💃':'#F9E8FF','🔬':'#E8F4FF' };
   document.getElementById('activitiesGrid').innerHTML = rows.map(a => {
-    const stars = renderDynamicStars(a.rating || 0, a.review_count || 1, a.id);
+    const stars = renderDynamicStars(a.rating || 0, a.review_count || 0, a.listing_id);
     const ages = (a.ages || '').split(',').filter(Boolean);
     const tagHtml = ages.map(t => `<span class="card-age-tag">${t.trim()}</span>`).join('');
     const cardBg = bg[a.emoji] || '#F5F0FF';
@@ -2126,10 +2126,10 @@ function renderCachedListings(rows) {
         <div class="card-desc">${a.description || ''}</div>
         <div class="card-addr" style="margin-bottom:12px">📍 ${a.address || ''}</div>
         <div class="card-footer">
-          <div class="stars" id="stars-${a.id}">${stars}</div>
+          <div class="stars" id="stars-${a.listing_id}">${stars}</div>
           <div class="card-actions">
             <button class="share-btn" onclick="sharePlace(this,'${safeName}','${(a.address||'').replace(/'/g,"\\'")}','${(a.description||'').replace(/'/g,"\\'")}')">📤 Share</button>
-            <button class="review-btn" onclick="openReview(${a.id},'${safeName}')">✍️ Review</button>
+            <button class="review-btn" onclick="openReview(${a.listing_id},'${safeName}')">✍️ Review</button>
           </div>
         </div>
         <div style="margin-top:8px;font-size:.75rem;color:var(--muted);font-weight:600">🤖 AI-sourced · verify before visiting</div>
