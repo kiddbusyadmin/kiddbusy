@@ -1438,7 +1438,7 @@ async function upsertListing(activity, city) {
   // Check if listing already exists
   const { data: existing } = await sb
     .from('listings')
-    .select('id')
+    .select('listing_id')
     .ilike('name', activity.name)
     .ilike('city', cityName)
     .maybeSingle();
@@ -1449,8 +1449,8 @@ async function upsertListing(activity, city) {
       description: activity.desc,
       is_open: activity.open ?? true,
       last_refreshed: now,
-    }).eq('id', existing.id);
-    return existing.id;
+    }).eq('listing_id', existing.listing_id);
+    return existing.listing_id;
   }
 
   // Create new listing
@@ -2251,11 +2251,27 @@ async function loadEventsForCity(cityLabel) {
 
 // ── CITY SELECTION FLOW ──
 const CACHE_TTL_MS = 3 * 60 * 60 * 1000; // 3 hours
+const _memCache = {}; // in-memory cache: cityName -> { rows, ts }
 
 async function onCitySelected(city) {
   if (!city) return;
 
   const cityName = city.split(',')[0].trim();
+
+  // ── INSTANT RENDER from in-memory cache (zero network) ──
+  if (_memCache[cityName] && _memCache[cityName].rows.length >= 5) {
+    document.getElementById('splashState').style.display = 'none';
+    document.getElementById('loaderArea').classList.remove('visible');
+    document.getElementById('topPicksCity').textContent = city;
+    renderCachedListings(_memCache[cityName].rows);
+    document.getElementById('activities').style.display = 'block';
+    document.getElementById('activities').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    track('city_search', city);
+    _sessionCities.push(city);
+    if (_sessionCities.length === 2) track('multi_city_session', city, _sessionCities[0]);
+    sb.from('city_searches').upsert({ city, last_searched: new Date().toISOString() }, { onConflict: 'city' }).then(() => {});
+    return;
+  }
 
   // Hide splash, show loader
   document.getElementById('splashState').style.display = 'none';
@@ -2273,7 +2289,7 @@ async function onCitySelected(city) {
   if (_sessionCities.length === 2) track('multi_city_session', city, _sessionCities[0]);
 
   try {
-    // ── CHECK CACHE — serve ANY cached data instantly, refresh in background ──
+    // ── CHECK SUPABASE CACHE — serve ANY cached data, refresh stale in background ──
     const { data: cached } = await sb
       .from('listings')
       .select('*')
@@ -2285,7 +2301,9 @@ async function onCitySelected(city) {
     console.log(`[KiddBusy] Cache check for "${cityName}": ${cached?.length ?? 0} rows found`);
 
     if (cached && cached.length >= 5) {
-      // ── SERVE STALE DATA INSTANTLY ──
+      // Store in memory for instant repeat access
+      _memCache[cityName] = { rows: cached, ts: Date.now() };
+
       renderCachedListings(cached);
       document.getElementById('loaderArea').classList.remove('visible');
       document.getElementById('activities').style.display = 'block';
@@ -2382,6 +2400,40 @@ document.addEventListener('DOMContentLoaded', function() {
     o.value = s; o.textContent = s;
     stateEl.appendChild(o);
   });
+
+  // ── PREFETCH all cached cities into memory on page load ──
+  // Runs silently in background — user never waits for this
+  (async () => {
+    try {
+      const { data } = await sb
+        .from('listings')
+        .select('*')
+        .eq('status', 'active')
+        .order('rating', { ascending: false });
+
+      if (!data || !data.length) return;
+
+      // Group by city into _memCache
+      const grouped = {};
+      data.forEach(row => {
+        const c = row.city;
+        if (!grouped[c]) grouped[c] = [];
+        if (grouped[c].length < 20) grouped[c].push(row);
+      });
+
+      let count = 0;
+      Object.entries(grouped).forEach(([city, rows]) => {
+        if (rows.length >= 5) {
+          _memCache[city] = { rows, ts: Date.now() };
+          count++;
+        }
+      });
+
+      console.log(`[KiddBusy] Prefetched ${count} cities into memory`);
+    } catch(e) {
+      // Silent fail — prefetch is best-effort
+    }
+  })();
 });
 </script>
 </body>
