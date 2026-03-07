@@ -1890,11 +1890,30 @@ function submitAdvertise() {
     alert('Please confirm you agree to the subscription terms.');
     return;
   }
+
+  const payload = {
+    business_name: document.getElementById('ad-bizname').value.trim(),
+    plan: document.getElementById('ad-plan').value,
+    first_name: document.getElementById('ad-fname').value.trim(),
+    last_name: document.getElementById('ad-lname').value.trim(),
+    email: document.getElementById('ad-email').value.trim(),
+    phone: document.getElementById('ad-phone').value.trim(),
+    address: document.getElementById('ad-addr').value.trim(),
+    city: document.getElementById('ad-city').value.trim(),
+    billing_name: document.getElementById('ad-bill-name').value.trim(),
+    billing_address: document.getElementById('ad-bill-addr').value.trim(),
+    billing_city: document.getElementById('ad-bill-city').value.trim(),
+    billing_state: document.getElementById('ad-bill-state').value.trim(),
+    billing_zip: document.getElementById('ad-bill-zip').value.trim(),
+    status: 'pending'
+  };
+
+  supabase.from('sponsorships').insert(payload).then(({ error }) => {
+    if (error) console.error('Sponsorship insert error:', error);
+  });
+
   document.getElementById('advertiseSuccess').classList.add('visible');
-  required.forEach(id => document.getElementById(id).value = '');
-  ['ad-url','ad-category','ad-company','ad-notes'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('ad-agree').checked = false;
-  document.getElementById('advertise-form').scrollIntoView({ behavior: 'smooth' });
+  document.getElementById('advertise-form').style.display = 'none';
 }
 
 // ── COOKIE BANNER ──
