@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KiddBusy · Agent</title>
+<title>KiddBusy - Agent</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -446,7 +446,7 @@
 
 <!-- LOGIN -->
 <div id="login-screen">
-  <div class="login-logo">KIDDB<span>U</span>SY · AGENT ACCESS</div>
+  <div class="login-logo">KIDDB<span>U</span>SY - AGENT ACCESS</div>
   <div class="login-box">
     <input type="password" id="pass-input" placeholder="enter password" autocomplete="off" />
     <button class="login-btn" onclick="checkLogin()">AUTHENTICATE</button>
@@ -472,7 +472,7 @@
   </header>
 
   <div id="quick-actions">
-    <button class="quick-btn" onclick="sendQuick('Give me a business overview — submissions, reviews, sponsorships, and key metrics')">📊 Business overview</button>
+    <button class="quick-btn" onclick="sendQuick('Give me a business overview - submissions, reviews, sponsorships, and key metrics')">📊 Business overview</button>
     <button class="quick-btn" onclick="sendQuick('Find 3 actionable ways to increase sponsorship revenue this month')">💰 Grow revenue</button>
     <button class="quick-btn" onclick="sendQuick('Show me all pending submissions and tell me which ones to approve or reject and why')">📋 Review submissions</button>
     <button class="quick-btn" onclick="sendQuick('Are there any reviews awaiting approval? Summarize them and recommend which to publish')">⭐ Review queue</button>
@@ -483,7 +483,7 @@
   <div id="messages">
     <div class="empty-state" id="empty-state">
       <div class="big-label">KiddBusy Agent</div>
-      <div class="tagline">Your autonomous business manager. Ask me anything about your listings, reviews, sponsors, or strategy — I have direct access to your data.</div>
+      <div class="tagline">Your autonomous business manager. Ask me anything about your listings, reviews, sponsors, or strategy - I have direct access to your data.</div>
     </div>
   </div>
 
@@ -492,24 +492,24 @@
       <textarea id="user-input" placeholder="Ask the agent anything..." rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
       <button id="send-btn" onclick="sendMessage()">SEND</button>
     </div>
-    <div class="input-hint">↵ send · shift+↵ newline</div>
+    <div class="input-hint">↵ send - shift+↵ newline</div>
   </div>
 
 </div>
 
 <script>
-// ─── CONFIG ───────────────────────────────────────────────────────────────────
+// ----------------------------------------
 const ADMIN_PASSWORD = 'kiddbusy2024'; // Change this
 const SUPABASE_URL = 'https://wgbdwpbexfcxijcrxyii.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndnYmR3cGJleGZjeGlqY3J4eWlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDE0NzIxMzQsImV4cCI6MjA1NzA0ODEzNH0.jxU_St7aGHNFkCGzMiTqxJOXXpkPFj1qvHjEr7oNrM8';
 const ANTHROPIC_API_URL = '/.netlify/functions/agent-proxy';
 
-// ─── STATE ────────────────────────────────────────────────────────────────────
+// ----------------------------------------
 let conversationHistory = [];
 let isLoading = false;
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// ─── AUTH ─────────────────────────────────────────────────────────────────────
+// ----------------------------------------
 function checkLogin() {
   const pass = document.getElementById('pass-input').value;
   if (pass === ADMIN_PASSWORD) {
@@ -526,7 +526,7 @@ document.getElementById('pass-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') checkLogin();
 });
 
-// ─── SUPABASE TOOLS ──────────────────────────────────────────────────────────
+// ----------------------------------------
 const tools = [
   {
     name: "query_submissions",
@@ -621,7 +621,7 @@ const tools = [
   }
 ];
 
-// ─── TOOL EXECUTION ──────────────────────────────────────────────────────────
+// ----------------------------------------
 async function executeTool(name, input) {
   try {
     switch (name) {
@@ -682,9 +682,9 @@ async function executeTool(name, input) {
   }
 }
 
-// ─── AGENT CALL ───────────────────────────────────────────────────────────────
+// ----------------------------------------
 async function callAgent(messages) {
-  const systemPrompt = `You are the KiddBusy business agent — an autonomous AI manager for KiddBusy.com, a family activity directory.
+  const systemPrompt = `You are the KiddBusy business agent - an autonomous AI manager for KiddBusy.com, a family activity directory.
 
 You have direct access to the KiddBusy database through tools. Use them proactively to answer questions with real data.
 
@@ -724,7 +724,7 @@ Today's date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 
   return await response.json();
 }
 
-// ─── AGENTIC LOOP ─────────────────────────────────────────────────────────────
+// ----------------------------------------
 async function runAgentLoop(userMessage) {
   const messagesEl = document.getElementById('messages');
   const emptyState = document.getElementById('empty-state');
@@ -789,7 +789,7 @@ async function runAgentLoop(userMessage) {
     }
   } catch (err) {
     typingEl.remove();
-    appendMessage('agent', `⚠️ Error: ${err.message}\n\nMake sure your Anthropic API key is configured in the Netlify environment variables as \`ANTHROPIC_API_KEY\`, or this page needs a proxy function.`);
+    appendMessage('agent', `(!) Error: ${err.message}\n\nMake sure your Anthropic API key is configured in the Netlify environment variables as \`ANTHROPIC_API_KEY\`, or this page needs a proxy function.`);
   }
 
   isLoading = false;
@@ -797,7 +797,7 @@ async function runAgentLoop(userMessage) {
   document.getElementById('user-input').focus();
 }
 
-// ─── UI HELPERS ──────────────────────────────────────────────────────────────
+// ----------------------------------------
 function appendMessage(role, text) {
   const messagesEl = document.getElementById('messages');
   const div = document.createElement('div');
@@ -805,7 +805,7 @@ function appendMessage(role, text) {
 
   const meta = document.createElement('div');
   meta.className = 'msg-meta';
-  meta.textContent = role === 'user' ? 'YOU' : 'AGENT · ' + new Date().toLocaleTimeString();
+  meta.textContent = role === 'user' ? 'YOU' : 'AGENT - ' + new Date().toLocaleTimeString();
 
   const bubble = document.createElement('div');
   bubble.className = 'msg-bubble';
@@ -864,11 +864,11 @@ function clearChat() {
   const messagesEl = document.getElementById('messages');
   messagesEl.innerHTML = `<div class="empty-state" id="empty-state">
     <div class="big-label">KiddBusy Agent</div>
-    <div class="tagline">Your autonomous business manager. Ask me anything about your listings, reviews, sponsors, or strategy — I have direct access to your data.</div>
+    <div class="tagline">Your autonomous business manager. Ask me anything about your listings, reviews, sponsors, or strategy - I have direct access to your data.</div>
   </div>`;
 }
 
-// ─── INPUT HANDLING ───────────────────────────────────────────────────────────
+// ----------------------------------------
 function sendMessage() {
   const input = document.getElementById('user-input');
   const text = input.value.trim();
