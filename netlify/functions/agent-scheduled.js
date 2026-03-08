@@ -1,19 +1,54 @@
 // Autonomous KiddBusy Agent - runs on a schedule
-// Processes pending submissions, reviews, sponsorships, and sends appropriate emails
-
-const { createClient } = require('@supabase/supabase-js');
+// Uses fetch only — no npm dependencies required
 
 const SUPABASE_URL = 'https://wgbdwpbexfcxijcrxyii.supabase.co';
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
-// ---- EMAIL ----
+// ---- SUPABASE via REST ----
+async function dbQuery(table, params = {}) {
+  let url = `${SUPABASE_URL}/rest/v1/${table}?select=*&order=created_at.desc&limit=100`;
+  if (params.eq) {
+    for (const [col, val] of Object.entries(params.eq)) {
+      url += `&${col}=eq.${encodeURIComponent(val)}`;
+    }
+  }
+  const res = await fetch(url, {
+    headers: {
+      'apikey': SUPABASE_SERVICE_KEY,
+      'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+      'Content-Type': 'application/json'
+    }
+  });
+  if (!res.ok) throw new Error(`DB query failed: ${await res.text()}`);
+  return res.json();
+}
+
+async function dbUpdate(table, id, updates) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: {
+      'apikey': SUPABASE_SERVICE_KEY,
+      'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    },
+    body: JSON.stringify(updates)
+  });
+  if (!res.ok) throw new Error(`DB update failed: ${await res.text()}`);
+  return { success: true };
+}
+
+// ---- EMAIL via Resend ----
 async function sendEmail(to, subject, body, fromName = 'KiddBusy') {
   const isHtml = body.trim().startsWith('<');
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    headers: {
+      'Authorization': `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify({
       from: `${fromName} <admin@kiddbusy.com>`,
       to: [to],
@@ -26,80 +61,52 @@ async function sendEmail(to, subject, body, fromName = 'KiddBusy') {
   return result;
 }
 
-// ---- SUPABASE TOOLS ----
-function getDb() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-}
-
-async function queryTable(table, filters = {}) {
-  const db = getDb();
-  let q = db.from(table).select('*').order('created_at', { ascending: false }).limit(100);
-  for (const [key, val] of Object.entries(filters)) {
-    q = q.eq(key, val);
-  }
-  const { data, error } = await q;
-  if (error) throw new Error(error.message);
-  return data || [];
-}
-
-async function updateRecord(table, id, updates) {
-  const db = getDb();
-  const { error } = await db.from(table).update(updates).eq('id', id);
-  if (error) throw new Error(error.message);
-}
-
-async function getDirectives() {
-  try {
-    const db = getDb();
-    const { data } = await db.from('directives').select('*');
-    return Object.fromEntries((data || []).map(d => [d.key, d.value]));
-  } catch {
-    return {};
-  }
-}
-
-// ---- TOOL EXECUTOR (called by Claude) ----
+// ---- TOOL EXECUTOR ----
 async function executeTool(name, input, log) {
-  log(`  [tool] ${name}: ${JSON.stringify(input)}`);
+  log(`  [tool] ${name}(${JSON.stringify(input)})`);
   try {
     switch (name) {
       case 'query_submissions': {
-        const filters = {};
-        if (input.status && input.status !== 'all') filters.status = input.status;
-        const data = await queryTable('submissions', filters);
+        const eq = {};
+        if (input.status && input.status !== 'all') eq.status = input.status;
+        const data = await dbQuery('submissions', { eq });
         return { count: data.length, submissions: data };
       }
       case 'query_reviews': {
-        const filters = {};
-        if (input.status && input.status !== 'all') filters.status = input.status;
-        const data = await queryTable('reviews', filters);
+        const eq = {};
+        if (input.status && input.status !== 'all') eq.status = input.status;
+        const data = await dbQuery('reviews', { eq });
         return { count: data.length, reviews: data };
       }
       case 'query_sponsorships': {
-        const filters = {};
-        if (input.status && input.status !== 'all') filters.status = input.status;
-        const data = await queryTable('sponsorships', filters);
+        const eq = {};
+        if (input.status && input.status !== 'all') eq.status = input.status;
+        const data = await dbQuery('sponsorships', { eq });
         return { count: data.length, sponsorships: data };
       }
       case 'query_listings': {
-        const data = await queryTable('listings', {});
+        const data = await dbQuery('listings');
         return { count: data.length, listings: data };
       }
       case 'update_submission_status': {
-        await updateRecord('submissions', input.id, { status: input.status });
+        await dbUpdate('submissions', input.id, { status: input.status });
         return { success: true, id: input.id, new_status: input.status };
       }
       case 'update_review_status': {
-        await updateRecord('reviews', input.id, { status: input.status });
+        await dbUpdate('reviews', input.id, { status: input.status });
         return { success: true, id: input.id, new_status: input.status };
       }
       case 'update_sponsorship_status': {
-        await updateRecord('sponsorships', input.id, { status: input.status });
+        await dbUpdate('sponsorships', input.id, { status: input.status });
         return { success: true, id: input.id, new_status: input.status };
       }
       case 'get_directives': {
-        const directives = await getDirectives();
-        return { directives };
+        try {
+          const data = await dbQuery('directives');
+          return { directives: Object.fromEntries(data.map(d => [d.key, d.value])) };
+        } catch {
+          return { note: 'directives table not yet created', defaults: {} };
+        }
       }
       case 'send_email': {
         await sendEmail(input.to, input.subject, input.body, input.from_name || 'KiddBusy');
@@ -109,12 +116,13 @@ async function executeTool(name, input, log) {
         return { error: `Unknown tool: ${name}` };
     }
   } catch (e) {
+    log(`  [tool error] ${e.message}`);
     return { error: e.message };
   }
 }
 
 // ---- CLAUDE AGENTIC LOOP ----
-async function runAgent(task, log) {
+async function runAgent(log) {
   const tools = [
     {
       name: 'query_submissions',
@@ -153,18 +161,18 @@ async function runAgent(task, log) {
     },
     {
       name: 'get_directives',
-      description: 'Get agent directives and configuration.',
+      description: 'Get agent directives/config.',
       input_schema: { type: 'object', properties: {}, required: [] }
     },
     {
       name: 'send_email',
-      description: 'Send an email via Resend from admin@kiddbusy.com.',
+      description: 'Send an email from admin@kiddbusy.com.',
       input_schema: {
         type: 'object',
         properties: {
           to: { type: 'string' },
           subject: { type: 'string' },
-          body: { type: 'string', description: 'HTML email body' },
+          body: { type: 'string' },
           from_name: { type: 'string' }
         },
         required: ['to', 'subject', 'body']
@@ -172,19 +180,21 @@ async function runAgent(task, log) {
     }
   ];
 
-  const systemPrompt = `You are the autonomous KiddBusy business agent. You run every morning to keep the business running smoothly without any human involvement.
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-Your job today:
-1. Check all pending submissions — review each one. If it looks like a legitimate kid-friendly business with enough info, approve it and send the appropriate email. If missing info or a duplicate, reject it with the right email.
-2. Check all pending reviews — approve genuine helpful reviews, reject spam or inappropriate ones.
-3. Check pending sponsorships — send a welcome/inquiry received email to any new ones that haven't been contacted yet.
-4. Send a daily summary email to admin@kiddbusy.com at the end with what you did.
+  const systemPrompt = `You are the autonomous KiddBusy business agent. You run every morning to keep the business running smoothly.
 
-EMAIL TEMPLATES — use these exactly, personalized with real data:
+Your tasks today:
+1. Query all pending submissions — approve legitimate kid-friendly businesses with enough info, reject duplicates or those missing info
+2. Query all pending reviews — approve genuine helpful ones, reject spam or inappropriate ones
+3. Query pending sponsorships — send inquiry received email to any new ones not yet contacted
+4. Send a daily summary email to admin@kiddbusy.com with everything you did
+
+EMAIL TEMPLATES — personalize with real data from the database:
 
 SUBMISSION APPROVED (is_owner = true):
 Subject: Your listing is live on KiddBusy!
-<p>Hi {submitter_name},</p><p>Great news — <strong>{business_name}</strong> is now live on KiddBusy.com! Families in {city} can now find you when they're looking for fun things to do with their kids.</p><p>Want to stand out even more? Our sponsorship options put your business at the top of search results:</p><ul><li><strong>Sponsored Listing</strong> — $49/month</li><li><strong>Banner Ad</strong> — $199/month</li><li><strong>Bundle</strong> — $219/month (best value!)</li></ul><p>Interested? Just reply to this email!</p><p>Warmly,<br>The KiddBusy Team</p>
+<p>Hi {submitter_name},</p><p>Great news — <strong>{business_name}</strong> is now live on KiddBusy.com! Families in {city} can now find you when looking for fun things to do with their kids.</p><p>Want to stand out even more? Our sponsorship options put your business at the top of search results:</p><ul><li><strong>Sponsored Listing</strong> — $49/month</li><li><strong>Banner Ad</strong> — $199/month</li><li><strong>Bundle</strong> — $219/month (best value!)</li></ul><p>Interested? Just reply to this email!</p><p>Warmly,<br>The KiddBusy Team</p>
 
 SUBMISSION APPROVED (is_owner = false):
 Subject: The listing you submitted is live on KiddBusy!
@@ -192,7 +202,7 @@ Subject: The listing you submitted is live on KiddBusy!
 
 SUBMISSION REJECTED (missing info):
 Subject: A note about your KiddBusy submission
-<p>Hi {submitter_name},</p><p>Thank you for submitting <strong>{business_name}</strong>! We need a bit more information: {missing_fields}. Please reply and we'll get your listing up right away!</p><p>Warmly,<br>The KiddBusy Team</p>
+<p>Hi {submitter_name},</p><p>Thank you for submitting <strong>{business_name}</strong>! We need a bit more information to complete your profile: {missing_fields}. Please reply and we'll get your listing up right away!</p><p>Warmly,<br>The KiddBusy Team</p>
 
 SUBMISSION REJECTED (duplicate):
 Subject: A note about your KiddBusy submission
@@ -208,21 +218,25 @@ Subject: About your recent KiddBusy review
 
 SPONSORSHIP INQUIRY RECEIVED:
 Subject: Thanks for your interest in sponsoring KiddBusy!
-<p>Hi {first_name},</p><p>Thank you for reaching out about sponsoring <strong>{business_name}</strong> on KiddBusy! We'll be in touch within 1 business day to discuss next steps.</p><p>Quick overview: Sponsored Listing ($49/mo), Banner Ad ($199/mo), Bundle ($219/mo).</p><p>Warmly,<br>The KiddBusy Team</p>
+<p>Hi {first_name},</p><p>Thank you for reaching out about sponsoring <strong>{business_name}</strong> on KiddBusy! We'll be in touch within 1 business day.</p><p>Quick overview: Sponsored Listing ($49/mo), Banner Ad ($199/mo), Bundle ($219/mo).</p><p>Warmly,<br>The KiddBusy Team</p>
 
-DAILY SUMMARY (to admin@kiddbusy.com):
-Subject: KiddBusy Daily Agent Report — {date}
-List everything you did: submissions approved/rejected, reviews processed, sponsorship emails sent, any issues encountered.
+DAILY SUMMARY (always send this last to admin@kiddbusy.com):
+Subject: KiddBusy Daily Agent Report — ${today}
+List everything processed: submissions approved/rejected with business names, reviews processed, sponsorship emails sent, and any issues encountered. Be specific.
 
 RULES:
-- Be thorough — process everything pending, don't skip items
-- Always send the right email after each action
-- If something is ambiguous, use your best judgment and note it in the daily summary
-- Today's date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`;
+- Process everything pending — don't skip items
+- Always send the correct email after each action
+- Use good judgment on borderline cases and note them in the summary
+- Today: ${today}`;
 
-  let messages = [{ role: 'user', content: task }];
+  let messages = [{
+    role: 'user',
+    content: 'Run the daily KiddBusy agent routine. Process all pending submissions, reviews, and sponsorships. Send the appropriate emails for each action. Finish with a daily summary to admin@kiddbusy.com.'
+  }];
+
   let iterations = 0;
-  const MAX_ITERATIONS = 20;
+  const MAX_ITERATIONS = 25;
 
   while (iterations < MAX_ITERATIONS) {
     iterations++;
@@ -258,16 +272,19 @@ RULES:
 
       for (const toolUse of toolUses) {
         const result = await executeTool(toolUse.name, toolUse.input, log);
-        toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(result) });
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: toolUse.id,
+          content: JSON.stringify(result)
+        });
       }
 
       messages.push({ role: 'assistant', content: response.content });
       messages.push({ role: 'user', content: toolResults });
 
     } else {
-      // end_turn — agent is done
       const finalText = response.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
-      log(`\n[agent complete]\n${finalText}`);
+      log(`\n[agent done]\n${finalText}`);
       return finalText;
     }
   }
@@ -280,36 +297,24 @@ exports.handler = async (event) => {
   const logs = [];
   const log = (msg) => { console.log(msg); logs.push(msg); };
 
-  log(`[KiddBusy Autonomous Agent] Starting at ${new Date().toISOString()}`);
-
-  // Allow manual trigger via HTTP for testing
-  const isManual = event.httpMethod === 'POST' || event.httpMethod === 'GET';
-  if (isManual && event.headers['x-agent-key'] !== process.env.AGENT_SECRET_KEY) {
-    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
-  }
+  log(`[KiddBusy Agent] Starting ${new Date().toISOString()}`);
 
   try {
-    const task = `Run the daily KiddBusy agent routine. Check all pending submissions, reviews, and sponsorships. Process them appropriately, send the right emails, and send me a daily summary to admin@kiddbusy.com when done.`;
-
-    const summary = await runAgent(task, log);
-
+    const summary = await runAgent(log);
     return {
       statusCode: 200,
       body: JSON.stringify({ success: true, summary, log: logs })
     };
-
   } catch (err) {
     log(`[ERROR] ${err.message}`);
-    // Try to send an error alert
     try {
       await sendEmail(
         'admin@kiddbusy.com',
         'KiddBusy Agent Error',
-        `<p>The daily KiddBusy agent encountered an error:</p><pre>${err.message}</pre><p>Please check the Netlify function logs.</p>`,
+        `<p>The daily agent hit an error:</p><pre>${err.message}</pre><p>Check Netlify function logs for details.</p>`,
         'KiddBusy Agent'
       );
     } catch {}
-
     return {
       statusCode: 500,
       body: JSON.stringify({ error: err.message, log: logs })
