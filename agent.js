@@ -269,7 +269,7 @@ Body:
 <p>In the meantime, if you have any questions, just reply to this email.</p>
 <p>Warmly,<br>The KiddBusy Team</p>
 
---- TEMPLATE 2: Submission Approved ---
+--- TEMPLATE 2A: Submission Approved (is_owner = true) ---
 Subject: Your listing is live on KiddBusy!
 Body:
 <p>Hi {submitter_name},</p>
@@ -281,6 +281,14 @@ Body:
 <li><strong>Bundle</strong> — $219/month: Sponsored listing + banner ad (best value!)</li>
 </ul>
 <p>Interested? Just reply to this email and we'll get you set up!</p>
+<p>Warmly,<br>The KiddBusy Team</p>
+
+--- TEMPLATE 2B: Submission Approved (is_owner = false — community submission) ---
+Subject: The listing you submitted is live on KiddBusy!
+Body:
+<p>Hi {submitter_name},</p>
+<p>Thanks to you, <strong>{business_name}</strong> is now live on KiddBusy.com! Families in {city} can find it when they're looking for fun things to do with their kids.</p>
+<p>We love having community members like you help build the directory — thank you for spreading the word about great local spots!</p>
 <p>Warmly,<br>The KiddBusy Team</p>
 
 --- TEMPLATE 3: Submission Rejected - Missing Information ---
@@ -380,7 +388,7 @@ Body:
 <p>Warmly,<br>The KiddBusy Team</p>
 
 WHEN TO SEND EMAILS:
-- After approving a submission: send Template 2 to the submitter_email
+- After approving a submission: check is_owner field. If is_owner = true, send Template 2A (with sponsorship upsell). If is_owner = false, send Template 2B (thank you only, no upsell).
 - After rejecting a submission: send Template 3 or 4 based on reason
 - After approving a review: send Template 5 to reviewer_email
 - After rejecting a review: send Template 6 to reviewer_email
