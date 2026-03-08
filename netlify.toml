@@ -5,9 +5,20 @@
 [functions.search]
   timeout = 60
 
+[functions.agent-proxy]
+  timeout = 60
+
+[functions.send-email]
+  timeout = 30
+
 # Daily cache warm — runs at 3am ET (8am UTC)
 [functions.daily-cache-warm]
   schedule = "0 8 * * *"
+  timeout = 900
+
+# Autonomous agent — runs every morning at 9am ET (2pm UTC)
+[functions.agent-scheduled]
+  schedule = "0 14 * * *"
   timeout = 900
 
 [[redirects]]
@@ -18,4 +29,9 @@
 [[redirects]]
   from = "/api/warm"
   to = "/.netlify/functions/daily-cache-warm"
+  status = 200
+
+[[redirects]]
+  from = "/api/agent-run"
+  to = "/.netlify/functions/agent-scheduled"
   status = 200
