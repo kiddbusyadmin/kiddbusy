@@ -1,3 +1,4 @@
+document.addEventListener('DOMContentLoaded', function() {
 
 // ----------------------------------------
 const ADMIN_PASSWORD = 'kiddbusy2024'; // Change this
@@ -395,3 +396,5 @@ function autoResize(el) {
   el.style.height = 'auto';
   el.style.height = Math.min(el.scrollHeight, 160) + 'px';
 }
+
+});
