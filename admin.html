@@ -52,7 +52,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 
 /* ===================== DASHBOARD ===================== */
 #view-dash{overflow-y:auto;}
+#view-locations{overflow-y:auto;}
 .dash-inner{padding:24px 32px;max-width:1400px;margin:0 auto;}
+.locations-inner{padding:24px 32px;max-width:1400px;margin:0 auto;}
 .date-banner{font-family:var(--mono);font-size:.68rem;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:20px;}
 
 /* Stat cards */
@@ -185,9 +187,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 .chat-send:disabled{opacity:.4;cursor:not-allowed;}
 
 /* Scrollbar */
-::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar{width:12px;height:12px;}
 ::-webkit-scrollbar-track{background:transparent;}
-::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}
+::-webkit-scrollbar-thumb:hover{background:var(--accent2);background-clip:padding-box;}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
@@ -216,6 +219,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
   <div class="topbar-logo">Kidd<span>Busy</span></div>
   <div class="tabs">
     <div class="tab active" onclick="switchTab('dash',this)" id="tab-dash">Dashboard</div>
+    <div class="tab" onclick="switchTab('locations',this)" id="tab-locations">Locations</div>
     <div class="tab" onclick="switchTab('agent',this)" id="tab-agent">Agent</div>
   </div>
   <div class="topbar-right">
@@ -359,7 +363,26 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
     </div>
   </div>
 
-  <!-- SPONSOR MANAGER -->
+  <!-- EMAIL LEADS -->
+  <div class="panels full">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Email Leads</div>
+        <div class="panel-badge" id="badge-leads">--</div>
+      </div>
+      <div id="body-leads">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div><!-- /view-dash -->
+
+<!-- LOCATIONS VIEW -->
+<div class="view" id="view-locations">
+<div class="locations-inner">
+  <div class="date-banner">// LOCATIONS + SPONSORSHIPS</div>
   <div class="panels full">
     <div class="panel">
       <div class="panel-header">
@@ -382,22 +405,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
       </div>
     </div>
   </div>
-
-  <!-- EMAIL LEADS -->
-  <div class="panels full">
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Email Leads</div>
-        <div class="panel-badge" id="badge-leads">--</div>
-      </div>
-      <div id="body-leads">
-        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
-      </div>
-    </div>
-  </div>
-
 </div>
-</div><!-- /view-dash -->
+</div><!-- /view-locations -->
 
 <!-- AGENT VIEW -->
 <div class="view" id="view-agent">
@@ -445,6 +454,9 @@ var sb = null;
 var _allSponsorListings = [];
 var convHistory = [];
 var agentBusy = false;
+var refreshTimer = null;
+var locationsLoaded = false;
+var LOGIN_STATE_KEY = 'kiddbusy_hq_unlocked';
 
 var EVENT_COLORS = {
   city_search:'#4d9fff', multi_city_session:'#7c5cbf',
@@ -472,15 +484,20 @@ var FILTER_ICONS = {
 function doLogin() {
   var pw = document.getElementById('pw-input').value;
   if (pw === ADMIN_PASSWORD) {
-    document.getElementById('login-screen').style.display = 'none';
-    sb = supabase.createClient(SUPABASE_URL, ANON_KEY);
-    loadAll();
-    setInterval(loadAll, 60000);
+    unlockDashboard();
+    try { sessionStorage.setItem(LOGIN_STATE_KEY, '1'); } catch (e) {}
   } else {
     var err = document.getElementById('login-err');
     err.style.display = 'block';
     setTimeout(function() { err.style.display = 'none'; }, 3000);
   }
+}
+
+function unlockDashboard() {
+  document.getElementById('login-screen').style.display = 'none';
+  if (!sb) sb = supabase.createClient(SUPABASE_URL, ANON_KEY);
+  loadAll();
+  if (!refreshTimer) refreshTimer = setInterval(loadAll, 60000);
 }
 
 // ===== TABS =====
@@ -489,6 +506,9 @@ function switchTab(name, el) {
   document.querySelectorAll('.view').forEach(function(v) { v.classList.remove('active'); });
   el.classList.add('active');
   document.getElementById('view-' + name).classList.add('active');
+  if (name === 'locations' && !locationsLoaded && sb) {
+    loadSponsorListings();
+  }
 }
 
 // ===== HELPERS =====
@@ -529,6 +549,17 @@ async function dbWrite(table, id, updates, match) {
   return true;
 }
 
+async function fetchAdminSubmissions(status, limit) {
+  var res = await fetch('/.netlify/functions/db-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
+    body: JSON.stringify({ action: 'query_submissions', status: status || 'all', limit: limit || 500 })
+  });
+  var payload = await res.json();
+  if (!res.ok) throw new Error(payload.error || 'Failed to load submissions');
+  return payload.submissions || [];
+}
+
 // ===== LOAD ALL =====
 async function loadAll() {
   if (!sb) return;
@@ -545,7 +576,6 @@ async function loadAll() {
     loadActivityFeed(),
     loadDataIntegrity(),
     loadSubmissions(),
-    loadSponsorListings(),
     loadLeads()
   ]);
 
@@ -558,11 +588,16 @@ async function loadStats() {
   var results = await Promise.all([
     sb.from('analytics').select('event, city, created_at').order('created_at', { ascending: false }),
     sb.from('reviews').select('status, created_at'),
-    sb.from('submissions').select('status'),
     sb.from('email_leads').select('created_at'),
     sb.from('analytics').select('id').eq('event', 'cache_hit'),
     sb.from('analytics').select('id').eq('event', 'cache_miss')
   ]);
+  var submissionRows = [];
+  try {
+    submissionRows = await fetchAdminSubmissions('all', 1000);
+  } catch (e) {
+    submissionRows = [];
+  }
 
   var events = results[0].data || [];
   var todayEvents = events.filter(function(e) { return isToday(e.created_at); });
@@ -578,7 +613,7 @@ async function loadStats() {
   var multiCity = events.filter(function(e) { return e.event === 'multi_city_session'; });
   document.getElementById('stat-multi').textContent = multiCity.length;
 
-  var emailData = results[3].data || [];
+  var emailData = results[2].data || [];
   var todayEmails = emailData.filter(function(e) { return isToday(e.created_at); });
   document.getElementById('stat-emails').textContent = emailData.length;
   document.getElementById('stat-emails-sub').textContent = 'today: ' + todayEmails.length;
@@ -588,7 +623,7 @@ async function loadStats() {
   document.getElementById('stat-reviews').textContent = reviewData.length;
   document.getElementById('stat-reviews-sub').textContent = 'pending: ' + pendingRevs.length;
 
-  var subData = results[2].data || [];
+  var subData = submissionRows || [];
   var pendingSubs = subData.filter(function(s) { return s.status === 'pending'; });
   document.getElementById('stat-subs').textContent = subData.length;
   document.getElementById('stat-subs-sub').textContent = 'pending: ' + pendingSubs.length;
@@ -596,8 +631,8 @@ async function loadStats() {
   var advClicks = events.filter(function(e) { return e.event === 'advertise_click'; });
   document.getElementById('stat-adv').textContent = advClicks.length;
 
-  var hits = (results[4].data || []).length;
-  var misses = (results[5].data || []).length;
+  var hits = (results[3].data || []).length;
+  var misses = (results[4].data || []).length;
   var total = hits + misses;
   document.getElementById('stat-cache').textContent = total > 0 ? Math.round((hits / total) * 100) + '%' : '--';
 }
@@ -813,14 +848,17 @@ async function loadDataIntegrity() {
 
 // ===== SUBMISSIONS INBOX (with approve/reject buttons) =====
 async function loadSubmissions() {
-  var res = await sb.from('submissions').select('*').order('created_at', { ascending: false });
-  if (res.error && String(res.error.message || '').includes('created_at')) {
-    res = await sb.from('submissions').select('*');
+  var rows = [];
+  try {
+    rows = await fetchAdminSubmissions('all', 500);
+  } catch (err) {
+    document.getElementById('body-subs').innerHTML = '<div class="empty" style="padding:24px;color:var(--accent)">Failed to load submissions: ' + err.message + '</div>';
+    return;
   }
-  var pending = (res.data || []).filter(function(s) { return s.status === 'pending'; }).length;
+  var pending = (rows || []).filter(function(s) { return s.status === 'pending'; }).length;
   document.getElementById('badge-subs').textContent = pending + ' pending';
 
-  if (!res.data || !res.data.length) {
+  if (!rows || !rows.length) {
     document.getElementById('body-subs').innerHTML = '<div class="empty" style="padding:24px">No submissions yet</div>';
     return;
   }
@@ -829,7 +867,7 @@ async function loadSubmissions() {
     '<table class="data-table"><thead><tr>' +
     '<th>Business</th><th>Type</th><th>City</th><th>Contact</th><th>Status</th><th>Date</th><th>Actions</th>' +
     '</tr></thead><tbody>' +
-    (res.data || []).map(function(s) {
+    (rows || []).map(function(s) {
       var matchKey = encodeURIComponent(JSON.stringify({
         business_name: s.business_name || '',
         submitter_email: s.submitter_email || '',
@@ -868,6 +906,7 @@ async function loadSponsorListings() {
   }
 
   _allSponsorListings = res.data;
+  locationsLoaded = true;
 
   var cities = [...new Set(res.data.map(function(r) { return r.city; }).filter(Boolean))].sort();
   var citySelect = document.getElementById('sponsor-city-filter');
@@ -1058,16 +1097,8 @@ async function execTool(name, input) {
   try {
     switch(name) {
       case 'query_submissions': {
-        var makeQ = function() {
-          var q = sb.from('submissions').select('*');
-          if (input.status && input.status !== 'all') q = q.eq('status', input.status);
-          return q;
-        };
-        var r = await makeQ().order('created_at', { ascending: false });
-        if (r.error && String(r.error.message || '').includes('created_at')) {
-          r = await makeQ();
-        }
-        return { count: (r.data||[]).length, submissions: r.data };
+        var r = await fetchAdminSubmissions(input.status || 'all', 500);
+        return { count: (r||[]).length, submissions: r };
       }
       case 'query_reviews': {
         var q2 = sb.from('reviews').select('*').order('created_at', { ascending: false });
@@ -1172,11 +1203,11 @@ function sendMsg() {
 
 function sendQuick(text) {
   // Switch to agent tab
-  document.querySelectorAll('.tab').forEach(function(t, i) {
-    t.classList.toggle('active', i === 1);
+  document.querySelectorAll('.tab').forEach(function(t) {
+    t.classList.toggle('active', t.id === 'tab-agent');
   });
-  document.querySelectorAll('.view').forEach(function(v, i) {
-    v.classList.toggle('active', i === 1);
+  document.querySelectorAll('.view').forEach(function(v) {
+    v.classList.toggle('active', v.id === 'view-agent');
   });
   runAgent(text);
 }
@@ -1300,6 +1331,12 @@ function autoResize(el) {
   el.style.height = 'auto';
   el.style.height = Math.min(el.scrollHeight, 120) + 'px';
 }
+
+try {
+  if (sessionStorage.getItem(LOGIN_STATE_KEY) === '1') {
+    unlockDashboard();
+  }
+} catch (e) {}
 </script>
 </body>
 </html>

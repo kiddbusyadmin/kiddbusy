@@ -40,7 +40,43 @@ exports.handler = async (event) => {
     return json(400, { error: 'Invalid JSON body' });
   }
 
-  const { action, table, id, updates, match } = body;
+  const { action, table, id, updates, match, status, limit } = body;
+
+  if (action === 'query_submissions') {
+    const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 1000);
+    const allowedStatus = new Set(['pending', 'approved', 'rejected', 'all']);
+    const statusFilter = String(status || 'all');
+    if (!allowedStatus.has(statusFilter)) {
+      return json(400, { error: 'Invalid status filter' });
+    }
+
+    const filters = [`select=*`, `limit=${safeLimit}`];
+    if (statusFilter !== 'all') filters.push(`status=eq.${encodeURIComponent(statusFilter)}`);
+    const queryUrl = `${SUPABASE_URL}/rest/v1/submissions?${filters.join('&')}`;
+    try {
+      const response = await fetch(queryUrl, {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_SERVICE_KEY,
+          'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const text = await response.text();
+      let data = [];
+      try {
+        data = text ? JSON.parse(text) : [];
+      } catch {
+        data = [];
+      }
+      if (!response.ok) {
+        return json(response.status, { error: 'Supabase query failed', details: data });
+      }
+      return json(200, { count: Array.isArray(data) ? data.length : 0, submissions: data });
+    } catch (err) {
+      return json(500, { error: err.message || 'Unexpected error' });
+    }
+  }
 
   if (action !== 'update') {
     return json(400, { error: 'Unsupported action' });
