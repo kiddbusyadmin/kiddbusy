@@ -1,14 +1,14 @@
 // Autonomous KiddBusy Agent - runs on a schedule
 // Uses fetch only — no npm dependencies required
 
-const SUPABASE_URL = 'https://wgbdwpbexfcxijcrxyii.supabase.co';
+const SUPABASE_URL = process.env.KB_DB_URL || 'https://wgwexzyqaiwosgraaczi.supabase.co';
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
 // ---- SUPABASE via REST ----
 async function dbQuery(table, params = {}) {
-  let url = `${SUPABASE_URL}/rest/v1/${table}?select=*&limit=100`;
+  let url = `${SUPABASE_URL}/rest/v1/${table}?select=*&imit=100`;
   if (params.eq) {
     for (const [col, val] of Object.entries(params.eq)) {
       url += `&${col}=eq.${encodeURIComponent(val)}`;
