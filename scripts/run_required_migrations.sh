@@ -10,6 +10,7 @@ MIGRATIONS=(
   "supabase/migrations/20260309_owner_leads_enrichment.sql"
   "supabase/migrations/20260309_email_unsubscribe.sql"
   "supabase/migrations/20260309_cmo_agent_settings.sql"
+  "supabase/migrations/20260309_agent_activity.sql"
 )
 
 for m in "${MIGRATIONS[@]}"; do

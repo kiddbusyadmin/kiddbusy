@@ -226,6 +226,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
     <div class="tab" onclick="switchTab('photos',this)" id="tab-photos">Photos</div>
     <div class="tab" onclick="switchTab('ownerkpi',this)" id="tab-ownerkpi">Owner KPI</div>
     <div class="tab" onclick="switchTab('cmo',this)" id="tab-cmo">CMO</div>
+    <div class="tab" onclick="switchTab('agentsummary',this)" id="tab-agentsummary">Agent Summary</div>
     <div class="tab" onclick="switchTab('cache',this)" id="tab-cache">Cache</div>
     <div class="tab" onclick="switchTab('activity',this)" id="tab-activity">Activity</div>
     <div class="tab" onclick="switchTab('integrity',this)" id="tab-integrity">Integrity</div>
@@ -590,6 +591,24 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 </div>
 </div><!-- /view-cmo -->
 
+<!-- AGENT SUMMARY VIEW -->
+<div class="view" id="view-agentsummary">
+<div class="locations-inner">
+  <div class="date-banner">// AGENT EXECUTION SUMMARY</div>
+  <div class="panels full">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">What Agents Have Been Doing</div>
+        <div class="panel-badge" id="badge-agent-summary">recent runs</div>
+      </div>
+      <div class="panel-body" id="body-agent-summary">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div><!-- /view-agentsummary -->
+
 <!-- CACHE VIEW -->
 <div class="view" id="view-cache">
 <div class="locations-inner">
@@ -758,6 +777,9 @@ function switchTab(name, el) {
   if (name === 'cmo') {
     loadCmoDashboard();
   }
+  if (name === 'agentsummary') {
+    loadAgentSummary();
+  }
 }
 
 // ===== HELPERS =====
@@ -875,6 +897,9 @@ async function loadAll() {
   }
   if (document.getElementById('view-cmo').classList.contains('active')) {
     loadCmoDashboard();
+  }
+  if (document.getElementById('view-agentsummary').classList.contains('active')) {
+    loadAgentSummary();
   }
 
   document.getElementById('last-updated').textContent =
@@ -1353,6 +1378,67 @@ async function saveCmoConfig() {
     alert('CMO settings save failed: ' + e.message);
   } finally {
     btns.forEach(function(b) { b.disabled = false; });
+  }
+}
+
+// ===== AGENT SUMMARY =====
+async function fetchAgentActivity(limit) {
+  var res = await fetch('/.netlify/functions/db-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
+    body: JSON.stringify({ action: 'query_agent_activity', limit: limit || 80 })
+  });
+  var out = await res.json();
+  if (!res.ok) throw new Error(out.error || 'Failed to load agent activity');
+  return out.activities || [];
+}
+
+function formatLocalTimestamp(ts) {
+  if (!ts) return '--';
+  var d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return '--';
+  return d.toLocaleString('en-US', { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+function humanAgentName(key) {
+  var k = String(key || '').trim();
+  if (k === 'admin_scheduled_agent') return 'Admin Agent';
+  if (k === 'owner_leads_enrichment_agent') return 'Owner Leads Agent';
+  if (k === 'cmo_agent') return 'CMO Agent';
+  if (!k) return 'Unknown Agent';
+  return k.replace(/_/g, ' ');
+}
+
+async function loadAgentSummary() {
+  var body = document.getElementById('body-agent-summary');
+  var badge = document.getElementById('badge-agent-summary');
+  if (!body) return;
+  body.innerHTML = loadingHTML();
+  try {
+    var rows = await fetchAgentActivity(120);
+    badge.textContent = rows.length + ' entries';
+    if (!rows.length) {
+      body.innerHTML = emptyHTML('No agent activity yet');
+      return;
+    }
+    body.innerHTML =
+      '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+      '<th>Time</th><th>Agent</th><th>Status</th><th>Summary</th>' +
+      '</tr></thead><tbody>' +
+      rows.map(function(r) {
+        var statusClass = String(r.status || 'info').toLowerCase();
+        var color = statusClass === 'error' ? 'var(--accent)' : (statusClass === 'success' ? 'var(--green)' : 'var(--blue)');
+        return '<tr>' +
+          '<td style="font-family:var(--mono);font-size:.72rem;color:var(--muted);white-space:nowrap">' + formatLocalTimestamp(r.created_at) + '</td>' +
+          '<td style="font-family:var(--mono);font-size:.72rem;color:var(--text)">' + humanAgentName(r.agent_key) + '</td>' +
+          '<td style="font-family:var(--mono);font-size:.7rem;color:' + color + ';text-transform:uppercase">' + String(r.status || 'info') + '</td>' +
+          '<td style="color:var(--text);line-height:1.45;white-space:normal">' + String(r.summary || '--') + '</td>' +
+          '</tr>';
+      }).join('') +
+      '</tbody></table></div>';
+  } catch (e) {
+    badge.textContent = 'unavailable';
+    body.innerHTML = '<div class="empty" style="padding:24px;color:var(--accent)">Agent summary unavailable: ' + e.message + '</div>';
   }
 }
 

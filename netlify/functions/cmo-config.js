@@ -1,5 +1,6 @@
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+const { logAgentActivity } = require('./_agent-activity');
 
 function json(statusCode, payload) {
   return {
@@ -80,6 +81,17 @@ exports.handler = async (event) => {
   if (!response.ok) return json(response.status, { error: 'Failed to update CMO config', details: data });
 
   const row = Array.isArray(data) && data.length ? data[0] : null;
+  await logAgentActivity({
+    agentKey: 'cmo_agent',
+    status: 'info',
+    summary: `CMO config updated: execution_mode=${row && row.execution_mode ? row.execution_mode : 'unknown'}, auto_send=${row && row.auto_send_enabled ? 'on' : 'off'}.`,
+    details: {
+      execution_mode: row ? row.execution_mode : null,
+      auto_send_enabled: row ? !!row.auto_send_enabled : null,
+      max_emails_per_day: row ? row.max_emails_per_day : null,
+      monthly_email_send_cap: row ? row.monthly_email_send_cap : null,
+      contact_cap: row ? row.contact_cap : null
+    }
+  });
   return json(200, { success: true, config: row });
 };
-

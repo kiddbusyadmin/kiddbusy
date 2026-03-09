@@ -40,7 +40,7 @@ exports.handler = async (event) => {
     return json(400, { error: 'Invalid JSON body' });
   }
 
-  const { action, table, id, updates, match, status, limit, listing_id, is_sponsored } = body;
+  const { action, table, id, updates, match, status, limit, listing_id, is_sponsored, agent_key } = body;
 
   if (action === 'query_submissions') {
     const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 1000);
@@ -112,6 +112,37 @@ exports.handler = async (event) => {
         return json(404, { error: 'Listing not found or update not permitted' });
       }
       return json(200, { success: true, listing_id, is_sponsored, data });
+    } catch (err) {
+      return json(500, { error: err.message || 'Unexpected error' });
+    }
+  }
+
+  if (action === 'query_agent_activity') {
+    const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
+    const filters = ['select=*', `order=created_at.desc`, `limit=${safeLimit}`];
+    const key = String(agent_key || '').trim();
+    if (key) filters.push(`agent_key=eq.${encodeURIComponent(key)}`);
+    const queryUrl = `${SUPABASE_URL}/rest/v1/agent_activity?${filters.join('&')}`;
+    try {
+      const response = await fetch(queryUrl, {
+        method: 'GET',
+        headers: {
+          apikey: SUPABASE_SERVICE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const text = await response.text();
+      let data = [];
+      try {
+        data = text ? JSON.parse(text) : [];
+      } catch {
+        data = [];
+      }
+      if (!response.ok) {
+        return json(response.status, { error: 'Supabase query failed', details: data });
+      }
+      return json(200, { count: Array.isArray(data) ? data.length : 0, activities: data });
     } catch (err) {
       return json(500, { error: err.message || 'Unexpected error' });
     }

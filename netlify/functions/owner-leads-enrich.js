@@ -2,6 +2,7 @@ const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const OWNER_LEADS_MODEL = process.env.OWNER_LEADS_MODEL || 'claude-sonnet-4-20250514';
+const { logAgentActivity } = require('./_agent-activity');
 
 function json(statusCode, payload) {
   return {
@@ -312,6 +313,23 @@ exports.handler = async (event) => {
       }
     }
 
+    await logAgentActivity({
+      agentKey: 'owner_leads_enrichment_agent',
+      status: 'success',
+      summary: `Owner leads enrichment completed for ${city || 'all cities'}: scanned ${listings.length}, stored ${stored}, websites backfilled ${websiteBackfilled}, failed ${failed}.`,
+      details: {
+        city: city || null,
+        auto_write: autoWrite,
+        dry_run: dryRun,
+        scanned: listings.length,
+        stored,
+        websites_backfilled: websiteBackfilled,
+        skipped_no_email: skippedNoEmail,
+        skipped_low_confidence: skippedLowConfidence,
+        failed
+      }
+    });
+
     return json(200, {
       success: true,
       city: city || null,
@@ -326,6 +344,11 @@ exports.handler = async (event) => {
       results
     });
   } catch (err) {
+    await logAgentActivity({
+      agentKey: 'owner_leads_enrichment_agent',
+      status: 'error',
+      summary: `Owner leads enrichment failed for ${city || 'all cities'}: ${String(err.message || 'unexpected error').slice(0, 800)}`
+    });
     return json(500, { error: err.message || 'Unexpected error' });
   }
 };

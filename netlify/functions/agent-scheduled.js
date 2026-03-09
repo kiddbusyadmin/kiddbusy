@@ -1,6 +1,7 @@
 // Autonomous KiddBusy Agent - runs on a schedule
 // Uses fetch only — no npm dependencies required
 const { sendCompliantEmail } = require('./_email-compliance');
+const { logAgentActivity } = require('./_agent-activity');
 
 const SUPABASE_URL = process.env.KB_DB_URL || 'https://wgwexzyqaiwosgraaczi.supabase.co';
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY;
@@ -317,12 +318,24 @@ exports.handler = async (event) => {
 
   try {
     const summary = await runAgent(log);
+    await logAgentActivity({
+      agentKey: 'admin_scheduled_agent',
+      status: 'success',
+      summary: `Daily admin agent completed successfully. ${String(summary || '').slice(0, 600)}`,
+      details: { run_type: 'scheduled', success: true }
+    });
     return {
       statusCode: 200,
       body: JSON.stringify({ success: true, summary, log: logs })
     };
   } catch (err) {
     log(`[ERROR] ${err.message}`);
+    await logAgentActivity({
+      agentKey: 'admin_scheduled_agent',
+      status: 'error',
+      summary: `Daily admin agent failed: ${String(err.message || 'unknown error').slice(0, 800)}`,
+      details: { run_type: 'scheduled', success: false }
+    });
     try {
       await sendEmail(
         'admin@kiddbusy.com',
