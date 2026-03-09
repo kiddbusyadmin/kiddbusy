@@ -595,6 +595,50 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 <div class="view" id="view-agentsummary">
 <div class="locations-inner">
   <div class="date-banner">// AGENT EXECUTION SUMMARY</div>
+  <div class="stats-row" style="margin-bottom:16px">
+    <div class="stat-card blue">
+      <div class="stat-label">Entries (7d)</div>
+      <div class="stat-value" id="agentkpi-total">--</div>
+      <div class="stat-sub" id="agentkpi-total-sub">all time: --</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Success (7d)</div>
+      <div class="stat-value" id="agentkpi-success">--</div>
+      <div class="stat-sub" id="agentkpi-success-rate">success rate: --</div>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-label">Errors (7d)</div>
+      <div class="stat-value" id="agentkpi-error">--</div>
+      <div class="stat-sub" id="agentkpi-error-rate">error rate: --</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-label">Active Agents (7d)</div>
+      <div class="stat-value" id="agentkpi-agents">--</div>
+      <div class="stat-sub">distinct agent keys</div>
+    </div>
+  </div>
+
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Runs by Agent</div>
+        <div class="panel-badge">last 7 days</div>
+      </div>
+      <div class="panel-body" id="body-agent-summary-by-agent">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Status Mix</div>
+        <div class="panel-badge">last 7 days</div>
+      </div>
+      <div class="panel-body" id="body-agent-summary-status">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+
   <div class="panels full">
     <div class="panel">
       <div class="panel-header">
@@ -1436,11 +1480,75 @@ function humanAgentName(key) {
 async function loadAgentSummary() {
   var body = document.getElementById('body-agent-summary');
   var badge = document.getElementById('badge-agent-summary');
+  var byAgentEl = document.getElementById('body-agent-summary-by-agent');
+  var byStatusEl = document.getElementById('body-agent-summary-status');
   if (!body) return;
   body.innerHTML = loadingHTML();
+  if (byAgentEl) byAgentEl.innerHTML = loadingHTML();
+  if (byStatusEl) byStatusEl.innerHTML = loadingHTML();
   try {
     var rows = await fetchAgentActivity(120);
+    var rows7d = rows.filter(function(r) { return isWithinRange(r.created_at, '7d'); });
     badge.textContent = rows.length + ' entries';
+
+    var total7d = rows7d.length;
+    var totalAll = rows.length;
+    var success7d = rows7d.filter(function(r) { return String(r.status || '').toLowerCase() === 'success'; }).length;
+    var error7d = rows7d.filter(function(r) { return String(r.status || '').toLowerCase() === 'error'; }).length;
+    var successRate = total7d > 0 ? Math.round((success7d / total7d) * 100) : 0;
+    var errorRate = total7d > 0 ? Math.round((error7d / total7d) * 100) : 0;
+    var distinctAgents7d = new Set(rows7d.map(function(r) { return String(r.agent_key || '').trim(); }).filter(Boolean)).size;
+
+    document.getElementById('agentkpi-total').textContent = total7d;
+    document.getElementById('agentkpi-total-sub').textContent = 'all time: ' + totalAll;
+    document.getElementById('agentkpi-success').textContent = success7d;
+    document.getElementById('agentkpi-success-rate').textContent = 'success rate: ' + successRate + '%';
+    document.getElementById('agentkpi-error').textContent = error7d;
+    document.getElementById('agentkpi-error-rate').textContent = 'error rate: ' + errorRate + '%';
+    document.getElementById('agentkpi-agents').textContent = distinctAgents7d;
+
+    var byAgent = {};
+    rows7d.forEach(function(r) {
+      var k = String(r.agent_key || 'unknown');
+      byAgent[k] = (byAgent[k] || 0) + 1;
+    });
+    var byAgentSorted = Object.entries(byAgent).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 8);
+    var maxAgent = byAgentSorted[0] ? byAgentSorted[0][1] : 1;
+    if (byAgentEl) {
+      byAgentEl.innerHTML = byAgentSorted.length
+        ? byAgentSorted.map(function(entry) {
+            var key = entry[0], count = entry[1];
+            var pct = Math.round((count / maxAgent) * 100);
+            return '<div class=\"city-bar-wrap\">' +
+              '<div class=\"city-bar-label\">' + humanAgentName(key) + '<span>' + count + '</span></div>' +
+              '<div class=\"city-bar-bg\"><div class=\"city-bar-fill\" style=\"width:' + pct + '%\"></div></div>' +
+              '</div>';
+          }).join('')
+        : emptyHTML('No agent entries in last 7 days');
+    }
+
+    var byStatus = {};
+    rows7d.forEach(function(r) {
+      var s = String(r.status || 'info').toLowerCase();
+      byStatus[s] = (byStatus[s] || 0) + 1;
+    });
+    var statusOrder = ['success', 'info', 'error'];
+    var statusRows = statusOrder.filter(function(s) { return byStatus[s] > 0; }).map(function(s) { return [s, byStatus[s]]; });
+    var maxStatus = statusRows[0] ? Math.max.apply(null, statusRows.map(function(x) { return x[1]; })) : 1;
+    if (byStatusEl) {
+      byStatusEl.innerHTML = statusRows.length
+        ? statusRows.map(function(entry) {
+            var status = entry[0], count = entry[1];
+            var pct = Math.round((count / maxStatus) * 100);
+            var color = status === 'error' ? 'var(--accent)' : (status === 'success' ? 'var(--green)' : 'var(--blue)');
+            return '<div class=\"city-bar-wrap\">' +
+              '<div class=\"city-bar-label\" style=\"text-transform:uppercase\">' + status + '<span>' + count + '</span></div>' +
+              '<div class=\"city-bar-bg\"><div class=\"city-bar-fill\" style=\"width:' + pct + '%;background:' + color + '\"></div></div>' +
+              '</div>';
+          }).join('')
+        : emptyHTML('No status data in last 7 days');
+    }
+
     if (!rows.length) {
       body.innerHTML = emptyHTML('No agent activity yet');
       return;
