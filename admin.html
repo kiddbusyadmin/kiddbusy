@@ -996,15 +996,21 @@ async function setSponsor(listingId, sponsored, name, btn) {
   btn.disabled = true;
   btn.textContent = sponsored ? 'Saving...' : 'Removing...';
 
-  var res = await sb.from('listings').update({ is_sponsored: sponsored }).eq('listing_id', listingId);
+  var res = await fetch('/.netlify/functions/db-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
+    body: JSON.stringify({ action: 'update_listing_sponsor', listing_id: listingId, is_sponsored: sponsored })
+  });
+  var payload = await res.json();
 
-  if (res.error) {
+  if (!res.ok || !payload.success) {
     btn.textContent = 'Error!';
     btn.style.background = '#ff4444';
     setTimeout(function() {
       btn.disabled = false;
       btn.textContent = sponsored ? 'Make Sponsor' : 'Remove Sponsor';
     }, 2000);
+    if (payload && payload.error) alert('Failed: ' + payload.error);
     return;
   }
 

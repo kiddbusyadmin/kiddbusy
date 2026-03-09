@@ -40,7 +40,7 @@ exports.handler = async (event) => {
     return json(400, { error: 'Invalid JSON body' });
   }
 
-  const { action, table, id, updates, match, status, limit } = body;
+  const { action, table, id, updates, match, status, limit, listing_id, is_sponsored } = body;
 
   if (action === 'query_submissions') {
     const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 1000);
@@ -73,6 +73,45 @@ exports.handler = async (event) => {
         return json(response.status, { error: 'Supabase query failed', details: data });
       }
       return json(200, { count: Array.isArray(data) ? data.length : 0, submissions: data });
+    } catch (err) {
+      return json(500, { error: err.message || 'Unexpected error' });
+    }
+  }
+
+  if (action === 'update_listing_sponsor') {
+    if (typeof listing_id !== 'number' && typeof listing_id !== 'string') {
+      return json(400, { error: 'Missing listing_id' });
+    }
+    if (typeof is_sponsored !== 'boolean') {
+      return json(400, { error: 'Missing is_sponsored boolean' });
+    }
+
+    const updateUrl = `${SUPABASE_URL}/rest/v1/listings?listing_id=eq.${encodeURIComponent(String(listing_id))}`;
+    try {
+      const response = await fetch(updateUrl, {
+        method: 'PATCH',
+        headers: {
+          'apikey': SUPABASE_SERVICE_KEY,
+          'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify({ is_sponsored })
+      });
+      const text = await response.text();
+      let data = [];
+      try {
+        data = text ? JSON.parse(text) : [];
+      } catch {
+        data = [];
+      }
+      if (!response.ok) {
+        return json(response.status, { error: 'Supabase sponsor update failed', details: data });
+      }
+      if (!Array.isArray(data) || data.length === 0) {
+        return json(404, { error: 'Listing not found or update not permitted' });
+      }
+      return json(200, { success: true, listing_id, is_sponsored, data });
     } catch (err) {
       return json(500, { error: err.message || 'Unexpected error' });
     }

@@ -1537,8 +1537,10 @@ function renderActivities(list) {
     const tagHtml = a.ages.map(t => `<span class="card-age-tag">${t}</span>`).join('');
     const bg = { '🏃':'#FFE8E8','🌳':'#E8FFE8','🎨':'#E8EAFF','🎮':'#FFF3E0','🦁':'#FFF8E0','🖌️':'#FCE4EC' }[a.emoji] || '#F5F0FF';
     const catKey = a.category.toLowerCase().replace(/[^a-z]/g,'');
+    const sponsoredBadge = a.is_sponsored ? '<div class="sponsored-badge">⭐ Sponsored</div>' : '';
     return `
     <div class="activity-card">
+      ${sponsoredBadge}
       <div class="card-thumb" style="background:${bg}">
         <span style="filter:drop-shadow(2px 4px 6px rgba(0,0,0,.15))">${a.emoji}</span>
         
@@ -2026,10 +2028,34 @@ async function loadTopPicksForCity(cityLabel, source = 'ai_generated') {
     const activities = JSON.parse(match[0]);
 
     // Upsert each listing to Supabase to get stable IDs for reviews
-    const enriched = await Promise.all(activities.map(async (a) => {
+    let enriched = await Promise.all(activities.map(async (a) => {
       const dbId = await upsertListing(a, cityLabel, source);
       return { ...a, id: dbId || (Math.floor(Math.random() * 90000) + 10000) };
     }));
+
+    // Ensure sponsored locations are pinned first even on cache-miss / fresh AI flow.
+    const ids = enriched.map(a => a.id).filter(Boolean);
+    if (ids.length > 0) {
+      const { data: sponsorRows } = await sb
+        .from('listings')
+        .select('listing_id,is_sponsored,rating')
+        .in('listing_id', ids);
+      const sponsorById = {};
+      (sponsorRows || []).forEach(r => { sponsorById[r.listing_id] = r; });
+      enriched = enriched.map(a => {
+        const row = sponsorById[a.id];
+        return {
+          ...a,
+          is_sponsored: !!(row && row.is_sponsored),
+          rating: row && typeof row.rating === 'number' ? row.rating : a.rating
+        };
+      }).sort((a, b) => {
+        const sa = a.is_sponsored ? 1 : 0;
+        const sbv = b.is_sponsored ? 1 : 0;
+        if (sbv !== sa) return sbv - sa;
+        return (b.rating || 0) - (a.rating || 0);
+      });
+    }
 
     // Store as current listings for filter operations
     currentListings = enriched;
@@ -2141,8 +2167,10 @@ function renderCachedListings(rows) {
     const tagHtml = ages.map(t => `<span class="card-age-tag">${t.trim()}</span>`).join('');
     const cardBg = bg[a.emoji] || '#F5F0FF';
     const safeName = (a.name || '').replace(/'/g, "\\'");
+    const sponsoredBadge = a.is_sponsored ? '<div class="sponsored-badge">⭐ Sponsored</div>' : '';
     return `
     <div class="activity-card">
+      ${sponsoredBadge}
       <div class="card-thumb" style="background:${cardBg}">
         <span style="filter:drop-shadow(2px 4px 6px rgba(0,0,0,.15))">${a.emoji || '🎉'}</span>
         
