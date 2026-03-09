@@ -3,6 +3,7 @@ const { logAgentActivity } = require('./_agent-activity');
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const CMO_RUN_TOKEN = process.env.CMO_RUN_TOKEN || process.env.ADMIN_PASSWORD || '';
 
 function json(statusCode, payload) {
   return {
@@ -298,10 +299,6 @@ async function runCmoBlog(event) {
     var ev = event || {};
     var headers = ev.headers || {};
     var method = String(ev.httpMethod || 'GET').toUpperCase();
-    var isCron = method === 'GET';
-    var source = String(headers['x-requested-from'] || headers['X-Requested-From'] || '').toLowerCase();
-    if (!isCron && source !== 'kiddbusy-hq') return json(403, { error: 'Forbidden' });
-
     var body = {};
     if (method === 'POST') {
       try {
@@ -309,6 +306,12 @@ async function runCmoBlog(event) {
       } catch (e) {
         return json(400, { error: 'Invalid JSON body' });
       }
+    }
+    var isCron = method === 'GET';
+    var source = String(headers['x-requested-from'] || headers['X-Requested-From'] || '').toLowerCase();
+    var tokenMatch = !!(CMO_RUN_TOKEN && String(body.run_token || '') === CMO_RUN_TOKEN);
+    if (!isCron && source !== 'kiddbusy-hq' && !tokenMatch) {
+      return json(403, { error: 'Forbidden' });
     }
 
     var settings = await getSettings();

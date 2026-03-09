@@ -1,4 +1,5 @@
 const NETLIFY_MAIN_DOMAIN = 'https://main--clinquant-biscuit-44a0dc.netlify.app';
+const CMO_RUN_TOKEN = process.env.CMO_RUN_TOKEN || process.env.ADMIN_PASSWORD || '';
 
 function json(statusCode, payload) {
   return {
@@ -17,8 +18,15 @@ exports.handler = async function handler(event) {
   var source = String(headers['x-requested-from'] || headers['X-Requested-From'] || '').toLowerCase();
   if (source !== 'kiddbusy-hq') return json(403, { error: 'Forbidden' });
 
-  var body = '{}';
-  if (typeof ev.body === 'string' && ev.body.trim()) body = ev.body;
+  var body = {};
+  if (typeof ev.body === 'string' && ev.body.trim()) {
+    try {
+      body = JSON.parse(ev.body);
+    } catch (e) {
+      return json(400, { error: 'Invalid JSON body' });
+    }
+  }
+  body.run_token = CMO_RUN_TOKEN;
 
   try {
     var upstream = await fetch(NETLIFY_MAIN_DOMAIN + '/.netlify/functions/cmo-blog-run-background', {
@@ -27,7 +35,7 @@ exports.handler = async function handler(event) {
         'Content-Type': 'application/json',
         'X-Requested-From': 'kiddbusy-hq'
       },
-      body: body
+      body: JSON.stringify(body)
     });
 
     // Background functions return 202 when queued.
