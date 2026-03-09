@@ -558,7 +558,7 @@ async function loadStats() {
   var results = await Promise.all([
     sb.from('analytics').select('event, city, created_at').order('created_at', { ascending: false }),
     sb.from('reviews').select('status, created_at'),
-    sb.from('submissions').select('status, created_at'),
+    sb.from('submissions').select('status'),
     sb.from('email_leads').select('created_at'),
     sb.from('analytics').select('id').eq('event', 'cache_hit'),
     sb.from('analytics').select('id').eq('event', 'cache_miss')
@@ -814,6 +814,9 @@ async function loadDataIntegrity() {
 // ===== SUBMISSIONS INBOX (with approve/reject buttons) =====
 async function loadSubmissions() {
   var res = await sb.from('submissions').select('*').order('created_at', { ascending: false });
+  if (res.error && String(res.error.message || '').includes('created_at')) {
+    res = await sb.from('submissions').select('*');
+  }
   var pending = (res.data || []).filter(function(s) { return s.status === 'pending'; }).length;
   document.getElementById('badge-subs').textContent = pending + ' pending';
 
@@ -837,7 +840,7 @@ async function loadSubmissions() {
         '<td style="color:var(--muted)">' + (s.city || '--') + '</td>' +
         '<td style="color:var(--muted);font-size:.75rem">' + (s.submitter_email || s.submitter_name || '--') + '</td>' +
         '<td><span class="status-badge ' + s.status + '">' + s.status + '</span></td>' +
-        '<td style="color:var(--muted);font-family:var(--mono);font-size:.72rem">' + timeAgo(s.created_at) + '</td>' +
+        '<td style="color:var(--muted);font-family:var(--mono);font-size:.72rem">' + (s.created_at ? timeAgo(s.created_at) : '--') + '</td>' +
         '<td>' + actions + '</td>' +
         '</tr>';
     }).join('') + '</tbody></table>';
@@ -1044,9 +1047,15 @@ async function execTool(name, input) {
   try {
     switch(name) {
       case 'query_submissions': {
-        var q = sb.from('submissions').select('*').order('created_at', { ascending: false });
-        if (input.status && input.status !== 'all') q = q.eq('status', input.status);
-        var r = await q;
+        var makeQ = function() {
+          var q = sb.from('submissions').select('*');
+          if (input.status && input.status !== 'all') q = q.eq('status', input.status);
+          return q;
+        };
+        var r = await makeQ().order('created_at', { ascending: false });
+        if (r.error && String(r.error.message || '').includes('created_at')) {
+          r = await makeQ();
+        }
         return { count: (r.data||[]).length, submissions: r.data };
       }
       case 'query_reviews': {

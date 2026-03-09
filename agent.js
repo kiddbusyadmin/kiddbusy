@@ -156,9 +156,17 @@ async function executeTool(name, input) {
   try {
     switch (name) {
       case 'query_submissions': {
-        let q = getSupabase().from('submissions').select('*').order('created_at', { ascending: false }).limit(input.limit || 50);
-        if (input.status && input.status !== 'all') q = q.eq('status', input.status);
-        const { data, error } = await q;
+        const limit = input.limit || 50;
+        const buildQuery = () => {
+          let q = getSupabase().from('submissions').select('*').limit(limit);
+          if (input.status && input.status !== 'all') q = q.eq('status', input.status);
+          return q;
+        };
+
+        let { data, error } = await buildQuery().order('created_at', { ascending: false });
+        if (error && String(error.message || '').includes('created_at')) {
+          ({ data, error } = await buildQuery());
+        }
         if (error) return { error: error.message };
         return { count: data.length, submissions: data };
       }
