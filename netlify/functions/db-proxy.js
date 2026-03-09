@@ -18,6 +18,55 @@ function json(statusCode, payload) {
   };
 }
 
+async function sbRequest(path, { method = 'GET', body = null, prefer = null } = {}) {
+  const headers = {
+    apikey: SUPABASE_SERVICE_KEY,
+    Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+    'Content-Type': 'application/json'
+  };
+  if (prefer) headers.Prefer = prefer;
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : null
+  });
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  return { response, data };
+}
+
+async function purgePlaceholderReviewsOnFirstOrganicApprove(reviewId) {
+  const { response: reviewResp, data: reviewRows } = await sbRequest(
+    `reviews?id=eq.${encodeURIComponent(String(reviewId))}&select=id,listing_id,source,status&limit=1`
+  );
+  if (!reviewResp.ok || !Array.isArray(reviewRows) || reviewRows.length === 0) return null;
+  const review = reviewRows[0];
+  const source = String(review.source || '').toLowerCase();
+  if (!review.listing_id || source !== 'user') return null;
+
+  const { response: organicResp, data: organicRows } = await sbRequest(
+    `reviews?listing_id=eq.${encodeURIComponent(String(review.listing_id))}&status=eq.approved&source=eq.user&select=id&limit=2`
+  );
+  if (!organicResp.ok || !Array.isArray(organicRows) || organicRows.length !== 1) return null;
+
+  const { response: delResp, data: delData } = await sbRequest(
+    `reviews?listing_id=eq.${encodeURIComponent(String(review.listing_id))}&source=eq.ai_seed`,
+    { method: 'DELETE', prefer: 'return=representation' }
+  );
+  if (!delResp.ok) {
+    return { purge_error: true, listing_id: review.listing_id, details: delData };
+  }
+  return {
+    listing_id: review.listing_id,
+    placeholder_deleted_count: Array.isArray(delData) ? delData.length : 0
+  };
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return json(405, { error: 'Method not allowed' });
@@ -247,7 +296,12 @@ exports.handler = async (event) => {
       return json(response.status, { error: 'Supabase update failed', details: data });
     }
 
-    return json(200, { success: true, table, id, updates: { status: nextStatus }, data });
+    let cleanup = null;
+    if (table === 'reviews' && nextStatus === 'approved') {
+      cleanup = await purgePlaceholderReviewsOnFirstOrganicApprove(id);
+    }
+
+    return json(200, { success: true, table, id, updates: { status: nextStatus }, data, cleanup });
   } catch (err) {
     return json(500, { error: err.message || 'Unexpected error' });
   }

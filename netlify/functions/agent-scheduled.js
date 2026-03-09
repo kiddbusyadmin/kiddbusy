@@ -58,6 +58,41 @@ async function dbUpdate(table, id, updates) {
   return { success: true };
 }
 
+async function purgePlaceholderReviewsOnFirstOrganicApprove(reviewId) {
+  const rows = await dbQuery('reviews', {
+    eq: { id: reviewId }
+  });
+  const review = Array.isArray(rows) && rows.length ? rows[0] : null;
+  if (!review || !review.listing_id || String(review.source || '').toLowerCase() !== 'user') return null;
+
+  const organicRows = await dbQuery('reviews', {
+    eq: { listing_id: review.listing_id, status: 'approved', source: 'user' }
+  });
+  if (!Array.isArray(organicRows) || organicRows.length !== 1) return null;
+
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/reviews?listing_id=eq.${encodeURIComponent(String(review.listing_id))}&source=eq.ai_seed`,
+    {
+      method: 'DELETE',
+      headers: {
+        apikey: SUPABASE_SERVICE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation'
+      }
+    }
+  );
+  const text = await res.text();
+  let data = [];
+  try {
+    data = text ? JSON.parse(text) : [];
+  } catch {
+    data = [];
+  }
+  if (!res.ok) throw new Error(`Placeholder review purge failed (${res.status})`);
+  return { listing_id: review.listing_id, placeholder_deleted_count: Array.isArray(data) ? data.length : 0 };
+}
+
 // ---- EMAIL via Resend ----
 async function sendEmail(to, subject, body, fromName = 'KiddBusy') {
   return sendCompliantEmail({
@@ -112,6 +147,10 @@ async function executeTool(name, input, log) {
       }
       case 'update_review_status': {
         await dbUpdate('reviews', input.id, { status: input.status });
+        if (input.status === 'approved') {
+          const cleanup = await purgePlaceholderReviewsOnFirstOrganicApprove(input.id);
+          return { success: true, id: input.id, new_status: input.status, cleanup };
+        }
         return { success: true, id: input.id, new_status: input.status };
       }
       case 'update_sponsorship_status': {

@@ -153,6 +153,45 @@ async function dbUpdate(table, id, updates) {
   return { success: true };
 }
 
+async function purgePlaceholderReviewsOnFirstOrganicApprove(reviewId) {
+  const reviewRows = await dbQuery('reviews', {
+    select: 'id,listing_id,source,status',
+    eq: { id: reviewId },
+    limit: 1
+  });
+  const review = Array.isArray(reviewRows) && reviewRows.length ? reviewRows[0] : null;
+  if (!review || !review.listing_id || String(review.source || '').toLowerCase() !== 'user') return null;
+
+  const organicRows = await dbQuery('reviews', {
+    select: 'id',
+    eq: { listing_id: review.listing_id, status: 'approved', source: 'user' },
+    limit: 2
+  });
+  if (!Array.isArray(organicRows) || organicRows.length !== 1) return null;
+
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/reviews?listing_id=eq.${encodeURIComponent(String(review.listing_id))}&source=eq.ai_seed`,
+    {
+      method: 'DELETE',
+      headers: {
+        apikey: SUPABASE_SERVICE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation'
+      }
+    }
+  );
+  const text = await res.text();
+  let data = [];
+  try {
+    data = text ? JSON.parse(text) : [];
+  } catch {
+    data = [];
+  }
+  if (!res.ok) throw new Error(`Placeholder review purge failed (${res.status})`);
+  return { listing_id: review.listing_id, placeholder_deleted_count: Array.isArray(data) ? data.length : 0 };
+}
+
 // ---- EMAIL ----
 async function sendEmail(to, subject, body, fromName = 'KiddBusy') {
   return sendCompliantEmail({
@@ -244,6 +283,10 @@ async function executeTool(name, input) {
       return { success: true, id: input.id, new_status: input.status };
     case 'update_review_status':
       await dbUpdate('reviews', input.id, { status: input.status });
+      if (input.status === 'approved') {
+        const cleanup = await purgePlaceholderReviewsOnFirstOrganicApprove(input.id);
+        return { success: true, id: input.id, new_status: input.status, cleanup };
+      }
       return { success: true, id: input.id, new_status: input.status };
     case 'update_sponsorship_status':
       await dbUpdate('sponsorships', input.id, { status: input.status });
