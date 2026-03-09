@@ -8,7 +8,7 @@ const ANTHROPIC_API_URL = '/.netlify/functions/agent-proxy';
 let conversationHistory = [];
 let isLoading = false;
 let _supabase = null;
-function getSupabase() 
+function getSupabase() { 
   if (!_supabase) _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   return _supabase;
 }
