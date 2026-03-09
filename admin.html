@@ -675,6 +675,50 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 <div class="view" id="view-activity">
 <div class="locations-inner">
   <div class="date-banner">// LIVE ACTIVITY FEED</div>
+  <div class="stats-row" style="margin-bottom:16px">
+    <div class="stat-card blue">
+      <div class="stat-label">Events (24h)</div>
+      <div class="stat-value" id="activitykpi-events">--</div>
+      <div class="stat-sub" id="activitykpi-events-sub">all time: --</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-label">Unique Sessions (24h)</div>
+      <div class="stat-value" id="activitykpi-sessions">--</div>
+      <div class="stat-sub">from analytics log</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Top Event (24h)</div>
+      <div class="stat-value" id="activitykpi-top-event">--</div>
+      <div class="stat-sub" id="activitykpi-top-event-sub">count: --</div>
+    </div>
+    <div class="stat-card yellow">
+      <div class="stat-label">Top City (24h)</div>
+      <div class="stat-value" id="activitykpi-top-city">--</div>
+      <div class="stat-sub" id="activitykpi-top-city-sub">count: --</div>
+    </div>
+  </div>
+
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Event Mix</div>
+        <div class="panel-badge">last 24h</div>
+      </div>
+      <div class="panel-body" id="body-activity-event-mix">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">City Mix</div>
+        <div class="panel-badge">last 24h</div>
+      </div>
+      <div class="panel-body" id="body-activity-city-mix">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+
   <div class="panels full">
     <div class="panel">
       <div class="panel-header">
@@ -1203,17 +1247,76 @@ async function loadCacheHealth() {
 
 // ===== LIVE ACTIVITY FEED =====
 async function loadActivityFeed() {
-  var res = await sb.from('analytics').select('*').order('created_at', { ascending: false }).limit(50);
-  if (!res.data || !res.data.length) {
+  var res = await sb.from('analytics').select('*').order('created_at', { ascending: false }).limit(1500);
+  var rows = res.data || [];
+  if (!rows.length) {
+    document.getElementById('activitykpi-events').textContent = '0';
+    document.getElementById('activitykpi-events-sub').textContent = 'all time: 0';
+    document.getElementById('activitykpi-sessions').textContent = '0';
+    document.getElementById('activitykpi-top-event').textContent = '--';
+    document.getElementById('activitykpi-top-event-sub').textContent = 'count: 0';
+    document.getElementById('activitykpi-top-city').textContent = '--';
+    document.getElementById('activitykpi-top-city-sub').textContent = 'count: 0';
+    document.getElementById('body-activity-event-mix').innerHTML = emptyHTML('No event data in last 24h');
+    document.getElementById('body-activity-city-mix').innerHTML = emptyHTML('No city data in last 24h');
     document.getElementById('body-activity').innerHTML = emptyHTML('No activity yet -- analytics will appear as users interact with the site');
     return;
   }
+
+  var rows24h = rows.filter(function(e) { return isWithinRange(e.created_at, '24h'); });
+  var sessionSet = new Set(rows24h.map(function(e) { return String(e.session_id || '').trim(); }).filter(Boolean));
+  var eventCounts = {};
+  var cityCounts = {};
+  rows24h.forEach(function(e) {
+    var evt = String(e.event || 'unknown');
+    var city = String(e.city || 'Unknown');
+    eventCounts[evt] = (eventCounts[evt] || 0) + 1;
+    cityCounts[city] = (cityCounts[city] || 0) + 1;
+  });
+
+  var topEvent = Object.entries(eventCounts).sort(function(a, b) { return b[1] - a[1]; })[0] || ['--', 0];
+  var topCity = Object.entries(cityCounts).sort(function(a, b) { return b[1] - a[1]; })[0] || ['--', 0];
+
+  document.getElementById('activitykpi-events').textContent = rows24h.length;
+  document.getElementById('activitykpi-events-sub').textContent = 'all time: ' + rows.length;
+  document.getElementById('activitykpi-sessions').textContent = sessionSet.size;
+  document.getElementById('activitykpi-top-event').textContent = topEvent[0];
+  document.getElementById('activitykpi-top-event-sub').textContent = 'count: ' + topEvent[1];
+  document.getElementById('activitykpi-top-city').textContent = topCity[0];
+  document.getElementById('activitykpi-top-city-sub').textContent = 'count: ' + topCity[1];
+
+  var eventSorted = Object.entries(eventCounts).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 8);
+  var citySorted = Object.entries(cityCounts).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 8);
+  var maxEvent = eventSorted[0] ? eventSorted[0][1] : 1;
+  var maxCity = citySorted[0] ? citySorted[0][1] : 1;
+
+  document.getElementById('body-activity-event-mix').innerHTML = eventSorted.length
+    ? eventSorted.map(function(entry) {
+        var label = entry[0], count = entry[1];
+        var pct = Math.round((count / maxEvent) * 100);
+        return '<div class="city-bar-wrap">' +
+          '<div class="city-bar-label">' + label + '<span>' + count + '</span></div>' +
+          '<div class="city-bar-bg"><div class="city-bar-fill" style="width:' + pct + '%"></div></div>' +
+          '</div>';
+      }).join('')
+    : emptyHTML('No event data in last 24h');
+
+  document.getElementById('body-activity-city-mix').innerHTML = citySorted.length
+    ? citySorted.map(function(entry) {
+        var label = entry[0], count = entry[1];
+        var pct = Math.round((count / maxCity) * 100);
+        return '<div class="city-bar-wrap">' +
+          '<div class="city-bar-label">' + label + '<span>' + count + '</span></div>' +
+          '<div class="city-bar-bg"><div class="city-bar-fill" style="width:' + pct + '%"></div></div>' +
+          '</div>';
+      }).join('')
+    : emptyHTML('No city data in last 24h');
 
   document.getElementById('body-activity').innerHTML =
     '<table class="data-table"><thead><tr>' +
     '<th>Event</th><th>City</th><th>Value</th><th>Session</th><th>Time</th>' +
     '</tr></thead><tbody>' +
-    res.data.map(function(e) {
+    rows.slice(0, 50).map(function(e) {
       var color = EVENT_COLORS[e.event] || 'var(--text)';
       return '<tr>' +
         '<td><span style="color:' + color + ';font-family:var(--mono);font-size:.75rem">' + e.event + '</span></td>' +
