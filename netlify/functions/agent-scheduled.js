@@ -5,6 +5,8 @@ const SUPABASE_URL = process.env.KB_DB_URL || 'https://wgwexzyqaiwosgraaczi.supa
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 // ---- SUPABASE via REST ----
 async function dbQuery(table, params = {}) {
@@ -75,6 +77,16 @@ async function sendEmail(to, subject, body, fromName = 'KiddBusy') {
   return result;
 }
 
+// ---- TELEGRAM ----
+async function sendTelegram(text) {
+  if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) return;
+  await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text, parse_mode: 'HTML' })
+  });
+}
+
 // ---- TOOL EXECUTOR ----
 async function executeTool(name, input, log) {
   log(`  [tool] ${name}(${JSON.stringify(input)})`);
@@ -125,6 +137,10 @@ async function executeTool(name, input, log) {
       case 'send_email': {
         await sendEmail(input.to, input.subject, input.body, input.from_name || 'KiddBusy');
         return { success: true, to: input.to, subject: input.subject };
+      }
+      case 'send_telegram': {
+        await sendTelegram(input.message);
+        return { success: true };
       }
       default:
         return { error: `Unknown tool: ${name}` };
@@ -191,6 +207,11 @@ async function runAgent(log) {
         },
         required: ['to', 'subject', 'body']
       }
+    },
+    {
+      name: 'send_telegram',
+      description: 'Send a Telegram message to the admin (Harold). Use for daily summary and important alerts.',
+      input_schema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] }
     }
   ];
 
@@ -217,7 +238,7 @@ Sponsorship pending: Subject "Thanks for your interest in sponsoring KiddBusy!" 
 
 Sign all emails: "The KiddBusy Team"
 
-DAILY SUMMARY to admin@kiddbusy.com: List every action taken with business names. Be specific.`;
+DAILY SUMMARY: Send to admin@kiddbusy.com AND send a brief plain-text summary via send_telegram. Keep the Telegram version short — 5 lines max.`;
 
   let messages = [{
     role: 'user',
