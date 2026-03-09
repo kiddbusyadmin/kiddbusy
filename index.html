@@ -1672,6 +1672,11 @@ function getPriceClass(label) {
   return 'price-unknown';
 }
 
+function isAiSource(source) {
+  const v = String(source || '').trim().toLowerCase();
+  return v === 'ai_generated' || v === 'background_refresh' || v === 'ai_assisted';
+}
+
 function normalizeWebsiteUrl(raw) {
   const v = String(raw || '').trim();
   if (!v) return '';
@@ -2298,7 +2303,7 @@ async function loadTopPicksForCity(cityLabel, source = 'ai_generated') {
     if (ids.length > 0) {
       const { data: sponsorRows } = await sb
         .from('listings')
-        .select('listing_id,is_sponsored,rating,photo_url,photo_status')
+        .select('listing_id,is_sponsored,rating,photo_url,photo_status,source')
         .in('listing_id', ids);
       const sponsorById = {};
       (sponsorRows || []).forEach(r => { sponsorById[r.listing_id] = r; });
@@ -2309,7 +2314,8 @@ async function loadTopPicksForCity(cityLabel, source = 'ai_generated') {
           is_sponsored: !!(row && row.is_sponsored),
           rating: row && typeof row.rating === 'number' ? row.rating : a.rating,
           photo_url: row && row.photo_url ? row.photo_url : null,
-          photo_status: row && row.photo_status ? row.photo_status : null
+          photo_status: row && row.photo_status ? row.photo_status : null,
+          source: row && row.source ? row.source : source
         };
       });
     }
@@ -2328,6 +2334,7 @@ async function loadTopPicksForCity(cityLabel, source = 'ai_generated') {
       const safeWebsite = (a.website || '').replace(/'/g, "\\'");
       const priceLabel = getPriceLabel(a);
       const priceClass = getPriceClass(priceLabel);
+      const aiBadge = isAiSource(a.source || source) ? '<div style=\"margin-top:8px;font-size:.75rem;color:var(--muted);font-weight:600\">🤖 AI-sourced · verify before visiting</div>' : '';
       const sponsoredBadge = a.is_sponsored ? '<div class="sponsored-badge">⭐ Sponsored</div>' : '';
       return `
       <div class="activity-card">
@@ -2352,7 +2359,7 @@ async function loadTopPicksForCity(cityLabel, source = 'ai_generated') {
               </div>
             </div>
           </div>
-          <div style="margin-top:8px;font-size:.75rem;color:var(--muted);font-weight:600">🤖 AI-sourced · verify before visiting</div>
+          ${aiBadge}
         </div>
       </div>`;
     }).join('');
@@ -2437,6 +2444,7 @@ function renderCachedListings(rows) {
     const safeWebsite = (a.website || '').replace(/'/g, "\\'");
     const priceLabel = getPriceLabel(a);
     const priceClass = getPriceClass(priceLabel);
+    const aiBadge = isAiSource(a.source) ? '<div style=\"margin-top:8px;font-size:.75rem;color:var(--muted);font-weight:600\">🤖 AI-sourced · verify before visiting</div>' : '';
     const sponsoredBadge = a.is_sponsored ? '<div class="sponsored-badge">⭐ Sponsored</div>' : '';
     return `
     <div class="activity-card">
@@ -2461,7 +2469,7 @@ function renderCachedListings(rows) {
             </div>
           </div>
         </div>
-        <div style="margin-top:8px;font-size:.75rem;color:var(--muted);font-weight:600">🤖 AI-sourced · verify before visiting</div>
+        ${aiBadge}
       </div>
     </div>`;
   }).join('');
