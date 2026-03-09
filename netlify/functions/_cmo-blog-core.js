@@ -183,7 +183,7 @@ async function generateBatch(cities, existingTitles, batchSize) {
     'Generate exactly ' + String(batchSize) + ' unique blog posts for KiddBusy as a JSON array.',
     'Candidate cities: ' + cities.join(', ') + '.',
     'Hard rules:',
-    '- 350-650 words per post in body_html.',
+    '- 220-380 words per post in body_html.',
     '- body_html may only use <p>, <h2>, <ul>, <li>, <strong>.',
     '- Title under 70 chars; excerpt 120-180 chars; seo_description 120-155 chars.',
     '- tags must be 4-6 items.',
@@ -202,8 +202,8 @@ async function generateBatch(cities, existingTitles, batchSize) {
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 7000,
-      temperature: 0.8,
+      max_tokens: 1600,
+      temperature: 0.7,
       system: system,
       messages: [{ role: 'user', content: prompt }]
     })
@@ -327,6 +327,12 @@ async function runCmoBlog(event) {
       20,
       1
     );
+    var maxGeneratePerRun = clampNumber(
+      Object.prototype.hasOwnProperty.call(body, 'max_generate_per_run') ? body.max_generate_per_run : 1,
+      0,
+      5,
+      1
+    );
 
     var cities = await getCities();
     var identity = await getIdentitySets();
@@ -335,6 +341,7 @@ async function runCmoBlog(event) {
     var remaining = queueTarget - already;
     if (remaining < 0) remaining = 0;
     if (remaining > 200) remaining = 200;
+    if (remaining > maxGeneratePerRun) remaining = maxGeneratePerRun;
 
     var generated = [];
     var generationErrors = [];
@@ -383,6 +390,7 @@ async function runCmoBlog(event) {
         queue_target_per_day: queueTarget,
         distribution_enabled: distributionEnabled,
         publish_rate_per_day: publishRate,
+        max_generate_per_run: maxGeneratePerRun,
         generated_count: generated.length,
         published_count: published.length,
         queue_depth: depth,
@@ -395,6 +403,7 @@ async function runCmoBlog(event) {
       queue_target_per_day: queueTarget,
       distribution_enabled: distributionEnabled,
       publish_rate_per_day: publishRate,
+      max_generate_per_run: maxGeneratePerRun,
       generated_count: generated.length,
       published_count: published.length,
       queue_depth: depth,

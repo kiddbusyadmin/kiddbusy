@@ -42,13 +42,10 @@
   schedule = "0 14 * * *"
   timeout = 900
 
-# CMO blog writer — one post daily at 11am ET (3pm UTC)
+# CMO blog writer — runs every 20 minutes to build daily queue target safely
 [functions.cmo-blog-run]
+  schedule = "*/20 * * * *"
   timeout = 30
-
-[functions.cmo-blog-run-background]
-  schedule = "0 15 * * *"
-  timeout = 900
 
 [[redirects]]
   from = "/api/cmo-config"
@@ -102,7 +99,7 @@
 
 [[redirects]]
   from = "/api/cmo-blog-run"
-  to = "/.netlify/functions/cmo-blog-run-background"
+  to = "/.netlify/functions/cmo-blog-run"
   status = 200
 
 [[redirects]]
