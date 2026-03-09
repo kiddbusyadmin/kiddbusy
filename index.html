@@ -2513,31 +2513,37 @@ async function loadEventsForCity(cityLabel) {
   eventsSection.style.display = 'block';
   showEventsSkeletons();
 
-  // ── CHECK EVENTS CACHE (24h) ──
-  const { data: cached } = await sb
+  // ── CHECK EVENTS CACHE (24h preferred, but serve any cache as fallback) ──
+  const { data: cachedMeta } = await sb
     .from('events')
     .select('*')
     .ilike('city', cityLabel)
     .order('last_refreshed', { ascending: false })
     .limit(1);
 
-  const lastRefreshed = cached?.[0]?.last_refreshed;
+  const lastRefreshed = cachedMeta?.[0]?.last_refreshed;
   const isFresh = lastRefreshed && (Date.now() - new Date(lastRefreshed)) < EVENTS_TTL_MS;
+  const age = lastRefreshed ? Math.round((Date.now() - new Date(lastRefreshed)) / 3600000) : null;
+
+  const { data: cachedEvents } = await sb
+    .from('events')
+    .select('*')
+    .ilike('city', cityLabel)
+    .order('id', { ascending: true });
+
+  const hasCached = cachedEvents && cachedEvents.length >= 2;
+  if (hasCached) {
+    renderEvents(cachedEvents);
+    if (isFresh) {
+      freshnessEl.textContent = age < 1 ? 'Just updated' : `Updated ${age}h ago`;
+    } else {
+      freshnessEl.textContent = age == null ? 'Showing cached events' : `Showing cached events (${age}h old), refreshing…`;
+    }
+    console.log(`[KiddBusy] Events served from cache (${cachedEvents.length} events${age == null ? '' : `, ${age}h old`})`);
+  }
 
   if (isFresh) {
-    const { data: events } = await sb
-      .from('events')
-      .select('*')
-      .ilike('city', cityLabel)
-      .order('id', { ascending: true });
-
-    if (events && events.length >= 2) {
-      renderEvents(events);
-      const age = Math.round((Date.now() - new Date(lastRefreshed)) / 3600000);
-      freshnessEl.textContent = age < 1 ? 'Just updated' : `Updated ${age}h ago`;
-      console.log(`[KiddBusy] Events served from cache (${events.length} events, ${age}h old)`);
-      return;
-    }
+    return;
   }
 
   // ── CACHE MISS — fetch from AI ──
@@ -2580,11 +2586,15 @@ async function loadEventsForCity(cityLabel) {
 
   } catch (err) {
     console.warn('Events load failed:', err);
-    document.getElementById('eventsList').innerHTML = `
-      <div style="text-align:center;padding:32px;color:var(--muted);font-weight:600">
-        😕 Couldn't load events right now. Check back soon!
-      </div>`;
-    freshnessEl.textContent = '';
+    if (!hasCached) {
+      document.getElementById('eventsList').innerHTML = `
+        <div style="text-align:center;padding:32px;color:var(--muted);font-weight:600">
+          😕 Couldn't load events right now. Check back soon!
+        </div>`;
+      freshnessEl.textContent = '';
+    } else {
+      freshnessEl.textContent = age == null ? 'Showing cached events' : `Showing cached events (${age}h old)`;
+    }
   }
 }
 
