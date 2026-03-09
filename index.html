@@ -2615,6 +2615,8 @@ async function onCitySelected(city) {
     renderCachedListings(_memCache[cityName].rows);
     document.getElementById('activities').style.display = 'block';
     document.getElementById('activities').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Ensure events render on repeat searches that use in-memory listing cache.
+    loadEventsForCity(city);
     track('city_search', city);
     _sessionCities.push(city);
     if (_sessionCities.length === 2) track('multi_city_session', city, _sessionCities[0]);
