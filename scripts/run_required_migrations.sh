@@ -12,6 +12,7 @@ MIGRATIONS=(
   "supabase/migrations/20260309_cmo_agent_settings.sql"
   "supabase/migrations/20260309_agent_activity.sql"
   "supabase/migrations/20260309_blog_posts.sql"
+  "supabase/migrations/20260309_cmo_blog_queue_settings.sql"
   "supabase/migrations/20260309_owner_contact_messages.sql"
 )
 

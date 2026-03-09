@@ -65,6 +65,9 @@ exports.handler = async (event) => {
     'max_emails_per_day',
     'monthly_email_send_cap',
     'contact_cap',
+    'blog_queue_target_per_day',
+    'blog_distribution_enabled',
+    'blog_publish_rate_per_day',
     'updated_at'
   ];
   const patch = {};
@@ -90,7 +93,10 @@ exports.handler = async (event) => {
       auto_send_enabled: row ? !!row.auto_send_enabled : null,
       max_emails_per_day: row ? row.max_emails_per_day : null,
       monthly_email_send_cap: row ? row.monthly_email_send_cap : null,
-      contact_cap: row ? row.contact_cap : null
+      contact_cap: row ? row.contact_cap : null,
+      blog_queue_target_per_day: row ? row.blog_queue_target_per_day : null,
+      blog_distribution_enabled: row ? !!row.blog_distribution_enabled : null,
+      blog_publish_rate_per_day: row ? row.blog_publish_rate_per_day : null
     }
   });
   return json(200, { success: true, config: row });

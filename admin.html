@@ -586,8 +586,29 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
             Auto Send Enabled
           </label>
         </div>
+        <div style="margin-top:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 14px">
+          <label style="display:inline-flex;align-items:center;gap:10px;font-family:var(--mono);font-size:.74rem;color:var(--text)">
+            <input id="cmo-blog-dist-enabled" type="checkbox" style="accent-color:var(--accent);transform:scale(1.15)">
+            Blog Distribution Enabled
+          </label>
+          <label style="font-family:var(--mono);font-size:.72rem;color:var(--muted);display:flex;align-items:center;gap:8px">
+            Blog Publish Rate / Day
+            <select id="cmo-blog-rate" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-family:var(--mono);font-size:.72rem">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="5">5</option>
+              <option value="10">10</option>
+            </select>
+          </label>
+          <label style="font-family:var(--mono);font-size:.72rem;color:var(--muted);display:flex;align-items:center;gap:8px">
+            Daily Queue Build Target
+            <input id="cmo-blog-target" type="number" min="1" max="200" step="1" value="50" style="width:88px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-family:var(--mono);font-size:.72rem">
+          </label>
+        </div>
         <div style="margin-top:14px;display:flex;gap:8px">
           <button class="topbar-btn primary" onclick="saveCmoConfig()">Save CMO Settings</button>
+          <button class="topbar-btn" onclick="runCmoBlogNow()">Run Blog Queue Now</button>
           <button class="topbar-btn" onclick="loadCmoDashboard()">Reload</button>
         </div>
       </div>
@@ -1710,6 +1731,12 @@ async function loadCmoDashboard() {
     var mode = (_cmoConfig && _cmoConfig.execution_mode) ? _cmoConfig.execution_mode : (autoSend ? 'auto_send_enabled' : 'drafts_for_approval');
     var toggle = document.getElementById('cmo-auto-send');
     if (toggle) toggle.checked = autoSend;
+    var blogDist = document.getElementById('cmo-blog-dist-enabled');
+    if (blogDist) blogDist.checked = !(_cmoConfig && _cmoConfig.blog_distribution_enabled === false);
+    var blogRate = document.getElementById('cmo-blog-rate');
+    if (blogRate) blogRate.value = String((_cmoConfig && _cmoConfig.blog_publish_rate_per_day) || 1);
+    var blogTarget = document.getElementById('cmo-blog-target');
+    if (blogTarget) blogTarget.value = String((_cmoConfig && _cmoConfig.blog_queue_target_per_day) || 50);
     document.getElementById('cmo-mode-badge').textContent = mode === 'auto_send_enabled' ? 'auto send enabled' : 'drafts for approval';
   } catch (e) {
     document.getElementById('cmo-mode-badge').textContent = 'config unavailable';
@@ -1718,9 +1745,18 @@ async function loadCmoDashboard() {
 
 async function saveCmoConfig() {
   var autoSend = !!(document.getElementById('cmo-auto-send') && document.getElementById('cmo-auto-send').checked);
+  var blogDistEnabled = !!(document.getElementById('cmo-blog-dist-enabled') && document.getElementById('cmo-blog-dist-enabled').checked);
+  var blogRate = Number((document.getElementById('cmo-blog-rate') && document.getElementById('cmo-blog-rate').value) || 1);
+  var blogTarget = Number((document.getElementById('cmo-blog-target') && document.getElementById('cmo-blog-target').value) || 50);
+  if (!Number.isFinite(blogRate) || blogRate < 1) blogRate = 1;
+  if (!Number.isFinite(blogTarget) || blogTarget < 1) blogTarget = 50;
+  if (blogTarget > 200) blogTarget = 200;
   var payload = {
     auto_send_enabled: autoSend,
-    execution_mode: autoSend ? 'auto_send_enabled' : 'drafts_for_approval'
+    execution_mode: autoSend ? 'auto_send_enabled' : 'drafts_for_approval',
+    blog_distribution_enabled: blogDistEnabled,
+    blog_publish_rate_per_day: blogRate,
+    blog_queue_target_per_day: blogTarget
   };
   var btns = Array.from(document.querySelectorAll('#view-cmo .topbar-btn'));
   btns.forEach(function(b) { b.disabled = true; });
@@ -1736,6 +1772,26 @@ async function saveCmoConfig() {
     document.getElementById('cmo-mode-badge').textContent = autoSend ? 'auto send enabled' : 'drafts for approval';
   } catch (e) {
     alert('CMO settings save failed: ' + e.message);
+  } finally {
+    btns.forEach(function(b) { b.disabled = false; });
+  }
+}
+
+async function runCmoBlogNow() {
+  var btns = Array.from(document.querySelectorAll('#view-cmo .topbar-btn'));
+  btns.forEach(function(b) { b.disabled = true; });
+  try {
+    var res = await fetch('/api/cmo-blog-run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
+      body: JSON.stringify({})
+    });
+    var out = await res.json();
+    if (!res.ok) throw new Error(out.error || 'Failed to run CMO blog queue');
+    alert('CMO blog queue run complete. Generated ' + (out.generated_count || 0) + ', published ' + (out.published_count || 0) + '.');
+    await loadCmoDashboard();
+  } catch (e) {
+    alert('CMO blog run failed: ' + e.message);
   } finally {
     btns.forEach(function(b) { b.disabled = false; });
   }

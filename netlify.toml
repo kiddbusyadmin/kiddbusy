@@ -45,7 +45,7 @@
 # CMO blog writer — one post daily at 11am ET (3pm UTC)
 [functions.cmo-blog-scheduled]
   schedule = "0 15 * * *"
-  timeout = 120
+  timeout = 900
 
 [[redirects]]
   from = "/api/cmo-config"
