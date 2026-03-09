@@ -1,7 +1,7 @@
 // CONFIG
 const ADMIN_PASSWORD = 'kiddbusy2024';
 const SUPABASE_URL = 'https://wgbdwpbexfcxijcrxyii.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndnYmR3cGJleGZjeGlqY3J4eWlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDE0NzIxMzQsImV4cCI6MjA1NzA0ODEzNH0.jxU_St7aGHNFkCGzMiTqxJOXXpkPFj1qvHjEr7oNrM8';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indnd2V4enlxYWl3b3NncmFhY3ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODEwNzUsImV4cCI6MjA4ODI1NzA3NX0.IS8u4SL1XeLh9KgD4c2Pl9BiGNg0zkiNauUzu_QtKH8';
 const ANTHROPIC_API_URL = '/.netlify/functions/agent-proxy';
 
 // STATE
