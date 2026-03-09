@@ -11,6 +11,9 @@
 [functions.send-email]
   timeout = 30
 
+[functions.db-proxy]
+  timeout = 30
+
 # Daily cache warm — runs at 3am ET (8am UTC)
 [functions.daily-cache-warm]
   schedule = "0 8 * * *"

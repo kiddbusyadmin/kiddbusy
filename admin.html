@@ -519,7 +519,7 @@ function emptyHTML(msg) {
 async function dbWrite(table, id, updates) {
   var res = await fetch('/.netlify/functions/db-proxy', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
     body: JSON.stringify({ action: 'update', table: table, id: id, updates: updates })
   });
   if (!res.ok) {
