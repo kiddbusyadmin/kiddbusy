@@ -46,10 +46,10 @@
 [functions.cmo-blog-run]
   timeout = 30
 
-# CMO blog writer — scheduled queue builder/distributor
-[functions.cmo-blog-scheduled]
+# CMO blog writer — background queue builder/distributor
+[functions.cmo-blog-run-background]
   schedule = "*/20 * * * *"
-  timeout = 30
+  timeout = 900
 
 [[redirects]]
   from = "/api/cmo-config"
