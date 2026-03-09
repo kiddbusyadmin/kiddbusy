@@ -105,6 +105,21 @@ button:disabled{opacity:.5;cursor:not-allowed}
       </div>
     </section>
   </div>
+
+  <section class="card" style="margin-top:18px">
+    <h2>Contact KiddBusy Support</h2>
+    <p class="help">Need help claiming or updating your listing? Send us a message and we will respond from admin@kiddbusy.com.</p>
+    <label for="contactSubject">Subject</label>
+    <input id="contactSubject" placeholder="Owner claim support" />
+
+    <label for="contactMessage">Message</label>
+    <textarea id="contactMessage" placeholder="Tell us what you need help with..."></textarea>
+
+    <div class="row">
+      <button id="contactBtn" onclick="submitOwnerContact()">Send Message</button>
+    </div>
+    <div class="msg" id="contactMsg"></div>
+  </section>
 </div>
 
 <script>
@@ -294,6 +309,45 @@ async function saveOwnerUpdates() {
     setMsg('dashMsg', e.message, false);
   } finally {
     document.getElementById('saveBtn').disabled = false;
+  }
+}
+
+async function submitOwnerContact() {
+  const owner_name = document.getElementById('ownerName').value.trim();
+  const owner_email = document.getElementById('ownerEmail').value.trim();
+  const owner_phone = document.getElementById('ownerPhone').value.trim();
+  const subject = document.getElementById('contactSubject').value.trim();
+  const message = document.getElementById('contactMessage').value.trim();
+
+  if (!owner_email || owner_email.indexOf('@') < 0) {
+    setMsg('contactMsg', 'Enter a valid email so we can reply.', false);
+    return;
+  }
+  if (!message || message.length < 8) {
+    setMsg('contactMsg', 'Please enter a longer message.', false);
+    return;
+  }
+
+  document.getElementById('contactBtn').disabled = true;
+  setMsg('contactMsg', 'Sending...', true);
+  try {
+    await api('submit_contact', {
+      listing_id: currentListingId,
+      listing_name: currentListingName || null,
+      listing_city: currentListingCity || null,
+      owner_name,
+      owner_email,
+      owner_phone,
+      subject: subject || 'Owner support request',
+      message
+    });
+    setMsg('contactMsg', 'Sent. We will reply from admin@kiddbusy.com.', true);
+    document.getElementById('contactMessage').value = '';
+    track('owner_contact_form_sent', String(currentListingId || ''));
+  } catch (e) {
+    setMsg('contactMsg', e.message, false);
+  } finally {
+    document.getElementById('contactBtn').disabled = false;
   }
 }
 

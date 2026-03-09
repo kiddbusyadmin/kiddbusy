@@ -458,6 +458,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
       <div class="stat-value" id="ownerkpi-updates">--</div>
       <div class="stat-sub">owner_update_saved</div>
     </div>
+    <div class="stat-card yellow">
+      <div class="stat-label">Contact Messages</div>
+      <div class="stat-value" id="ownerkpi-contacts">--</div>
+      <div class="stat-sub">owner_contact_submit</div>
+    </div>
   </div>
 
   <div class="panels">
@@ -487,6 +492,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
       <div class="panel-badge">analytics</div>
     </div>
     <div class="panel-body" id="ownerkpi-events-body">
+      <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:20px">
+    <div class="panel-header">
+      <div class="panel-title">Owner Contact Inbox</div>
+      <div class="panel-badge" id="ownerkpi-contact-count">--</div>
+    </div>
+    <div class="panel-body" id="ownerkpi-contact-body">
       <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
     </div>
   </div>
@@ -1450,11 +1465,20 @@ async function loadOwnerKpis() {
 
     var claimsRes = await sb.from('owner_claims').select('status, owner_email, listing_id, created_at').order('created_at', { ascending: false }).limit(200);
     var changesRes = await sb.from('owner_change_requests').select('status, change_type, created_at').order('created_at', { ascending: false }).limit(200);
+    var contactsRes = await fetch('/.netlify/functions/db-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
+      body: JSON.stringify({ action: 'query_owner_contacts', limit: 200 })
+    });
+    var contactsPayload = await contactsRes.json();
+    if (!contactsRes.ok) throw new Error(contactsPayload.error || 'Failed to load owner contacts');
+    var contacts = contactsPayload.contacts || [];
 
     document.getElementById('ownerkpi-starts').textContent = starts;
     document.getElementById('ownerkpi-verified').textContent = verified;
     document.getElementById('ownerkpi-abandons').textContent = abandons;
     document.getElementById('ownerkpi-updates').textContent = updates;
+    document.getElementById('ownerkpi-contacts').textContent = contacts.length;
     document.getElementById('ownerkpi-funnel-rate').textContent = conversion + '% verify / ' + abandonRate + '% abandon';
 
     document.getElementById('ownerkpi-funnel-body').innerHTML =
@@ -1481,6 +1505,22 @@ async function loadOwnerKpis() {
         }).join('') + '</tbody></table>'
       : emptyHTML('No owner events yet');
 
+    document.getElementById('ownerkpi-contact-count').textContent = contacts.length + ' recent';
+    document.getElementById('ownerkpi-contact-body').innerHTML = contacts.length
+      ? '<table class=\"data-table\"><thead><tr><th>Time</th><th>Name</th><th>Email</th><th>Listing</th><th>Subject</th><th>Message</th></tr></thead><tbody>' +
+        contacts.slice(0, 80).map(function(c) {
+          var listing = (c.listing_name || '--') + ' ' + (c.listing_city ? ('(' + c.listing_city + ')') : '');
+          return '<tr>' +
+            '<td style=\"font-family:var(--mono);font-size:.72rem;color:var(--muted)\">' + timeAgo(c.created_at) + '</td>' +
+            '<td>' + (c.owner_name || '--') + '</td>' +
+            '<td style=\"color:var(--muted);font-size:.75rem\">' + (c.owner_email || '--') + '</td>' +
+            '<td style=\"color:var(--muted);font-size:.75rem\">' + listing + '</td>' +
+            '<td style=\"font-family:var(--mono);font-size:.72rem\">' + (c.subject || '--') + '</td>' +
+            '<td style=\"max-width:280px;white-space:normal;line-height:1.45;color:var(--muted)\">' + (c.message || '--') + '</td>' +
+          '</tr>';
+        }).join('') + '</tbody></table>'
+      : emptyHTML('No owner contact messages yet');
+
     // Keep one lightweight KPI available to the agent path.
     window.__ownerKpiSnapshot = {
       starts: starts,
@@ -1496,6 +1536,8 @@ async function loadOwnerKpis() {
     document.getElementById('ownerkpi-funnel-body').innerHTML = '<div class=\"empty\" style=\"padding:24px;color:var(--accent)\">Owner KPI unavailable: ' + e.message + '</div>';
     document.getElementById('ownerkpi-claims-body').innerHTML = emptyHTML('Run owner claims migration first');
     document.getElementById('ownerkpi-events-body').innerHTML = emptyHTML('No owner event data yet');
+    document.getElementById('ownerkpi-contact-body').innerHTML = emptyHTML('No owner contact messages yet');
+    document.getElementById('ownerkpi-contact-count').textContent = 'unavailable';
   }
 }
 

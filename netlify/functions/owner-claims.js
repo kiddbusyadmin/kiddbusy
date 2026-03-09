@@ -531,6 +531,84 @@ async function logOwnerEvent(payload) {
   return json(200, { success: true });
 }
 
+async function submitOwnerContact(payload) {
+  const listingId = payload.listing_id ? Number(payload.listing_id) : null;
+  const ownerName = String(payload.owner_name || '').trim() || null;
+  const ownerEmail = normalizeEmail(payload.owner_email);
+  const ownerPhone = String(payload.owner_phone || '').trim() || null;
+  const subject = String(payload.subject || '').trim().slice(0, 160) || 'Owner support request';
+  const message = String(payload.message || '').trim();
+
+  if (!ownerEmail || ownerEmail.indexOf('@') < 0) return json(400, { error: 'Valid email is required' });
+  if (!message || message.length < 8) return json(400, { error: 'Message is too short' });
+
+  let listing = null;
+  if (Number.isFinite(listingId) && listingId > 0) {
+    listing = await findListing(listingId);
+  }
+
+  const row = {
+    listing_id: listing ? listing.listing_id : null,
+    listing_name: listing ? listing.name : (payload.listing_name ? String(payload.listing_name).trim().slice(0, 200) : null),
+    listing_city: listing ? listing.city : (payload.listing_city ? String(payload.listing_city).trim().slice(0, 120) : null),
+    owner_name: ownerName,
+    owner_email: ownerEmail,
+    owner_phone: ownerPhone,
+    subject,
+    message
+  };
+
+  const ins = await sbFetch('owner_contact_messages', {
+    method: 'POST',
+    body: row,
+    prefer: 'return=representation'
+  });
+  if (!ins.response.ok) {
+    return json(ins.response.status, { error: 'Failed to save message', details: ins.data });
+  }
+
+  const to = 'admin@kiddbusy.com';
+  const city = row.listing_city || null;
+  await track('owner_contact_submit', city, row.listing_id ? String(row.listing_id) : null);
+
+  const html = [
+    '<div style="font-family:Arial,sans-serif;line-height:1.55">',
+    '<h2 style="margin:0 0 10px">Owner Contact Submission</h2>',
+    `<p><strong>Subject:</strong> ${subject}</p>`,
+    `<p><strong>Name:</strong> ${row.owner_name || '--'}</p>`,
+    `<p><strong>Email:</strong> ${row.owner_email}</p>`,
+    `<p><strong>Phone:</strong> ${row.owner_phone || '--'}</p>`,
+    `<p><strong>Listing:</strong> ${row.listing_name || '--'} (${row.listing_city || '--'})</p>`,
+    `<p><strong>Listing ID:</strong> ${row.listing_id || '--'}</p>`,
+    '<p><strong>Message:</strong></p>',
+    `<p>${message.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br/>')}</p>`,
+    '</div>'
+  ].join('');
+
+  let emailSent = false;
+  if (RESEND_API_KEY) {
+    try {
+      await sendCompliantEmail({
+        to,
+        subject: `Owner Contact: ${subject}`,
+        body: html,
+        fromName: 'KiddBusy Owner Portal',
+        campaignType: 'owner_contact_support',
+        allowSuppressedBypass: true
+      });
+      emailSent = true;
+    } catch {
+      emailSent = false;
+    }
+  }
+
+  return json(200, {
+    success: true,
+    message_id: Array.isArray(ins.data) && ins.data[0] ? ins.data[0].message_id : null,
+    emailed_admin: emailSent
+  });
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return json(405, { error: 'Method not allowed' });
@@ -561,10 +639,11 @@ exports.handler = async (event) => {
     if (action === 'submit_update') return await submitUpdate(body);
     if (action === 'abandon_claim') return await abandonClaim(body);
     if (action === 'log_event') return await logOwnerEvent(body);
+    if (action === 'submit_contact') return await submitOwnerContact(body);
 
     return json(400, {
       error: 'Unsupported action',
-      supported_actions: ['start_claim', 'verify_claim', 'get_session', 'submit_update', 'abandon_claim', 'log_event']
+      supported_actions: ['start_claim', 'verify_claim', 'get_session', 'submit_update', 'abandon_claim', 'log_event', 'submit_contact']
     });
   } catch (err) {
     return json(500, { error: err && err.message ? err.message : 'Unexpected error' });
