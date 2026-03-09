@@ -264,12 +264,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
     <div class="stat-card blue">
       <div class="stat-label">Unique Cities</div>
       <div class="stat-value" id="stat-cities">--</div>
-      <div class="stat-sub">searched ever</div>
+      <div class="stat-sub" id="stat-cities-sub">searched ever</div>
     </div>
     <div class="stat-card purple">
       <div class="stat-label">Multi-City Sessions</div>
       <div class="stat-value" id="stat-multi">--</div>
-      <div class="stat-sub">high-intent users</div>
+      <div class="stat-sub" id="stat-multi-sub">high-intent users</div>
     </div>
     <div class="stat-card green">
       <div class="stat-label">Email Leads</div>
@@ -289,12 +289,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
     <div class="stat-card red">
       <div class="stat-label">Advertise Clicks</div>
       <div class="stat-value" id="stat-adv">--</div>
-      <div class="stat-sub">revenue intent</div>
+      <div class="stat-sub" id="stat-adv-sub">revenue intent</div>
     </div>
     <div class="stat-card green">
       <div class="stat-label">Cache Hit Rate</div>
       <div class="stat-value" id="stat-cache">--</div>
-      <div class="stat-sub">fast loads</div>
+      <div class="stat-sub" id="stat-cache-sub">fast loads</div>
     </div>
   </div>
 
@@ -818,6 +818,13 @@ function searchesRangeLabel(rangeKey) {
   return 'Searches (24h)';
 }
 
+function rangeBadgeLabel(rangeKey) {
+  if (rangeKey === '7d') return '7d';
+  if (rangeKey === '30d') return '30d';
+  if (rangeKey === 'all') return 'all time';
+  return '24h';
+}
+
 function onSearchRangeChange() {
   var sel = document.getElementById('searches-range');
   searchesRange = sel ? sel.value : '24h';
@@ -912,8 +919,8 @@ async function loadStats() {
     sb.from('analytics').select('event, city, created_at').order('created_at', { ascending: false }),
     sb.from('reviews').select('status, created_at'),
     sb.from('email_leads').select('created_at'),
-    sb.from('analytics').select('id').eq('event', 'cache_hit'),
-    sb.from('analytics').select('id').eq('event', 'cache_miss')
+    sb.from('analytics').select('created_at').eq('event', 'cache_hit'),
+    sb.from('analytics').select('created_at').eq('event', 'cache_miss')
   ]);
   var submissionRows = [];
   try {
@@ -926,39 +933,56 @@ async function loadStats() {
   var windowEvents = events.filter(function(e) { return isWithinRange(e.created_at, searchesRange); });
   var allSearches = events.filter(function(e) { return e.event === 'city_search'; });
   var scopedSearches = windowEvents.filter(function(e) { return e.event === 'city_search'; });
+  var rangeLbl = rangeBadgeLabel(searchesRange);
 
   document.getElementById('stat-searches-label').textContent = searchesRangeLabel(searchesRange);
   document.getElementById('stat-searches-today').textContent = scopedSearches.length;
   document.getElementById('stat-searches-sub').textContent = 'all time: ' + allSearches.length;
 
-  var uniqueCities = new Set(allSearches.map(function(e) { return e.city; }).filter(Boolean));
-  document.getElementById('stat-cities').textContent = uniqueCities.size;
+  var uniqueCitiesAll = new Set(allSearches.map(function(e) { return e.city; }).filter(Boolean));
+  var uniqueCitiesScoped = new Set(scopedSearches.map(function(e) { return e.city; }).filter(Boolean));
+  document.getElementById('stat-cities').textContent = uniqueCitiesScoped.size;
+  document.getElementById('stat-cities-sub').textContent = rangeLbl + ': ' + uniqueCitiesScoped.size + ' | all: ' + uniqueCitiesAll.size;
 
-  var multiCity = events.filter(function(e) { return e.event === 'multi_city_session'; });
-  document.getElementById('stat-multi').textContent = multiCity.length;
+  var multiCityAll = events.filter(function(e) { return e.event === 'multi_city_session'; });
+  var multiCityScoped = windowEvents.filter(function(e) { return e.event === 'multi_city_session'; });
+  document.getElementById('stat-multi').textContent = multiCityScoped.length;
+  document.getElementById('stat-multi-sub').textContent = rangeLbl + ': ' + multiCityScoped.length + ' | all: ' + multiCityAll.length;
 
   var emailData = results[2].data || [];
-  var todayEmails = emailData.filter(function(e) { return isToday(e.created_at); });
-  document.getElementById('stat-emails').textContent = emailData.length;
-  document.getElementById('stat-emails-sub').textContent = 'today: ' + todayEmails.length;
+  var emailScoped = emailData.filter(function(e) { return isWithinRange(e.created_at, searchesRange); });
+  document.getElementById('stat-emails').textContent = emailScoped.length;
+  document.getElementById('stat-emails-sub').textContent = rangeLbl + ': ' + emailScoped.length + ' | all: ' + emailData.length;
 
   var reviewData = results[1].data || [];
-  var pendingRevs = reviewData.filter(function(r) { return r.status === 'pending'; });
-  document.getElementById('stat-reviews').textContent = reviewData.length;
-  document.getElementById('stat-reviews-sub').textContent = 'pending: ' + pendingRevs.length;
+  var reviewScoped = reviewData.filter(function(r) { return isWithinRange(r.created_at, searchesRange); });
+  var pendingRevs = reviewScoped.filter(function(r) { return r.status === 'pending'; });
+  document.getElementById('stat-reviews').textContent = reviewScoped.length;
+  document.getElementById('stat-reviews-sub').textContent = 'pending (' + rangeLbl + '): ' + pendingRevs.length + ' | all: ' + reviewData.length;
 
   var subData = submissionRows || [];
-  var pendingSubs = subData.filter(function(s) { return s.status === 'pending'; });
-  document.getElementById('stat-subs').textContent = subData.length;
-  document.getElementById('stat-subs-sub').textContent = 'pending: ' + pendingSubs.length;
+  var subScoped = subData.filter(function(s) { return isWithinRange(s.created_at, searchesRange); });
+  var pendingSubs = subScoped.filter(function(s) { return s.status === 'pending'; });
+  document.getElementById('stat-subs').textContent = subScoped.length;
+  document.getElementById('stat-subs-sub').textContent = 'pending (' + rangeLbl + '): ' + pendingSubs.length + ' | all: ' + subData.length;
 
-  var advClicks = events.filter(function(e) { return e.event === 'advertise_click'; });
+  var advClicksAll = events.filter(function(e) { return e.event === 'advertise_click'; });
+  var advClicks = windowEvents.filter(function(e) { return e.event === 'advertise_click'; });
   document.getElementById('stat-adv').textContent = advClicks.length;
+  document.getElementById('stat-adv-sub').textContent = rangeLbl + ': ' + advClicks.length + ' | all: ' + advClicksAll.length;
 
-  var hits = (results[3].data || []).length;
-  var misses = (results[4].data || []).length;
+  var hitsAllRows = results[3].data || [];
+  var missAllRows = results[4].data || [];
+  var hits = hitsAllRows.filter(function(r) { return isWithinRange(r.created_at, searchesRange); }).length;
+  var misses = missAllRows.filter(function(r) { return isWithinRange(r.created_at, searchesRange); }).length;
+  var allHits = hitsAllRows.length;
+  var allMisses = missAllRows.length;
   var total = hits + misses;
-  document.getElementById('stat-cache').textContent = total > 0 ? Math.round((hits / total) * 100) + '%' : '--';
+  var totalAll = allHits + allMisses;
+  var pct = total > 0 ? Math.round((hits / total) * 100) : null;
+  var pctAll = totalAll > 0 ? Math.round((allHits / totalAll) * 100) : null;
+  document.getElementById('stat-cache').textContent = pct == null ? '--' : (pct + '%');
+  document.getElementById('stat-cache-sub').textContent = rangeLbl + ': ' + (pct == null ? '--' : (pct + '%')) + ' | all: ' + (pctAll == null ? '--' : (pctAll + '%'));
 }
 
 // ===== TOP CITIES =====
