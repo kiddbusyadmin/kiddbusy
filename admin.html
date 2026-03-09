@@ -525,6 +525,35 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
     </div>
   </div>
 
+  <div class="date-banner" style="margin:0 0 10px 0">// BLOG SEO KPI SNAPSHOT (30D)</div>
+  <div class="stats-row" style="margin-bottom:16px">
+    <div class="stat-card blue">
+      <div class="stat-label">Blog Sessions</div>
+      <div class="stat-value" id="cmo-blog-sessions">--</div>
+      <div class="stat-sub" id="cmo-blog-views-sub">views: --</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Organic Landings</div>
+      <div class="stat-value" id="cmo-blog-organic">--</div>
+      <div class="stat-sub" id="cmo-blog-organic-rate">organic rate: --</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-label">Avg Active Time</div>
+      <div class="stat-value" id="cmo-blog-active-time">--</div>
+      <div class="stat-sub">industry target: 60s+</div>
+    </div>
+    <div class="stat-card yellow">
+      <div class="stat-label">Scroll Depth 75%</div>
+      <div class="stat-value" id="cmo-blog-scroll75">--</div>
+      <div class="stat-sub" id="cmo-blog-engaged-rate">engaged rate: --</div>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-label">Bounce Rate</div>
+      <div class="stat-value" id="cmo-blog-bounce">--</div>
+      <div class="stat-sub" id="cmo-blog-ctr">blog->site CTR: --</div>
+    </div>
+  </div>
+
   <div class="panels">
     <div class="panel">
       <div class="panel-header">
@@ -562,6 +591,27 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
           <div>- monthly email cap: 3,000</div>
           <div>- contact cap: 1,000</div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panels" style="margin-top:20px">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Top Blog Posts (30d)</div>
+        <div class="panel-badge">by views</div>
+      </div>
+      <div class="panel-body" id="cmo-blog-top-posts">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Blog SEO Funnel (30d)</div>
+        <div class="panel-badge">industry standard kpis</div>
+      </div>
+      <div class="panel-body" id="cmo-blog-funnel">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
       </div>
     </div>
   </div>
@@ -1459,7 +1509,7 @@ async function fetchCmoConfig() {
 }
 
 async function loadCmoKpis() {
-  var eventsRes = await sb.from('analytics').select('event,created_at,session_id').order('created_at', { ascending: false }).limit(3000);
+  var eventsRes = await sb.from('analytics').select('event,created_at,session_id,value').order('created_at', { ascending: false }).limit(5000);
   var leadsRes = await sb.from('email_leads').select('created_at').order('created_at', { ascending: false }).limit(3000);
   var claimsRes = await sb.from('owner_claims').select('status,created_at').order('created_at', { ascending: false }).limit(3000);
   var sponsorRes = await sb.from('sponsorships').select('status,created_at,plan').order('created_at', { ascending: false }).limit(3000);
@@ -1510,6 +1560,102 @@ async function loadCmoKpis() {
   document.getElementById('cmo-owner-conv').textContent = ownerConv.toFixed(1) + '%';
   document.getElementById('cmo-sponsor-pace').textContent = '$' + monthlyRevenue;
   document.getElementById('cmo-unsub-rate').textContent = unsubRate.toFixed(1) + '%';
+
+  function parseValue(value) {
+    if (value == null) return null;
+    if (typeof value === 'object') return value;
+    var s = String(value || '').trim();
+    if (!s) return null;
+    try { return JSON.parse(s); } catch (_) { return { raw: s }; }
+  }
+
+  var blogEventSet = new Set([
+    'blog_index_view',
+    'blog_post_view',
+    'blog_post_engaged_30s',
+    'blog_scroll_75',
+    'blog_to_home_click',
+    'blog_outbound_click'
+  ]);
+  var monthBlogEvents = monthEvents.filter(function(e) { return blogEventSet.has(String(e.event || '')); });
+  var blogSessionsSet = new Set(monthBlogEvents.map(function(e) { return e.session_id || ''; }).filter(Boolean));
+  var blogSessions = blogSessionsSet.size;
+
+  var blogPostViews = monthBlogEvents.filter(function(e) { return e.event === 'blog_post_view'; });
+  var blogViews = blogPostViews.length;
+  var organicViews = blogPostViews.filter(function(e) {
+    var v = parseValue(e.value);
+    return !!(v && (v.organic_referrer === true || v.referrer_type === 'search'));
+  }).length;
+  var organicRate = blogViews > 0 ? (organicViews / blogViews) * 100 : 0;
+
+  var scroll75Views = monthBlogEvents.filter(function(e) { return e.event === 'blog_scroll_75'; }).length;
+  var engaged30Views = monthBlogEvents.filter(function(e) { return e.event === 'blog_post_engaged_30s'; }).length;
+  var engagedRate = blogViews > 0 ? ((Math.max(scroll75Views, engaged30Views) / blogViews) * 100) : 0;
+
+  var homeClicks = monthBlogEvents.filter(function(e) { return e.event === 'blog_to_home_click'; }).length;
+  var ctrToSite = blogViews > 0 ? ((homeClicks / blogViews) * 100) : 0;
+
+  var sessionActivity = {};
+  monthBlogEvents.forEach(function(e) {
+    var sid = e.session_id || '';
+    if (!sid || !e.created_at) return;
+    var t = new Date(e.created_at).getTime();
+    if (!Number.isFinite(t)) return;
+    if (!sessionActivity[sid]) sessionActivity[sid] = { min: t, max: t, views: 0, engaged: false, depth: false, out: false };
+    sessionActivity[sid].min = Math.min(sessionActivity[sid].min, t);
+    sessionActivity[sid].max = Math.max(sessionActivity[sid].max, t);
+    if (e.event === 'blog_post_view') sessionActivity[sid].views += 1;
+    if (e.event === 'blog_post_engaged_30s') sessionActivity[sid].engaged = true;
+    if (e.event === 'blog_scroll_75') sessionActivity[sid].depth = true;
+    if (e.event === 'blog_to_home_click' || e.event === 'blog_outbound_click') sessionActivity[sid].out = true;
+  });
+
+  var sessionRows = Object.values(sessionActivity);
+  var bounceSessions = sessionRows.filter(function(s) {
+    return s.views > 0 && !s.engaged && !s.depth && !s.out;
+  }).length;
+  var bounceRate = blogSessions > 0 ? ((bounceSessions / blogSessions) * 100) : 0;
+  var avgActiveSeconds = sessionRows.length > 0
+    ? Math.round(sessionRows.reduce(function(sum, s) {
+        var sec = Math.max(0, Math.min(900, Math.round((s.max - s.min) / 1000)));
+        return sum + sec;
+      }, 0) / sessionRows.length)
+    : 0;
+
+  var bySlug = {};
+  blogPostViews.forEach(function(e) {
+    var v = parseValue(e.value) || {};
+    var slug = String(v.slug || 'unknown');
+    bySlug[slug] = (bySlug[slug] || 0) + 1;
+  });
+  var topPosts = Object.entries(bySlug).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 8);
+
+  document.getElementById('cmo-blog-sessions').textContent = blogSessions;
+  document.getElementById('cmo-blog-views-sub').textContent = 'views: ' + blogViews;
+  document.getElementById('cmo-blog-organic').textContent = organicViews;
+  document.getElementById('cmo-blog-organic-rate').textContent = 'organic rate: ' + organicRate.toFixed(1) + '%';
+  document.getElementById('cmo-blog-active-time').textContent = avgActiveSeconds + 's';
+  document.getElementById('cmo-blog-scroll75').textContent = scroll75Views;
+  document.getElementById('cmo-blog-engaged-rate').textContent = 'engaged rate: ' + engagedRate.toFixed(1) + '%';
+  document.getElementById('cmo-blog-bounce').textContent = bounceRate.toFixed(1) + '%';
+  document.getElementById('cmo-blog-ctr').textContent = 'blog->site CTR: ' + ctrToSite.toFixed(1) + '%';
+
+  document.getElementById('cmo-blog-top-posts').innerHTML = topPosts.length
+    ? '<table class="data-table"><thead><tr><th>Post Slug</th><th>Views</th></tr></thead><tbody>' +
+      topPosts.map(function(r) {
+        return '<tr><td style="font-family:var(--mono);font-size:.72rem;color:var(--muted)">' + r[0] + '</td><td><span class="status-badge status-approved">' + r[1] + '</span></td></tr>';
+      }).join('') +
+      '</tbody></table>'
+    : emptyHTML('No blog post views in last 30 days');
+
+  document.getElementById('cmo-blog-funnel').innerHTML =
+    '<div class="cache-item"><span class="cache-city">Blog Sessions</span><span class="cache-count">' + blogSessions + '</span></div>' +
+    '<div class="cache-item"><span class="cache-city">Blog Post Views</span><span class="cache-count">' + blogViews + '</span></div>' +
+    '<div class="cache-item"><span class="cache-city">Organic Search Landings</span><span class="cache-count">' + organicViews + ' (' + organicRate.toFixed(1) + '%)</span></div>' +
+    '<div class="cache-item"><span class="cache-city">Engaged Reads (30s or 75% scroll)</span><span class="cache-count">' + Math.max(scroll75Views, engaged30Views) + ' (' + engagedRate.toFixed(1) + '%)</span></div>' +
+    '<div class="cache-item"><span class="cache-city">Bounce Sessions</span><span class="cache-count">' + bounceSessions + ' (' + bounceRate.toFixed(1) + '%)</span></div>' +
+    '<div class="cache-item"><span class="cache-city">Blog to Site Clicks</span><span class="cache-count">' + homeClicks + ' (' + ctrToSite.toFixed(1) + '%)</span></div>';
 }
 
 async function loadCmoDashboard() {

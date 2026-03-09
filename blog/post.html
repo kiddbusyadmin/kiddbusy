@@ -7,6 +7,7 @@
 <meta name="description" content="KiddBusy blog post" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root {
   --plum: #6c3fc5;
@@ -41,6 +42,12 @@ h1 { font-family: 'Fredoka One', cursive; line-height: 1.2; margin-bottom: 12px;
 .content ul { padding-left: 18px; margin: 6px 0 12px; }
 .content li { margin-bottom: 8px; }
 .state { padding: 14px; background: #fff; border: 2px dashed var(--border); border-radius: 12px; color: var(--muted); }
+.cta-line { margin-top: 20px; }
+.cta-site {
+  display: inline-block; background: var(--plum); color: #fff; border-radius: 999px;
+  padding: 10px 16px; font-weight: 800;
+}
+.cta-site:hover { background: #5730a8; }
 </style>
 </head>
 <body>
@@ -57,10 +64,41 @@ h1 { font-family: 'Fredoka One', cursive; line-height: 1.2; margin-bottom: 12px;
       <h1 id="title"></h1>
       <p id="excerpt" class="excerpt"></p>
       <div id="content" class="content"></div>
+      <div class="cta-line"><a class="cta-site" href="/" id="blogToSiteCta">Find Activities in Your City</a></div>
     </article>
   </main>
 
 <script>
+const SUPABASE_URL = 'https://wgwexzyqaiwosgraaczi.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indnd2V4enlxYWl3b3NncmFhY3ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODEwNzUsImV4cCI6MjA4ODI1NzA3NX0.IS8u4SL1XeLh9KgD4c2Pl9BiGNg0zkiNauUzu_QtKH8';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const SESSION_ID = (() => {
+  let id = sessionStorage.getItem('kb_session');
+  if (!id) {
+    id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    sessionStorage.setItem('kb_session', id);
+  }
+  return id;
+})();
+var __blogState = { slug: '', trackedScroll: false, tracked30s: false };
+
+function referrerType() {
+  var ref = (document.referrer || '').toLowerCase();
+  if (!ref) return 'direct';
+  if (ref.indexOf('google.') >= 0 || ref.indexOf('bing.') >= 0 || ref.indexOf('duckduckgo.') >= 0 || ref.indexOf('yahoo.') >= 0) return 'search';
+  if (ref.indexOf(window.location.hostname) >= 0) return 'internal';
+  return 'referral';
+}
+
+function track(event, value) {
+  sb.from('analytics').insert({
+    event: event,
+    city: null,
+    value: value == null ? null : JSON.stringify(value),
+    session_id: SESSION_ID
+  }).then(function(){}).catch(function(){});
+}
+
 function params() {
   var qp = new URLSearchParams(window.location.search);
   var slug = qp.get('slug');
@@ -107,6 +145,8 @@ async function load() {
     var out = await res.json();
     if (!res.ok || !out.post) throw new Error(out.error || 'Not found');
     var post = out.post;
+    __blogState.slug = String(post.slug || p.slug || '');
+    var rType = referrerType();
 
     document.title = post.title + ' | KiddBusy Blog';
     var desc = document.querySelector('meta[name="description"]');
@@ -122,6 +162,31 @@ async function load() {
     canonical.href = 'https://kiddbusy.com/blog/' + encodeURIComponent(post.slug);
     document.head.appendChild(canonical);
 
+    track('blog_post_view', {
+      slug: __blogState.slug,
+      referrer_type: rType,
+      organic_referrer: rType === 'search'
+    });
+
+    setTimeout(function() {
+      if (__blogState.tracked30s || document.hidden) return;
+      __blogState.tracked30s = true;
+      track('blog_post_engaged_30s', { slug: __blogState.slug });
+    }, 30000);
+
+    document.getElementById('blogToSiteCta').addEventListener('click', function() {
+      track('blog_to_home_click', { slug: __blogState.slug });
+    });
+
+    document.getElementById('content').addEventListener('click', function(e) {
+      var link = e.target && e.target.closest ? e.target.closest('a') : null;
+      if (!link) return;
+      var href = String(link.getAttribute('href') || '');
+      if (/^https?:\/\//i.test(href) && href.indexOf(window.location.hostname) === -1) {
+        track('blog_outbound_click', { slug: __blogState.slug, href: href.slice(0, 240) });
+      }
+    });
+
     state.style.display = 'none';
     article.style.display = 'block';
   } catch (err) {
@@ -129,6 +194,17 @@ async function load() {
     console.error(err);
   }
 }
+
+window.addEventListener('scroll', function() {
+  if (__blogState.trackedScroll || !__blogState.slug) return;
+  var scrolled = window.scrollY + window.innerHeight;
+  var total = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+  if (total <= 0) return;
+  if ((scrolled / total) >= 0.75) {
+    __blogState.trackedScroll = true;
+    track('blog_scroll_75', { slug: __blogState.slug });
+  }
+}, { passive: true });
 
 load();
 </script>

@@ -7,6 +7,7 @@
 <meta name="description" content="Weekend activity ideas, city guides, and practical planning tips for parents looking for kid-friendly things to do." />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root {
   --sun: #ffcf2f;
@@ -76,6 +77,35 @@ nav {
   </main>
 
 <script>
+const SUPABASE_URL = 'https://wgwexzyqaiwosgraaczi.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indnd2V4enlxYWl3b3NncmFhY3ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODEwNzUsImV4cCI6MjA4ODI1NzA3NX0.IS8u4SL1XeLh9KgD4c2Pl9BiGNg0zkiNauUzu_QtKH8';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const SESSION_ID = (() => {
+  let id = sessionStorage.getItem('kb_session');
+  if (!id) {
+    id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    sessionStorage.setItem('kb_session', id);
+  }
+  return id;
+})();
+
+function referrerType() {
+  var ref = (document.referrer || '').toLowerCase();
+  if (!ref) return 'direct';
+  if (ref.indexOf('google.') >= 0 || ref.indexOf('bing.') >= 0 || ref.indexOf('duckduckgo.') >= 0 || ref.indexOf('yahoo.') >= 0) return 'search';
+  if (ref.indexOf(window.location.hostname) >= 0) return 'internal';
+  return 'referral';
+}
+
+function track(event, value) {
+  sb.from('analytics').insert({
+    event: event,
+    city: null,
+    value: value == null ? null : JSON.stringify(value),
+    session_id: SESSION_ID
+  }).then(function(){}).catch(function(){});
+}
+
 function esc(s) {
   return String(s || '').replace(/[&<>\"']/g, function (c) {
     return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c];
@@ -115,6 +145,14 @@ function render(posts) {
       '</article>'
     ].join('');
   }).join('');
+
+  Array.from(grid.querySelectorAll('a[href^="/blog/"]')).forEach(function(a) {
+    a.addEventListener('click', function() {
+      var href = a.getAttribute('href') || '';
+      var slug = href.split('/').filter(Boolean).pop() || '';
+      track('blog_post_click', { slug: decodeURIComponent(slug), from: 'blog_index' });
+    });
+  });
 }
 
 async function load() {
@@ -123,6 +161,10 @@ async function load() {
     var res = await fetch('/api/blog-posts?limit=50');
     var out = await res.json();
     if (!res.ok) throw new Error(out.error || 'Failed to load blog');
+    track('blog_index_view', {
+      referrer_type: referrerType(),
+      post_count: (out.posts || []).length
+    });
     render(out.posts || []);
   } catch (err) {
     state.className = 'error';
