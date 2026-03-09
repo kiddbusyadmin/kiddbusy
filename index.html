@@ -1492,15 +1492,18 @@ function track(event, city = null, value = null) {
 }
 
 // ── SHARE ──
-function sharePlace(btn, name, address, desc) {
-  const text = `🎉 Check out ${name}!\n📍 ${address}\n${desc ? desc.split('|')[0].trim() + '\n' : ''}🔗 ${window.location.href}`;
+function sharePlace(btn, name, address, desc, businessUrl) {
+  const officialUrl = normalizeWebsiteUrl(businessUrl) || '';
+  const shareUrl = officialUrl || window.location.href;
+  const urlLine = officialUrl ? `🌐 ${officialUrl}\n` : '';
+  const text = `🎉 Check out ${name}!\n📍 ${address}\n${desc ? desc.split('|')[0].trim() + '\n' : ''}${urlLine}🔗 ${shareUrl}`;
   const city = (document.getElementById('citySelect') && document.getElementById('citySelect').value)
     ? document.getElementById('citySelect').value
     : null;
   let method = 'copy_clipboard';
   if (navigator.share) {
     method = 'native_share';
-    navigator.share({ title: name, text, url: window.location.href })
+    navigator.share({ title: name, text, url: shareUrl })
       .catch(() => {});
   } else {
     navigator.clipboard.writeText(text).then(() => {
@@ -1509,7 +1512,7 @@ function sharePlace(btn, name, address, desc) {
       setTimeout(() => { btn.innerHTML = '📤 Share'; btn.classList.remove('copied'); }, 2000);
     });
   }
-  track('share_click', city, JSON.stringify({ method, listing_name: name }));
+  track('share_click', city, JSON.stringify({ method, listing_name: name, shared_url: shareUrl, has_business_url: !!officialUrl }));
 }
 
 // ── UPSERT LISTING & GET STABLE ID ──
@@ -1723,7 +1726,7 @@ function renderActivities(list) {
         <div class="card-footer">
           <div class="stars" id="stars-${a.id}">${stars}</div>
           <div class="card-actions">
-            <button class="share-btn" onclick="sharePlace(this,'${a.name.replace(/'/g,"\\'")}','${(a.addr||'').replace(/'/g,"\\'")}','${(a.desc||'').replace(/'/g,"\\'")}')">📤 Share</button>
+            <button class="share-btn" onclick="sharePlace(this,'${a.name.replace(/'/g,"\\'")}','${(a.addr||'').replace(/'/g,"\\'")}','${(a.desc||'').replace(/'/g,"\\'")}','${(a.website||'').replace(/'/g,"\\'")}')">📤 Share</button>
             <button class="review-btn" onclick="openReview(${a.id},'${a.name.replace(/'/g,"\\'")}')">✍️ Review</button>
             <button class="claim-btn" onclick="openClaimPortal(${Number(a.id) > 8 ? a.id : 0},'${a.name.replace(/'/g,"\\'")}','${(document.getElementById('citySelect')?.value || '').replace(/'/g,"\\'")}')">🏷 Claim</button>
           </div>
@@ -2316,6 +2319,7 @@ async function loadTopPicksForCity(cityLabel, source = 'ai_generated') {
       const tagHtml = a.ages.map(t => `<span class="card-age-tag">${t}</span>`).join('');
       const bg = { '🏃':'#FFE8E8','🌳':'#E8FFE8','🎨':'#E8EAFF','🎮':'#FFF3E0','🦁':'#FFF8E0','💦':'#E0F7FF','🎭':'#FFF0F5','📚':'#FFFBE0','🍦':'#FFF0E0','🏆':'#E8FFEF','💃':'#F9E8FF','🔬':'#E8F4FF' }[a.emoji] || '#F5F0FF';
       const safeName = a.name.replace(/'/g, "\\'");
+      const safeWebsite = (a.website || '').replace(/'/g, "\\'");
       const priceLabel = getPriceLabel(a);
       const priceClass = getPriceClass(priceLabel);
       const sponsoredBadge = a.is_sponsored ? '<div class="sponsored-badge">⭐ Sponsored</div>' : '';
@@ -2333,7 +2337,7 @@ async function loadTopPicksForCity(cityLabel, source = 'ai_generated') {
           <div class="card-footer">
             <div class="stars" id="stars-${a.id}">${stars}</div>
             <div class="card-actions">
-              <button class="share-btn" onclick="sharePlace(this,'${safeName}','${(a.addr||'').replace(/'/g,"\\'")}','${(a.desc||'').replace(/'/g,"\\'")}')">📤 Share</button>
+              <button class="share-btn" onclick="sharePlace(this,'${safeName}','${(a.addr||'').replace(/'/g,"\\'")}','${(a.desc||'').replace(/'/g,"\\'")}','${safeWebsite}')">📤 Share</button>
               <button class="review-btn" onclick="openReview(${a.id},'${safeName}')">✍️ Review</button>
               <button class="claim-btn" onclick="openClaimPortal(${a.id},'${safeName}','${(cityLabel || '').replace(/'/g,"\\'")}')">🏷 Claim</button>
             </div>
@@ -2420,6 +2424,7 @@ function renderCachedListings(rows) {
     const tagHtml = ages.map(t => `<span class="card-age-tag">${t.trim()}</span>`).join('');
     const cardBg = bg[a.emoji] || '#F5F0FF';
     const safeName = (a.name || '').replace(/'/g, "\\'");
+    const safeWebsite = (a.website || '').replace(/'/g, "\\'");
     const priceLabel = getPriceLabel(a);
     const priceClass = getPriceClass(priceLabel);
     const sponsoredBadge = a.is_sponsored ? '<div class="sponsored-badge">⭐ Sponsored</div>' : '';
@@ -2437,7 +2442,7 @@ function renderCachedListings(rows) {
         <div class="card-footer">
           <div class="stars" id="stars-${a.listing_id}">${stars}</div>
           <div class="card-actions">
-            <button class="share-btn" onclick="sharePlace(this,'${safeName}','${(a.address||'').replace(/'/g,"\\'")}','${(a.description||'').replace(/'/g,"\\'")}')">📤 Share</button>
+            <button class="share-btn" onclick="sharePlace(this,'${safeName}','${(a.address||'').replace(/'/g,"\\'")}','${(a.description||'').replace(/'/g,"\\'")}','${safeWebsite}')">📤 Share</button>
             <button class="review-btn" onclick="openReview(${a.listing_id},'${safeName}')">✍️ Review</button>
             <button class="claim-btn" onclick="openClaimPortal(${a.listing_id},'${safeName}','${(a.city||'').replace(/'/g,"\\'")}')">🏷 Claim</button>
           </div>
