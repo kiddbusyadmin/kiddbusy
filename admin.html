@@ -1784,7 +1784,7 @@ async function runCmoBlogNow() {
     var res = await fetch('/api/cmo-blog-run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
-      body: JSON.stringify({ max_generate_per_run: 1 })
+      body: JSON.stringify({ max_generate_per_run: 0 })
     });
     var text = await res.text();
     var out = {};
