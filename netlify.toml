@@ -46,8 +46,8 @@
 [functions.cmo-blog-run]
   timeout = 30
 
-# CMO blog writer — background queue builder/distributor
-[functions.cmo-blog-run-background]
+# CMO blog writer — scheduled background queue builder/distributor
+[functions.cmo-blog-scheduled-background]
   schedule = "*/20 * * * *"
   timeout = 900
 
