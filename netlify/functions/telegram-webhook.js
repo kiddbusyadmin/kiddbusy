@@ -25,11 +25,24 @@ async function sendTelegram(chatId, text) {
 
 // ---- SUPABASE ----
 async function dbQuery(table, params = {}) {
-  let url = `${SUPABASE_URL}/rest/v1/${table}?select=*&limit=100`;
+  let url = `${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(params.select || '*')}&limit=${Math.min(Math.max(Number(params.limit) || 100, 1), 1000)}`;
   if (params.eq) {
     for (const [col, val] of Object.entries(params.eq)) {
       url += `&${col}=eq.${encodeURIComponent(val)}`;
     }
+  }
+  if (params.in) {
+    for (const [col, vals] of Object.entries(params.in)) {
+      const arr = Array.isArray(vals) ? vals : [];
+      if (!arr.length) continue;
+      const packed = arr.map((v) => `"${String(v).replace(/"/g, '\\"')}"`).join(',');
+      url += `&${col}=in.(${encodeURIComponent(packed)})`;
+    }
+  }
+  if (params.order) {
+    const by = String(params.order.by || 'created_at');
+    const asc = params.order.asc ? 'asc' : 'desc';
+    url += `&order=${encodeURIComponent(by)}.${asc}`;
   }
   const res = await fetch(url, {
     headers: {
@@ -40,6 +53,89 @@ async function dbQuery(table, params = {}) {
   const text = await res.text();
   if (!res.ok) throw new Error(`DB query failed (${res.status}): ${text}`);
   return JSON.parse(text);
+}
+
+function isWithinRange(ts, rangeKey) {
+  if (!ts) return false;
+  if (rangeKey === 'all') return true;
+  const nowMs = Date.now();
+  const tMs = new Date(ts).getTime();
+  if (!Number.isFinite(tMs)) return false;
+  const delta = nowMs - tMs;
+  if (rangeKey === '24h') return delta <= 24 * 60 * 60 * 1000;
+  if (rangeKey === '7d') return delta <= 7 * 24 * 60 * 60 * 1000;
+  if (rangeKey === '30d') return delta <= 30 * 24 * 60 * 60 * 1000;
+  return true;
+}
+
+async function queryOwnerKpis() {
+  const [events, claims, changes] = await Promise.all([
+    dbQuery('analytics', { limit: 2000, order: { by: 'created_at', asc: false } }),
+    dbQuery('owner_claims', { select: 'status,owner_email,listing_id,created_at', limit: 500, order: { by: 'created_at', asc: false } }),
+    dbQuery('owner_change_requests', { select: 'status,change_type,created_at', limit: 500, order: { by: 'created_at', asc: false } })
+  ]);
+  const ownerEvents = (events || []).filter((e) => String(e.event || '').startsWith('owner_'));
+  const counts = {};
+  ownerEvents.forEach((e) => { counts[e.event] = (counts[e.event] || 0) + 1; });
+  const starts = counts.owner_claim_start || 0;
+  const verified = counts.owner_claim_verified || 0;
+  const abandons = counts.owner_claim_abandon || 0;
+  const updates = counts.owner_update_saved || 0;
+  const conversionPercent = starts > 0 ? Math.round((verified / starts) * 100) : 0;
+  const abandonPercent = starts > 0 ? Math.round((abandons / starts) * 100) : 0;
+  return {
+    starts,
+    verified,
+    abandons,
+    updates,
+    conversion_percent: conversionPercent,
+    abandon_percent: abandonPercent,
+    claims_count: (claims || []).length,
+    changes_count: (changes || []).length
+  };
+}
+
+async function queryDashboardStats(range = '24h') {
+  const safeRange = ['24h', '7d', '30d', 'all'].includes(String(range)) ? String(range) : '24h';
+  const [events, reviews, emailLeads, submissions, cacheHits, cacheMisses] = await Promise.all([
+    dbQuery('analytics', { select: 'event,city,created_at,value,session_id', limit: 4000, order: { by: 'created_at', asc: false } }),
+    dbQuery('reviews', { select: 'status,created_at', limit: 2000, order: { by: 'created_at', asc: false } }),
+    dbQuery('email_leads', { select: 'created_at,city,source', limit: 2000, order: { by: 'created_at', asc: false } }),
+    dbQuery('submissions', { select: 'status,created_at,city', limit: 2000, order: { by: 'created_at', asc: false } }),
+    dbQuery('analytics', { select: 'created_at', eq: { event: 'cache_hit' }, limit: 2000, order: { by: 'created_at', asc: false } }),
+    dbQuery('analytics', { select: 'created_at', eq: { event: 'cache_miss' }, limit: 2000, order: { by: 'created_at', asc: false } })
+  ]);
+
+  const scopedEvents = (events || []).filter((e) => isWithinRange(e.created_at, safeRange));
+  const searchAll = (events || []).filter((e) => e.event === 'city_search');
+  const searchScoped = scopedEvents.filter((e) => e.event === 'city_search');
+  const uniqueCitiesScoped = new Set(searchScoped.map((e) => e.city).filter(Boolean)).size;
+  const uniqueCitiesAll = new Set(searchAll.map((e) => e.city).filter(Boolean)).size;
+  const multiCityScoped = scopedEvents.filter((e) => e.event === 'multi_city_session').length;
+  const multiCityAll = (events || []).filter((e) => e.event === 'multi_city_session').length;
+  const emailScoped = (emailLeads || []).filter((e) => isWithinRange(e.created_at, safeRange)).length;
+  const reviewScopedRows = (reviews || []).filter((r) => isWithinRange(r.created_at, safeRange));
+  const submissionScopedRows = (submissions || []).filter((s) => isWithinRange(s.created_at, safeRange));
+  const advScoped = scopedEvents.filter((e) => e.event === 'advertise_click').length;
+  const advAll = (events || []).filter((e) => e.event === 'advertise_click').length;
+  const hitsScoped = (cacheHits || []).filter((r) => isWithinRange(r.created_at, safeRange)).length;
+  const missesScoped = (cacheMisses || []).filter((r) => isWithinRange(r.created_at, safeRange)).length;
+  const hitsAll = (cacheHits || []).length;
+  const missesAll = (cacheMisses || []).length;
+  const cachePctScoped = (hitsScoped + missesScoped) > 0 ? Math.round((hitsScoped / (hitsScoped + missesScoped)) * 100) : null;
+  const cachePctAll = (hitsAll + missesAll) > 0 ? Math.round((hitsAll / (hitsAll + missesAll)) * 100) : null;
+
+  return {
+    range: safeRange,
+    searches: { scoped: searchScoped.length, all_time: searchAll.length },
+    unique_cities: { scoped: uniqueCitiesScoped, all_time: uniqueCitiesAll },
+    multi_city_sessions: { scoped: multiCityScoped, all_time: multiCityAll },
+    email_leads: { scoped: emailScoped, all_time: (emailLeads || []).length },
+    reviews: { scoped: reviewScopedRows.length, all_time: (reviews || []).length, pending_all_time: (reviews || []).filter((r) => r.status === 'pending').length },
+    submissions: { scoped: submissionScopedRows.length, all_time: (submissions || []).length, pending_all_time: (submissions || []).filter((s) => s.status === 'pending').length },
+    advertise_clicks: { scoped: advScoped, all_time: advAll },
+    cache_hit_rate: { scoped_percent: cachePctScoped, all_time_percent: cachePctAll }
+  };
 }
 
 async function dbUpdate(table, id, updates) {
@@ -90,9 +186,59 @@ async function executeTool(name, input) {
       return { count: data.length, sponsorships: data };
     }
     case 'query_listings': {
-      const data = await dbQuery('listings');
+      const eq = {};
+      if (input.status) eq.status = input.status;
+      const data = await dbQuery('listings', { eq, limit: input.limit || 200, order: { by: 'last_refreshed', asc: false } });
       return { count: data.length, listings: data };
     }
+    case 'query_submission_photos': {
+      const eq = {};
+      if (input.status && input.status !== 'all') eq.status = input.status;
+      const data = await dbQuery('submission_photos', { eq, limit: input.limit || 200, order: { by: 'created_at', asc: false } });
+      return { count: data.length, photos: data };
+    }
+    case 'query_email_leads': {
+      const eq = {};
+      if (input.city) eq.city = input.city;
+      const data = await dbQuery('email_leads', { eq, limit: input.limit || 500, order: { by: 'created_at', asc: false } });
+      return { count: data.length, leads: data };
+    }
+    case 'query_analytics': {
+      const eq = {};
+      if (input.event) eq.event = input.event;
+      if (input.city) eq.city = input.city;
+      const data = await dbQuery('analytics', { eq, limit: input.limit || 1000, order: { by: 'created_at', asc: false } });
+      return { count: data.length, analytics: data };
+    }
+    case 'query_owner_kpis':
+      return queryOwnerKpis();
+    case 'query_cmo_settings': {
+      const data = await dbQuery('cmo_agent_settings', { eq: { id: 1 }, limit: 1 });
+      return { config: data[0] || null };
+    }
+    case 'query_agent_activity': {
+      const eq = {};
+      if (input.agent_key) eq.agent_key = input.agent_key;
+      if (input.status) eq.status = input.status;
+      const data = await dbQuery('agent_activity', { eq, limit: input.limit || 200, order: { by: 'created_at', asc: false } });
+      return { count: data.length, activities: data };
+    }
+    case 'query_email_compliance': {
+      const [prefs, logs] = await Promise.all([
+        dbQuery('email_preferences', { limit: input.limit || 500, order: { by: 'updated_at', asc: false } }),
+        dbQuery('email_send_log', { limit: input.limit || 500, order: { by: 'created_at', asc: false } })
+      ]);
+      return {
+        unsubscribed_count: (prefs || []).filter((p) => !!p.unsubscribed).length,
+        send_log_count: (logs || []).length,
+        failed_count: (logs || []).filter((l) => String(l.status || '').toLowerCase() === 'failed').length,
+        suppressed_count: (logs || []).filter((l) => String(l.status || '').toLowerCase() === 'suppressed_unsubscribed').length,
+        prefs,
+        logs
+      };
+    }
+    case 'query_dashboard_stats':
+      return queryDashboardStats(input.range || '24h');
     case 'update_submission_status':
       await dbUpdate('submissions', input.id, { status: input.status });
       return { success: true, id: input.id, new_status: input.status };
@@ -121,7 +267,15 @@ async function runAgent(userMessage) {
     { name: 'query_submissions', description: 'Query submissions.', input_schema: { type: 'object', properties: { status: { type: 'string' } }, required: [] } },
     { name: 'query_reviews', description: 'Query reviews.', input_schema: { type: 'object', properties: { status: { type: 'string' } }, required: [] } },
     { name: 'query_sponsorships', description: 'Query sponsorships.', input_schema: { type: 'object', properties: { status: { type: 'string' } }, required: [] } },
-    { name: 'query_listings', description: 'Query listings.', input_schema: { type: 'object', properties: {}, required: [] } },
+    { name: 'query_listings', description: 'Query listings.', input_schema: { type: 'object', properties: { status: { type: 'string' }, limit: { type: 'number' } }, required: [] } },
+    { name: 'query_submission_photos', description: 'Query submission photo moderation queue.', input_schema: { type: 'object', properties: { status: { type: 'string' }, limit: { type: 'number' } }, required: [] } },
+    { name: 'query_email_leads', description: 'Query email leads list.', input_schema: { type: 'object', properties: { city: { type: 'string' }, limit: { type: 'number' } }, required: [] } },
+    { name: 'query_analytics', description: 'Query analytics events used by command center.', input_schema: { type: 'object', properties: { event: { type: 'string' }, city: { type: 'string' }, limit: { type: 'number' } }, required: [] } },
+    { name: 'query_owner_kpis', description: 'Get owner claim funnel KPIs used in dashboard.', input_schema: { type: 'object', properties: {}, required: [] } },
+    { name: 'query_cmo_settings', description: 'Get CMO agent settings and execution mode.', input_schema: { type: 'object', properties: {}, required: [] } },
+    { name: 'query_agent_activity', description: 'Get agent execution summary feed.', input_schema: { type: 'object', properties: { agent_key: { type: 'string' }, status: { type: 'string' }, limit: { type: 'number' } }, required: [] } },
+    { name: 'query_email_compliance', description: 'Get unsubscribe/send-log compliance metrics.', input_schema: { type: 'object', properties: { limit: { type: 'number' } }, required: [] } },
+    { name: 'query_dashboard_stats', description: 'Get top dashboard stat-card datapoints for a range.', input_schema: { type: 'object', properties: { range: { type: 'string', enum: ['24h', '7d', '30d', 'all'] } }, required: [] } },
     { name: 'update_submission_status', description: 'Approve or reject a submission.', input_schema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string', enum: ['approved', 'rejected'] } }, required: ['id', 'status'] } },
     { name: 'update_review_status', description: 'Approve or reject a review.', input_schema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string', enum: ['approved', 'rejected'] } }, required: ['id', 'status'] } },
     { name: 'update_sponsorship_status', description: 'Update sponsorship status.', input_schema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string' } }, required: ['id', 'status'] } },
@@ -131,7 +285,14 @@ async function runAgent(userMessage) {
 
   const systemPrompt = `You are the KiddBusy admin agent. You manage a family activity directory. You are responding to a Telegram message from Harold, the owner.
 
-You have access to the database (submissions, reviews, sponsorships, listings) and can query, approve, reject, and send emails.
+You have command-center parity data access. You can query any KPI/data point shown in the dashboard tabs, including:
+- Dashboard top metrics
+- Live activity analytics
+- Owner KPI funnel
+- Submissions and photo moderation queues
+- Sponsorships and listings
+- Email leads and compliance logs
+- CMO settings and agent activity feed
 
 Be concise — this is a chat interface. Use plain text, not HTML. When Harold asks for a status update, query the DB and summarize briefly. When he gives you an instruction, execute it and confirm. Today: ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}.`;
 
