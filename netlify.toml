@@ -42,8 +42,12 @@
   schedule = "0 14 * * *"
   timeout = 900
 
-# CMO blog writer — runs every 20 minutes to build daily queue target safely
+# CMO blog writer — manual API run
 [functions.cmo-blog-run]
+  timeout = 30
+
+# CMO blog writer — scheduled queue builder/distributor
+[functions.cmo-blog-scheduled]
   schedule = "*/20 * * * *"
   timeout = 30
 
