@@ -291,6 +291,17 @@
     letter-spacing: 1px; color: var(--plum); margin-bottom: 6px;
   }
   .card-name { font-family: 'Fredoka One', cursive; font-size: 1.25rem; color: var(--ink); margin-bottom: 6px; }
+  .card-name-link {
+    color: inherit;
+    text-decoration: none;
+  }
+  .card-name-link:hover,
+  .card-name-link:focus,
+  .card-name-link:active,
+  .card-name-link:visited {
+    color: var(--plum);
+    text-decoration: none;
+  }
   .card-desc { font-size: 0.88rem; color: var(--muted); line-height: 1.5; margin-bottom: 12px; }
   .card-meta { display: flex; justify-content: space-between; align-items: center; }
   .card-addr { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
@@ -1656,6 +1667,23 @@ function getPriceClass(label) {
   return 'price-unknown';
 }
 
+function normalizeWebsiteUrl(raw) {
+  const v = String(raw || '').trim();
+  if (!v) return '';
+  if (/^https?:\/\//i.test(v)) return v;
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(v)) return 'https://' + v;
+  return '';
+}
+
+function renderCardName(name, website) {
+  const safeName = String(name || '');
+  const href = normalizeWebsiteUrl(website);
+  if (!href) {
+    return `<div class="card-name">${safeName}</div>`;
+  }
+  return `<div class="card-name"><a class="card-name-link" href="${escapeAttr(href)}" target="_blank" rel="noopener noreferrer">${safeName}</a></div>`;
+}
+
 function openClaimPortal(listingId, name, city) {
   if (!listingId || Number(listingId) <= 0) {
     alert('This listing is not claimable yet.');
@@ -1687,7 +1715,7 @@ function renderActivities(list) {
       ${renderCardThumb(a, bg)}
       <div class="card-body">
         <div class="card-category category-filter" onclick="filterByCategory('${a.category}')" title="Filter by ${a.category}">${a.category} <span style="font-size:.7rem;opacity:.6">▼</span></div>
-        <div class="card-name">${a.name}</div>
+        ${renderCardName(a.name, a.website)}
         <div class="card-tags">${tagHtml}</div>
         <div class="card-desc">${a.desc}</div>
         <div class="card-addr" style="margin-bottom:8px">📍 ${a.addr}</div>
@@ -2297,7 +2325,7 @@ async function loadTopPicksForCity(cityLabel, source = 'ai_generated') {
         ${renderCardThumb(a, bg)}
         <div class="card-body">
           <div class="card-category">${a.category}</div>
-          <div class="card-name">${a.name}</div>
+          ${renderCardName(a.name, a.website)}
           <div class="card-tags">${tagHtml}</div>
           <div class="card-desc">${a.desc}</div>
           <div class="card-addr" style="margin-bottom:8px">📍 ${a.addr}</div>
@@ -2401,7 +2429,7 @@ function renderCachedListings(rows) {
       ${renderCardThumb(a, cardBg)}
       <div class="card-body">
         <div class="card-category">${a.category || ''}</div>
-        <div class="card-name">${a.name}</div>
+        ${renderCardName(a.name, a.website)}
         <div class="card-tags">${tagHtml}</div>
         <div class="card-desc">${a.description || ''}</div>
         <div class="card-addr" style="margin-bottom:8px">📍 ${a.address || ''}</div>

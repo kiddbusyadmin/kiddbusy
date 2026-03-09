@@ -30,6 +30,14 @@ function uniqueStrings(list, max = 8) {
   return out;
 }
 
+function normalizeWebsiteUrl(raw) {
+  const v = String(raw || '').trim();
+  if (!v) return null;
+  if (/^https?:\/\//i.test(v)) return v.slice(0, 500);
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(v)) return `https://${v}`.slice(0, 500);
+  return null;
+}
+
 function parseJsonFromText(raw) {
   const text = String(raw || '');
   const fenced = text.replace(/```json\s*/gi, '').replace(/```/g, '');
@@ -150,7 +158,7 @@ If uncertain, lower confidence and explain briefly in notes.`;
     owner_name: parsed.owner_name ? String(parsed.owner_name).trim().slice(0, 200) : null,
     contact_email: parsed.contact_email ? String(parsed.contact_email).trim().toLowerCase() : null,
     contact_phone: parsed.contact_phone ? String(parsed.contact_phone).trim().slice(0, 80) : null,
-    business_website: parsed.business_website ? String(parsed.business_website).trim().slice(0, 500) : (website || null),
+    business_website: normalizeWebsiteUrl(parsed.business_website || website),
     confidence: Number(parsed.confidence),
     notes: parsed.notes ? String(parsed.notes).trim().slice(0, 1200) : null,
     evidence_urls: uniqueStrings(parsed.evidence_urls, 6),
@@ -165,6 +173,24 @@ If uncertain, lower confidence and explain briefly in notes.`;
   }
 
   return lead;
+}
+
+async function maybeBackfillListingWebsite(listing, lead) {
+  const currentWebsite = normalizeWebsiteUrl(listing && listing.website ? listing.website : null);
+  const discoveredWebsite = normalizeWebsiteUrl(lead && lead.business_website ? lead.business_website : null);
+  if (!discoveredWebsite || currentWebsite) {
+    return { updated: false };
+  }
+
+  const { response, data } = await sbFetch(`listings?listing_id=eq.${encodeURIComponent(String(listing.listing_id))}`, {
+    method: 'PATCH',
+    body: { website: discoveredWebsite },
+    prefer: 'return=representation'
+  });
+  if (!response.ok) {
+    throw new Error(`Listing website backfill failed for ${listing.listing_id}: ${JSON.stringify(data)}`);
+  }
+  return { updated: true, website: discoveredWebsite };
 }
 
 async function upsertLead({ listing, lead }) {
@@ -245,6 +271,7 @@ exports.handler = async (event) => {
     const listings = await fetchPreseedListings({ city, limit });
     const results = [];
     let stored = 0;
+    let websiteBackfilled = 0;
     let skippedNoEmail = 0;
     let skippedLowConfidence = 0;
     let failed = 0;
@@ -252,28 +279,30 @@ exports.handler = async (event) => {
     for (const listing of listings) {
       try {
         const lead = await enrichOneListing(listing);
+        const siteUpdate = await maybeBackfillListingWebsite(listing, lead);
+        if (siteUpdate.updated) websiteBackfilled += 1;
 
         if (!lead.contact_email) {
           skippedNoEmail += 1;
-          results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'skipped_no_email', confidence: lead.confidence, notes: lead.notes || null });
+          results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'skipped_no_email', confidence: lead.confidence, notes: lead.notes || null, website_backfilled: !!siteUpdate.updated, website: siteUpdate.website || lead.business_website || null });
           continue;
         }
 
         if (lead.confidence < minConfidence) {
           skippedLowConfidence += 1;
-          results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'skipped_low_confidence', email: lead.contact_email, confidence: lead.confidence });
+          results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'skipped_low_confidence', email: lead.contact_email, confidence: lead.confidence, website_backfilled: !!siteUpdate.updated, website: siteUpdate.website || lead.business_website || null });
           continue;
         }
 
         if (dryRun) {
-          results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'dry_run_candidate', email: lead.contact_email, lead_name: lead.owner_name, confidence: lead.confidence, evidence_urls: lead.evidence_urls });
+          results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'dry_run_candidate', email: lead.contact_email, lead_name: lead.owner_name, confidence: lead.confidence, evidence_urls: lead.evidence_urls, website_backfilled: !!siteUpdate.updated, website: siteUpdate.website || lead.business_website || null });
           continue;
         }
 
         const upsert = await upsertLead({ listing, lead });
         if (upsert.stored) {
           stored += 1;
-          results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'stored', email: lead.contact_email, lead_name: lead.owner_name, confidence: lead.confidence });
+          results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'stored', email: lead.contact_email, lead_name: lead.owner_name, confidence: lead.confidence, website_backfilled: !!siteUpdate.updated, website: siteUpdate.website || lead.business_website || null });
         } else {
           results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'skipped', reason: upsert.reason || 'unknown' });
         }
@@ -290,6 +319,7 @@ exports.handler = async (event) => {
       dry_run: dryRun,
       scanned: listings.length,
       stored,
+      websites_backfilled: websiteBackfilled,
       skipped_no_email: skippedNoEmail,
       skipped_low_confidence: skippedLowConfidence,
       failed,

@@ -13,6 +13,7 @@ This pipeline researches pre-seeded listings and stores suspected owner outreach
   - phone, website
   - confidence score + evidence URLs
 - Stores results in `owner_marketing_leads` with status `suspected`.
+- Backfills `listings.website` when a trusted website is found and the listing website is blank.
 
 ## Required setup
 
@@ -51,6 +52,7 @@ Notes:
 - Use `dry_run: true` to preview candidates without DB writes.
 - Use `auto_write: false` if you want dry-run behavior without setting `dry_run`.
 - Rows without valid email are skipped.
+- Website backfill can still happen even when no email is found.
 
 ## Suggested operating flow
 
