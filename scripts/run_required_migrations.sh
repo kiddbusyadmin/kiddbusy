@@ -8,6 +8,8 @@ MIGRATIONS=(
   "supabase/migrations/20260309_photo_pipeline.sql"
   "supabase/migrations/20260309_owner_claims.sql"
   "supabase/migrations/20260309_owner_leads_enrichment.sql"
+  "supabase/migrations/20260309_email_unsubscribe.sql"
+  "supabase/migrations/20260309_cmo_agent_settings.sql"
 )
 
 for m in "${MIGRATIONS[@]}"; do
