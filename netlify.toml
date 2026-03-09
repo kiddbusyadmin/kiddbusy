@@ -29,6 +29,9 @@
 [functions.unsubscribe]
   timeout = 30
 
+[functions.blog-posts]
+  timeout = 30
+
 # Daily cache warm — runs at 3am ET (8am UTC)
 [functions.daily-cache-warm]
   schedule = "0 8 * * *"
@@ -38,6 +41,11 @@
 [functions.agent-scheduled]
   schedule = "0 14 * * *"
   timeout = 900
+
+# CMO blog writer — one post daily at 11am ET (3pm UTC)
+[functions.cmo-blog-scheduled]
+  schedule = "0 15 * * *"
+  timeout = 120
 
 [[redirects]]
   from = "/api/cmo-config"
@@ -82,4 +90,24 @@
 [[redirects]]
   from = "/api/owner-leads-enrich"
   to = "/.netlify/functions/owner-leads-enrich"
+  status = 200
+
+[[redirects]]
+  from = "/api/blog-posts"
+  to = "/.netlify/functions/blog-posts"
+  status = 200
+
+[[redirects]]
+  from = "/api/cmo-blog-run"
+  to = "/.netlify/functions/cmo-blog-scheduled"
+  status = 200
+
+[[redirects]]
+  from = "/blog"
+  to = "/blog/"
+  status = 301
+
+[[redirects]]
+  from = "/blog/:slug"
+  to = "/blog/post.html?slug=:slug"
   status = 200

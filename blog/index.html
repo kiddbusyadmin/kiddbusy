@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KiddBusy Blog - Weekend Activity Ideas for Parents</title>
+<meta name="description" content="Weekend activity ideas, city guides, and practical planning tips for parents looking for kid-friendly things to do." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --sun: #ffcf2f;
+  --sky: #4ac6ff;
+  --plum: #6c3fc5;
+  --tomato: #ff5a5f;
+  --cream: #fff8ee;
+  --ink: #1a1230;
+  --muted: #7b6e8a;
+  --card: #ffffff;
+  --border: #eee5ff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Nunito', sans-serif; background: var(--cream); color: var(--ink); }
+a { color: inherit; text-decoration: none; }
+nav {
+  position: sticky; top: 0; z-index: 30;
+  display: flex; justify-content: space-between; align-items: center;
+  background: var(--card); border-bottom: 3px solid var(--border); padding: 16px 24px;
+}
+.logo { font-family: 'Fredoka One', cursive; font-size: 1.8rem; color: var(--plum); }
+.logo span { color: var(--tomato); }
+.nav-links { display: flex; gap: 18px; list-style: none; font-weight: 800; color: var(--muted); }
+.nav-links a:hover { color: var(--plum); }
+.hero {
+  background: linear-gradient(135deg, #6c3fc5 0%, #4ac6ff 100%);
+  color: white; padding: 56px 24px;
+}
+.hero-wrap { max-width: 980px; margin: 0 auto; }
+.hero h1 { font-family: 'Fredoka One', cursive; font-size: clamp(2rem, 5vw, 3rem); margin-bottom: 10px; }
+.hero p { color: rgba(255,255,255,.9); max-width: 760px; font-size: 1.05rem; }
+.container { max-width: 980px; margin: 26px auto 48px; padding: 0 16px; }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.card {
+  background: var(--card); border: 2px solid var(--border); border-radius: 16px; padding: 16px;
+  box-shadow: 0 4px 18px rgba(108,63,197,.08);
+}
+.card:hover { transform: translateY(-1px); }
+.meta { color: var(--muted); font-size: .87rem; margin-bottom: 8px; font-weight: 700; }
+.title { font-size: 1.12rem; line-height: 1.3; margin-bottom: 8px; color: var(--ink); }
+.excerpt { color: #41365c; line-height: 1.5; font-size: .95rem; margin-bottom: 12px; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { background: #f2ebff; color: #4c2f8f; border-radius: 50px; padding: 4px 10px; font-size: .78rem; font-weight: 800; }
+.empty, .error { padding: 16px; border-radius: 12px; background: #fff; border: 2px dashed var(--border); color: var(--muted); }
+</style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo">Kidd<span>Busy</span></a>
+    <ul class="nav-links">
+      <li><a href="/">Home</a></li>
+      <li><a href="/blog/" style="color:var(--plum)">Blog</a></li>
+      <li><a href="/admin.html">Command Center</a></li>
+    </ul>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-wrap">
+      <h1>Weekend Ideas for Busy Parents</h1>
+      <p>City guides, planning templates, and practical tips to help you find kid-friendly things to do every weekend.</p>
+    </div>
+  </section>
+
+  <main class="container">
+    <div id="state" class="empty">Loading posts...</div>
+    <div id="grid" class="grid" style="display:none"></div>
+  </main>
+
+<script>
+function esc(s) {
+  return String(s || '').replace(/[&<>\"']/g, function (c) {
+    return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c];
+  });
+}
+
+function formatDate(value) {
+  try {
+    return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return value || '';
+  }
+}
+
+function render(posts) {
+  var state = document.getElementById('state');
+  var grid = document.getElementById('grid');
+
+  if (!Array.isArray(posts) || posts.length === 0) {
+    state.className = 'empty';
+    state.textContent = 'No blog posts yet. Check back soon.';
+    grid.style.display = 'none';
+    return;
+  }
+
+  state.style.display = 'none';
+  grid.style.display = 'grid';
+  grid.innerHTML = posts.map(function (p) {
+    var tags = Array.isArray(p.tags) ? p.tags.slice(0, 4) : [];
+    var metaCity = p.city ? (' - ' + esc(p.city)) : '';
+    return [
+      '<article class="card">',
+      '  <div class="meta">' + formatDate(p.published_at) + metaCity + ' - ' + (Number(p.read_minutes) || 4) + ' min read</div>',
+      '  <a href="/blog/' + encodeURIComponent(p.slug) + '"><h2 class="title">' + esc(p.title) + '</h2></a>',
+      '  <p class="excerpt">' + esc(p.excerpt) + '</p>',
+      '  <div class="tags">' + tags.map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('') + '</div>',
+      '</article>'
+    ].join('');
+  }).join('');
+}
+
+async function load() {
+  var state = document.getElementById('state');
+  try {
+    var res = await fetch('/api/blog-posts?limit=50');
+    var out = await res.json();
+    if (!res.ok) throw new Error(out.error || 'Failed to load blog');
+    render(out.posts || []);
+  } catch (err) {
+    state.className = 'error';
+    state.textContent = 'Unable to load posts right now.';
+    console.error(err);
+  }
+}
+
+load();
+</script>
+</body>
+</html>

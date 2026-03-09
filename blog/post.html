@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KiddBusy Blog</title>
+<meta name="description" content="KiddBusy blog post" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --plum: #6c3fc5;
+  --tomato: #ff5a5f;
+  --cream: #fff8ee;
+  --ink: #1a1230;
+  --muted: #7b6e8a;
+  --card: #ffffff;
+  --border: #eee5ff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Nunito', sans-serif; background: var(--cream); color: var(--ink); }
+a { color: inherit; text-decoration: none; }
+nav {
+  display: flex; justify-content: space-between; align-items: center;
+  background: var(--card); border-bottom: 3px solid var(--border); padding: 16px 24px;
+}
+.logo { font-family: 'Fredoka One', cursive; font-size: 1.8rem; color: var(--plum); }
+.logo span { color: var(--tomato); }
+.wrap { max-width: 860px; margin: 26px auto 70px; padding: 0 16px; }
+.back { display: inline-block; margin-bottom: 16px; color: var(--plum); font-weight: 800; }
+.card {
+  background: var(--card); border: 2px solid var(--border); border-radius: 16px;
+  padding: 22px; box-shadow: 0 4px 18px rgba(108,63,197,.07);
+}
+.meta { color: var(--muted); font-size: .9rem; margin-bottom: 8px; font-weight: 700; }
+h1 { font-family: 'Fredoka One', cursive; line-height: 1.2; margin-bottom: 12px; }
+.excerpt { color: #41365c; font-size: 1.05rem; margin-bottom: 16px; }
+.content { line-height: 1.72; font-size: 1.02rem; color: #23173d; }
+.content h2 { margin: 20px 0 10px; font-size: 1.2rem; color: #2f1f53; }
+.content p { margin-bottom: 12px; }
+.content ul { padding-left: 18px; margin: 6px 0 12px; }
+.content li { margin-bottom: 8px; }
+.state { padding: 14px; background: #fff; border: 2px dashed var(--border); border-radius: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo">Kidd<span>Busy</span></a>
+    <a href="/blog/" style="font-weight:800;color:var(--plum)">Blog</a>
+  </nav>
+
+  <main class="wrap">
+    <a href="/blog/" class="back">Back to blog</a>
+    <div id="state" class="state">Loading post...</div>
+    <article id="article" class="card" style="display:none">
+      <div id="meta" class="meta"></div>
+      <h1 id="title"></h1>
+      <p id="excerpt" class="excerpt"></p>
+      <div id="content" class="content"></div>
+    </article>
+  </main>
+
+<script>
+function params() {
+  var qp = new URLSearchParams(window.location.search);
+  var slug = qp.get('slug');
+  if (!slug) {
+    var m = window.location.pathname.match(/^\/blog\/([^/]+)$/);
+    if (m) slug = decodeURIComponent(m[1]);
+  }
+  return { slug: slug || '' };
+}
+
+function safeText(s) {
+  return String(s || '').replace(/[&<>\"']/g, function (c) {
+    return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c];
+  });
+}
+
+function safeBody(html) {
+  var val = String(html || '');
+  return val
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+    .replace(/on\w+\s*=\s*"[^"]*"/gi, '')
+    .replace(/on\w+\s*=\s*'[^']*'/gi, '');
+}
+
+function formatDate(value) {
+  try {
+    return new Date(value).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  } catch {
+    return value || '';
+  }
+}
+
+async function load() {
+  var state = document.getElementById('state');
+  var article = document.getElementById('article');
+  var p = params();
+  if (!p.slug) {
+    state.textContent = 'Post not found.';
+    return;
+  }
+
+  try {
+    var res = await fetch('/api/blog-posts?slug=' + encodeURIComponent(p.slug));
+    var out = await res.json();
+    if (!res.ok || !out.post) throw new Error(out.error || 'Not found');
+    var post = out.post;
+
+    document.title = post.title + ' | KiddBusy Blog';
+    var desc = document.querySelector('meta[name="description"]');
+    if (desc) desc.setAttribute('content', post.seo_description || post.excerpt || 'KiddBusy blog post');
+
+    document.getElementById('meta').textContent = formatDate(post.published_at) + (post.city ? (' - ' + post.city) : '') + ' - ' + (Number(post.read_minutes) || 4) + ' min read';
+    document.getElementById('title').textContent = post.title || 'KiddBusy Blog';
+    document.getElementById('excerpt').textContent = post.excerpt || '';
+    document.getElementById('content').innerHTML = safeBody(post.body_html || '');
+
+    var canonical = document.createElement('link');
+    canonical.rel = 'canonical';
+    canonical.href = 'https://kiddbusy.com/blog/' + encodeURIComponent(post.slug);
+    document.head.appendChild(canonical);
+
+    state.style.display = 'none';
+    article.style.display = 'block';
+  } catch (err) {
+    state.textContent = 'Unable to load this post right now.';
+    console.error(err);
+  }
+}
+
+load();
+</script>
+</body>
+</html>
