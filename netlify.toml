@@ -43,12 +43,12 @@
   timeout = 900
 
 # CMO blog writer — one post daily at 11am ET (3pm UTC)
-[functions.cmo-blog-scheduled]
-  schedule = "0 15 * * *"
-  timeout = 30
-
 [functions.cmo-blog-run]
   timeout = 30
+
+[functions.cmo-blog-run-background]
+  schedule = "0 15 * * *"
+  timeout = 900
 
 [[redirects]]
   from = "/api/cmo-config"
@@ -102,7 +102,7 @@
 
 [[redirects]]
   from = "/api/cmo-blog-run"
-  to = "/.netlify/functions/cmo-blog-run"
+  to = "/.netlify/functions/cmo-blog-run-background"
   status = 200
 
 [[redirects]]

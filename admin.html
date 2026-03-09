@@ -1786,9 +1786,15 @@ async function runCmoBlogNow() {
       headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
       body: JSON.stringify({})
     });
-    var out = await res.json();
-    if (!res.ok) throw new Error(out.error || 'Failed to run CMO blog queue');
-    alert('CMO blog queue run complete. Generated ' + (out.generated_count || 0) + ', published ' + (out.published_count || 0) + '.');
+    var text = await res.text();
+    var out = {};
+    try { out = text ? JSON.parse(text) : {}; } catch (e) { out = {}; }
+    if (!res.ok) throw new Error((out && out.error) || ('Failed to start CMO blog queue run (HTTP ' + res.status + ')'));
+    if (res.status === 202) {
+      alert('CMO blog queue run started in background. Refresh the CMO tab in about 1-2 minutes for updated counts.');
+    } else {
+      alert('CMO blog queue run complete. Generated ' + (out.generated_count || 0) + ', published ' + (out.published_count || 0) + '.');
+    }
     await loadCmoDashboard();
   } catch (e) {
     alert('CMO blog run failed: ' + e.message);
