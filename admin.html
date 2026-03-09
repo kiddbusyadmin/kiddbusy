@@ -3,7 +3,1283 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KiddBusy · Command Center</title>
+<title>KiddBusy HQ</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+:root {
+  --bg:#0a0a0f; --surface:#13131a; --surface2:#1c1c26; --border:#2a2a3a;
+  --accent:#ff4d6d; --accent2:#7c5cbf; --green:#00d68f; --yellow:#ffcf2f;
+  --blue:#4d9fff; --text:#f0eeff; --muted:#7070a0;
+  --mono:'Space Mono',monospace; --sans:'DM Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+
+/* LOGIN */
+#login-screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);z-index:9999;}
+.login-box{width:340px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:36px;}
+.login-logo{font-family:var(--mono);font-size:1.1rem;font-weight:700;color:var(--accent);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;}
+.login-logo span{color:var(--text);}
+.login-sub{color:var(--muted);font-size:.76rem;margin-bottom:28px;font-family:var(--mono);}
+.login-box input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:11px 14px;color:var(--text);font-family:var(--mono);font-size:.82rem;outline:none;margin-bottom:10px;transition:border-color .2s;}
+.login-box input:focus{border-color:var(--accent2);}
+.login-btn{width:100%;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:11px;font-family:var(--mono);font-weight:700;font-size:.82rem;cursor:pointer;letter-spacing:1px;}
+.login-btn:hover{opacity:.85;}
+.login-err{color:var(--accent);font-size:.72rem;margin-top:8px;display:none;font-family:var(--mono);}
+
+/* TOPBAR */
+.topbar{display:flex;align-items:center;padding:0 24px;height:52px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;z-index:100;}
+.topbar-logo{font-family:var(--mono);font-size:.9rem;font-weight:700;color:var(--accent);letter-spacing:2px;text-transform:uppercase;margin-right:24px;}
+.topbar-logo span{color:var(--text);}
+.tabs{display:flex;height:100%;}
+.tab{padding:0 20px;display:flex;align-items:center;font-family:var(--mono);font-size:.72rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;user-select:none;}
+.tab:hover{color:var(--text);}
+.tab.active{color:var(--text);border-bottom-color:var(--accent);}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px;}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+.topbar-time{font-family:var(--mono);font-size:.7rem;color:var(--muted);}
+.topbar-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 12px;border-radius:6px;font-family:var(--mono);font-size:.7rem;cursor:pointer;transition:all .2s;}
+.topbar-btn:hover{border-color:var(--accent);color:var(--accent);}
+.topbar-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.topbar-btn.primary:hover{opacity:.85;color:#fff;}
+.topbar-btn:disabled{opacity:.4;cursor:not-allowed;}
+
+/* VIEWS */
+.view{display:none;flex:1;overflow:hidden;}
+.view.active{display:flex;flex-direction:column;}
+
+/* ===================== DASHBOARD ===================== */
+#view-dash{overflow-y:auto;}
+.dash-inner{padding:24px 32px;max-width:1400px;margin:0 auto;}
+.date-banner{font-family:var(--mono);font-size:.68rem;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:20px;}
+
+/* Stat cards */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px;margin-bottom:24px;}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 20px 16px;position:relative;overflow:hidden;transition:border-color .2s;}
+.stat-card:hover{border-color:var(--accent2);}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.stat-card.red::before{background:var(--accent);}
+.stat-card.green::before{background:var(--green);}
+.stat-card.yellow::before{background:var(--yellow);}
+.stat-card.blue::before{background:var(--blue);}
+.stat-card.purple::before{background:var(--accent2);}
+.stat-label{font-size:.7rem;font-family:var(--mono);color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;}
+.stat-value{font-size:2.2rem;font-family:var(--mono);font-weight:700;line-height:1;margin-bottom:6px;}
+.stat-sub{font-size:.72rem;color:var(--muted);}
+.stat-card.red .stat-value{color:var(--accent);}
+.stat-card.green .stat-value{color:var(--green);}
+.stat-card.yellow .stat-value{color:var(--yellow);}
+.stat-card.blue .stat-value{color:var(--blue);}
+.stat-card.purple .stat-value{color:var(--accent2);}
+
+/* Panels */
+.panels{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
+.panels.full{grid-template-columns:1fr;}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.panel-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);}
+.panel-title{font-family:var(--mono);font-size:.78rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);}
+.panel-badge{font-family:var(--mono);font-size:.68rem;padding:3px 8px;border-radius:4px;background:var(--surface2);color:var(--muted);}
+.panel-body{padding:16px 20px;}
+
+/* Data table */
+.data-table{width:100%;border-collapse:collapse;font-size:.82rem;}
+.data-table th{font-family:var(--mono);font-size:.65rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);}
+.data-table td{padding:10px 10px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--text);vertical-align:middle;}
+.data-table tr:last-child td{border-bottom:none;}
+.data-table tr:hover td{background:var(--surface2);}
+
+/* City bars */
+.city-bar-wrap{margin-bottom:10px;}
+.city-bar-label{display:flex;justify-content:space-between;font-size:.78rem;margin-bottom:5px;color:var(--text);}
+.city-bar-label span{color:var(--muted);font-family:var(--mono);font-size:.72rem;}
+.city-bar-bg{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;}
+.city-bar-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent2),var(--accent));transition:width .6s ease;}
+
+/* Review funnel */
+.funnel-row{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
+.funnel-label{font-size:.78rem;color:var(--text);width:100px;flex-shrink:0;}
+.funnel-bar-bg{flex:1;height:28px;background:var(--surface2);border-radius:6px;overflow:hidden;}
+.funnel-bar-fill{height:100%;border-radius:6px;display:flex;align-items:center;padding-left:10px;font-family:var(--mono);font-size:.72rem;font-weight:700;transition:width .6s ease;white-space:nowrap;}
+.funnel-row.start .funnel-bar-fill{background:var(--blue);color:#000;}
+.funnel-row.abandon .funnel-bar-fill{background:var(--accent);color:#fff;}
+.funnel-row.submit .funnel-bar-fill{background:var(--green);color:#000;}
+.funnel-pct{font-family:var(--mono);font-size:.78rem;color:var(--muted);width:46px;text-align:right;flex-shrink:0;}
+
+/* Filter pills */
+.filter-pills{display:flex;flex-wrap:wrap;gap:8px;}
+.filter-pill{display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-size:.78rem;transition:border-color .2s;}
+.filter-pill:hover{border-color:var(--accent2);}
+.filter-pill-count{font-family:var(--mono);font-weight:700;color:var(--accent2);}
+
+/* Status badges */
+.status-badge{font-family:var(--mono);font-size:.65rem;padding:3px 8px;border-radius:4px;letter-spacing:.5px;text-transform:uppercase;}
+.status-badge.pending{background:rgba(255,207,47,.15);color:var(--yellow);}
+.status-badge.approved{background:rgba(0,214,143,.15);color:var(--green);}
+.status-badge.rejected{background:rgba(255,77,109,.15);color:var(--accent);}
+
+/* Cache */
+.cache-item{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:.82rem;}
+.cache-item:last-child{border-bottom:none;}
+.cache-city{color:var(--text);font-weight:500;}
+.cache-age{font-family:var(--mono);font-size:.72rem;}
+.cache-age.fresh{color:var(--green);}
+.cache-age.stale{color:var(--yellow);}
+.cache-age.old{color:var(--accent);}
+.cache-count{color:var(--muted);font-size:.72rem;font-family:var(--mono);}
+
+/* Loading / empty */
+.loading{display:flex;align-items:center;justify-content:center;padding:32px;color:var(--muted);font-family:var(--mono);font-size:.78rem;gap:10px;}
+.loading-dot{width:6px;height:6px;border-radius:50%;background:var(--accent2);animation:blink 1.2s infinite;}
+.loading-dot:nth-child(2){animation-delay:.2s;}
+.loading-dot:nth-child(3){animation-delay:.4s;}
+@keyframes blink{0%,100%{opacity:.2}50%{opacity:1}}
+.empty{text-align:center;padding:28px;color:var(--muted);font-size:.82rem;}
+
+/* Sponsor filters */
+.sponsor-search-bar{display:flex;gap:10px;padding:14px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+.sponsor-search-bar input,.sponsor-search-bar select{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;color:var(--text);font-family:var(--mono);font-size:.75rem;outline:none;transition:border-color .2s;}
+.sponsor-search-bar input{flex:1;min-width:180px;}
+.sponsor-search-bar input:focus,.sponsor-search-bar select:focus{border-color:var(--accent2);}
+
+/* Action buttons inline */
+.act-btn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:3px 9px;font-size:.7rem;cursor:pointer;font-family:var(--mono);transition:all .15s;}
+.act-btn.approve:hover{border-color:var(--green);color:var(--green);}
+.act-btn.reject:hover{border-color:var(--accent);color:var(--accent);}
+
+/* ===================== AGENT ===================== */
+#view-agent{flex-direction:row;}
+.agent-sidebar{width:240px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;}
+.sidebar-sec{padding:12px 14px;border-bottom:1px solid var(--border);}
+.sidebar-lbl{font-family:var(--mono);font-size:.62rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:9px;}
+.q-cmd{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:.74rem;color:var(--muted);cursor:pointer;font-family:var(--mono);text-align:left;transition:all .15s;margin-bottom:5px;display:block;}
+.q-cmd:hover{border-color:var(--accent2);color:var(--text);}
+.agent-log{flex:1;overflow-y:auto;padding:10px 12px;}
+.log-line{font-size:.65rem;color:var(--muted);padding:2px 4px;font-family:var(--mono);line-height:1.5;margin-bottom:1px;word-break:break-all;}
+.log-line.tool{color:var(--blue);}
+.log-line.ok{color:var(--green);}
+.log-line.err{color:var(--accent);}
+
+.agent-main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.chat-msgs{flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:14px;}
+.msg{display:flex;gap:10px;max-width:740px;animation:fadeUp .2s ease;}
+.msg.user{flex-direction:row-reverse;align-self:flex-end;}
+.msg-av{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
+.msg.agent .msg-av{background:var(--accent);}
+.msg.user .msg-av{background:var(--surface2);border:1px solid var(--border);}
+.msg-bubble{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:11px 15px;font-size:.82rem;line-height:1.6;}
+.msg.user .msg-bubble{background:var(--surface2);}
+.msg-bubble code{background:var(--bg);padding:1px 5px;border-radius:3px;font-family:var(--mono);font-size:.72rem;}
+.typing-dots{display:flex;gap:4px;align-items:center;padding:2px 0;}
+.td{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:tdBounce .8s infinite;}
+.td:nth-child(2){animation-delay:.15s;}
+.td:nth-child(3){animation-delay:.3s;}
+@keyframes tdBounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-6px)}}
+
+.chat-input-bar{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:flex-end;flex-shrink:0;}
+.chat-ta{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:var(--mono);font-size:.78rem;resize:none;outline:none;line-height:1.5;min-height:42px;max-height:120px;transition:border-color .2s;}
+.chat-ta:focus{border-color:var(--accent2);}
+.chat-send{background:var(--accent);color:#fff;border:none;border-radius:10px;width:42px;height:42px;cursor:pointer;font-size:16px;flex-shrink:0;}
+.chat-send:hover{opacity:.85;}
+.chat-send:disabled{opacity:.4;cursor:not-allowed;}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+@media(max-width:900px){
+  .dash-inner{padding:16px;}
+  .panels{grid-template-columns:1fr;}
+  .stats-row{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">Kidd<span>Busy</span> HQ</div>
+    <div class="login-sub">// admin command center</div>
+    <input type="password" id="pw-input" placeholder="password" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="login-btn" onclick="doLogin()">ENTER</button>
+    <div class="login-err" id="login-err">incorrect password</div>
+  </div>
+</div>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-logo">Kidd<span>Busy</span></div>
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('dash',this)" id="tab-dash">Dashboard</div>
+    <div class="tab" onclick="switchTab('agent',this)" id="tab-agent">Agent</div>
+  </div>
+  <div class="topbar-right">
+    <div class="pulse"></div>
+    <div class="topbar-time" id="last-updated">loading...</div>
+    <button class="topbar-btn" onclick="loadAll()">&#8635; Refresh</button>
+    <button class="topbar-btn primary" id="run-btn" onclick="runScheduledAgent()">&#9654; Run Agent</button>
+  </div>
+</div>
+
+<!-- DASHBOARD VIEW -->
+<div class="view active" id="view-dash">
+<div class="dash-inner">
+
+  <div class="date-banner" id="date-banner"></div>
+
+  <!-- STAT CARDS - all 8 from original -->
+  <div class="stats-row">
+    <div class="stat-card red">
+      <div class="stat-label">Searches Today</div>
+      <div class="stat-value" id="stat-searches-today">--</div>
+      <div class="stat-sub" id="stat-searches-sub">all time: --</div>
+    </div>
+    <div class="stat-card blue">
+      <div class="stat-label">Unique Cities</div>
+      <div class="stat-value" id="stat-cities">--</div>
+      <div class="stat-sub">searched ever</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-label">Multi-City Sessions</div>
+      <div class="stat-value" id="stat-multi">--</div>
+      <div class="stat-sub">high-intent users</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Email Leads</div>
+      <div class="stat-value" id="stat-emails">--</div>
+      <div class="stat-sub" id="stat-emails-sub">today: --</div>
+    </div>
+    <div class="stat-card yellow">
+      <div class="stat-label">Reviews</div>
+      <div class="stat-value" id="stat-reviews">--</div>
+      <div class="stat-sub" id="stat-reviews-sub">pending: --</div>
+    </div>
+    <div class="stat-card blue">
+      <div class="stat-label">Submissions</div>
+      <div class="stat-value" id="stat-subs">--</div>
+      <div class="stat-sub" id="stat-subs-sub">pending: --</div>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-label">Advertise Clicks</div>
+      <div class="stat-value" id="stat-adv">--</div>
+      <div class="stat-sub">revenue intent</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Cache Hit Rate</div>
+      <div class="stat-value" id="stat-cache">--</div>
+      <div class="stat-sub">fast loads</div>
+    </div>
+  </div>
+
+  <!-- TOP CITIES + REVIEW FUNNEL -->
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Top Cities by Search</div>
+        <div class="panel-badge" id="badge-top-cities">all time</div>
+      </div>
+      <div class="panel-body" id="body-top-cities">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Review Funnel</div>
+        <div class="panel-badge">conversion</div>
+      </div>
+      <div class="panel-body" id="body-funnel">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FILTER USAGE + CACHE HEALTH -->
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Filter Usage</div>
+        <div class="panel-badge">all time</div>
+      </div>
+      <div class="panel-body" id="body-filters">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Cache Health</div>
+        <div class="panel-badge" id="badge-cache">--</div>
+      </div>
+      <div class="panel-body" id="body-cache">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIVE ACTIVITY FEED -->
+  <div class="panels full">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Live Activity Feed</div>
+        <div class="panel-badge">last 50 events</div>
+      </div>
+      <div class="panel-body" id="body-activity">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DATA INTEGRITY -->
+  <div class="panels full">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Listings Data Integrity</div>
+        <div class="panel-badge">organic vs seeded</div>
+      </div>
+      <div class="panel-body" id="body-integrity">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SUBMISSIONS INBOX -->
+  <div class="panels full">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Submissions Inbox</div>
+        <div class="panel-badge" id="badge-subs">--</div>
+      </div>
+      <div id="body-subs">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SPONSOR MANAGER -->
+  <div class="panels full">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Sponsor Manager</div>
+        <div class="panel-badge" id="badge-sponsors">--</div>
+      </div>
+      <div class="sponsor-search-bar">
+        <input id="sponsor-q" type="text" placeholder="Search by name, city, or category..." oninput="sponsorSearch(this.value)">
+        <select id="sponsor-city-filter" onchange="sponsorSearch(document.getElementById('sponsor-q').value)">
+          <option value="">All cities</option>
+        </select>
+        <select id="sponsor-status-filter" onchange="sponsorSearch(document.getElementById('sponsor-q').value)">
+          <option value="">All listings</option>
+          <option value="sponsored">Sponsored only</option>
+          <option value="unsponsored">Unsponsored only</option>
+        </select>
+      </div>
+      <div id="body-sponsors">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EMAIL LEADS -->
+  <div class="panels full">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Email Leads</div>
+        <div class="panel-badge" id="badge-leads">--</div>
+      </div>
+      <div id="body-leads">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div><!-- /view-dash -->
+
+<!-- AGENT VIEW -->
+<div class="view" id="view-agent">
+  <div class="agent-sidebar">
+    <div class="sidebar-sec">
+      <div class="sidebar-lbl">Quick Commands</div>
+      <button class="q-cmd" onclick="sendQuick('What is pending right now? Give me counts for submissions and reviews.')">Pending items</button>
+      <button class="q-cmd" onclick="sendQuick('How many email subscribers do we have?')">Email list size</button>
+      <button class="q-cmd" onclick="sendQuick('Approve all pending reviews that look legitimate')">Approve reviews</button>
+      <button class="q-cmd" onclick="sendQuick('Give me a full status summary of the site')">Full summary</button>
+      <button class="q-cmd" onclick="sendQuick('Any new sponsorship inquiries?')">Sponsorships</button>
+      <button class="q-cmd" onclick="sendQuick('Which cities are getting the most searches?')">City traffic</button>
+      <button class="q-cmd" onclick="sendQuick('What is the review funnel drop-off rate?')">Review funnel</button>
+    </div>
+    <div class="sidebar-sec" style="flex:1;overflow:hidden;display:flex;flex-direction:column;border-bottom:none;">
+      <div class="sidebar-lbl">Agent Log</div>
+      <div class="agent-log" id="agent-log">
+        <div class="log-line">Ready.</div>
+      </div>
+    </div>
+  </div>
+  <div class="agent-main">
+    <div class="chat-msgs" id="chat-msgs">
+      <div class="msg agent">
+        <div class="msg-av">K</div>
+        <div class="msg-bubble">Hey Harold -- I'm your KiddBusy agent. I have full access to submissions, reviews, sponsorships, listings, analytics events, and the email list. What do you need?</div>
+      </div>
+    </div>
+    <div class="chat-input-bar">
+      <textarea class="chat-ta" id="chat-ta" placeholder="Ask the agent anything..." rows="1"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"
+        oninput="autoResize(this)"></textarea>
+      <button class="chat-send" id="chat-send" onclick="sendMsg()">&#8593;</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== CONFIG =====
+var ADMIN_PASSWORD = 'kiddbusy2024';
+var SUPABASE_URL = 'https://wgwexzyqaiwosgraaczi.supabase.co';
+var ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indnd2V4enlxYWl3b3NncmFhY3ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODEwNzUsImV4cCI6MjA4ODI1NzA3NX0.IS8u4SL1XeLh9KgD4c2Pl9BiGNg0zkiNauUzu_QtKH8';
+
+var sb = null;
+var _allSponsorListings = [];
+var convHistory = [];
+var agentBusy = false;
+
+var EVENT_COLORS = {
+  city_search:'#4d9fff', multi_city_session:'#7c5cbf',
+  review_start:'#ffcf2f', review_abandon:'#ff4d6d', review_submit:'#00d68f',
+  email_capture:'#00d68f', filter_used:'#a78bfa',
+  advertise_click:'#ff4d6d', submit_place:'#4d9fff',
+  cache_hit:'#00d68f', cache_miss:'#ff4d6d'
+};
+
+var EVENT_ICONS = {
+  city_search:'search', multi_city_session:'map',
+  review_start:'edit', review_abandon:'poof', review_submit:'star',
+  email_capture:'mail', filter_used:'filter',
+  advertise_click:'ad', submit_place:'pin',
+  cache_hit:'bolt', cache_miss:'refresh'
+};
+
+var FILTER_ICONS = {
+  outdoor:'[outdoor]', indoor:'[indoor]', free:'[free]',
+  parks:'[parks]', playgrounds:'[play]', splashpads:'[splash]',
+  toddler:'[toddler]', school:'[school]', teens:'[teens]'
+};
+
+// ===== AUTH =====
+function doLogin() {
+  var pw = document.getElementById('pw-input').value;
+  if (pw === ADMIN_PASSWORD) {
+    document.getElementById('login-screen').style.display = 'none';
+    sb = supabase.createClient(SUPABASE_URL, ANON_KEY);
+    loadAll();
+    setInterval(loadAll, 60000);
+  } else {
+    var err = document.getElementById('login-err');
+    err.style.display = 'block';
+    setTimeout(function() { err.style.display = 'none'; }, 3000);
+  }
+}
+
+// ===== TABS =====
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.view').forEach(function(v) { v.classList.remove('active'); });
+  el.classList.add('active');
+  document.getElementById('view-' + name).classList.add('active');
+}
+
+// ===== HELPERS =====
+function timeAgo(ts) {
+  var diff = Date.now() - new Date(ts);
+  var m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return m + 'm ago';
+  var h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  return Math.floor(h / 24) + 'd ago';
+}
+
+function isToday(ts) {
+  var d = new Date(ts), now = new Date();
+  return d.toDateString() === now.toDateString();
+}
+
+function loadingHTML() {
+  return '<div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>';
+}
+
+function emptyHTML(msg) {
+  return '<div class="empty">' + (msg || 'No data yet') + '</div>';
+}
+
+// ===== WRITE OPS via db-proxy =====
+async function dbWrite(table, id, updates) {
+  var res = await fetch('/.netlify/functions/db-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'update', table: table, id: id, updates: updates })
+  });
+  if (!res.ok) {
+    var e = await res.json();
+    throw new Error(e.error || 'Update failed');
+  }
+  return true;
+}
+
+// ===== LOAD ALL =====
+async function loadAll() {
+  if (!sb) return;
+  document.getElementById('last-updated').textContent = 'refreshing...';
+  document.getElementById('date-banner').textContent =
+    '// ' + new Date().toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' }).toUpperCase();
+
+  await Promise.all([
+    loadStats(),
+    loadTopCities(),
+    loadReviewFunnel(),
+    loadFilterUsage(),
+    loadCacheHealth(),
+    loadActivityFeed(),
+    loadDataIntegrity(),
+    loadSubmissions(),
+    loadSponsorListings(),
+    loadLeads()
+  ]);
+
+  document.getElementById('last-updated').textContent =
+    'updated ' + new Date().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' });
+}
+
+// ===== STATS (8 cards) =====
+async function loadStats() {
+  var results = await Promise.all([
+    sb.from('analytics').select('event, city, created_at').order('created_at', { ascending: false }),
+    sb.from('reviews').select('status, created_at'),
+    sb.from('submissions').select('status, created_at'),
+    sb.from('email_leads').select('created_at'),
+    sb.from('analytics').select('id').eq('event', 'cache_hit'),
+    sb.from('analytics').select('id').eq('event', 'cache_miss')
+  ]);
+
+  var events = results[0].data || [];
+  var todayEvents = events.filter(function(e) { return isToday(e.created_at); });
+  var allSearches = events.filter(function(e) { return e.event === 'city_search'; });
+  var todaySearches = todayEvents.filter(function(e) { return e.event === 'city_search'; });
+
+  document.getElementById('stat-searches-today').textContent = todaySearches.length;
+  document.getElementById('stat-searches-sub').textContent = 'all time: ' + allSearches.length;
+
+  var uniqueCities = new Set(allSearches.map(function(e) { return e.city; }).filter(Boolean));
+  document.getElementById('stat-cities').textContent = uniqueCities.size;
+
+  var multiCity = events.filter(function(e) { return e.event === 'multi_city_session'; });
+  document.getElementById('stat-multi').textContent = multiCity.length;
+
+  var emailData = results[3].data || [];
+  var todayEmails = emailData.filter(function(e) { return isToday(e.created_at); });
+  document.getElementById('stat-emails').textContent = emailData.length;
+  document.getElementById('stat-emails-sub').textContent = 'today: ' + todayEmails.length;
+
+  var reviewData = results[1].data || [];
+  var pendingRevs = reviewData.filter(function(r) { return r.status === 'pending'; });
+  document.getElementById('stat-reviews').textContent = reviewData.length;
+  document.getElementById('stat-reviews-sub').textContent = 'pending: ' + pendingRevs.length;
+
+  var subData = results[2].data || [];
+  var pendingSubs = subData.filter(function(s) { return s.status === 'pending'; });
+  document.getElementById('stat-subs').textContent = subData.length;
+  document.getElementById('stat-subs-sub').textContent = 'pending: ' + pendingSubs.length;
+
+  var advClicks = events.filter(function(e) { return e.event === 'advertise_click'; });
+  document.getElementById('stat-adv').textContent = advClicks.length;
+
+  var hits = (results[4].data || []).length;
+  var misses = (results[5].data || []).length;
+  var total = hits + misses;
+  document.getElementById('stat-cache').textContent = total > 0 ? Math.round((hits / total) * 100) + '%' : '--';
+}
+
+// ===== TOP CITIES =====
+async function loadTopCities() {
+  var res = await sb.from('analytics').select('city').eq('event', 'city_search');
+  var counts = {};
+  (res.data || []).forEach(function(e) {
+    if (e.city) counts[e.city] = (counts[e.city] || 0) + 1;
+  });
+  var sorted = Object.entries(counts).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 10);
+  var max = sorted[0] ? sorted[0][1] : 1;
+
+  document.getElementById('badge-top-cities').textContent = sorted.length + ' cities';
+
+  if (!sorted.length) {
+    document.getElementById('body-top-cities').innerHTML = emptyHTML('No searches yet');
+    return;
+  }
+
+  document.getElementById('body-top-cities').innerHTML = sorted.map(function(entry) {
+    var city = entry[0], count = entry[1];
+    var pct = Math.round((count / max) * 100);
+    return '<div class="city-bar-wrap">' +
+      '<div class="city-bar-label">' + city + '<span>' + count + ' search' + (count !== 1 ? 'es' : '') + '</span></div>' +
+      '<div class="city-bar-bg"><div class="city-bar-fill" style="width:' + pct + '%"></div></div>' +
+      '</div>';
+  }).join('');
+}
+
+// ===== REVIEW FUNNEL (with abandon rate) =====
+async function loadReviewFunnel() {
+  var res = await sb.from('analytics').select('event').in('event', ['review_start','review_abandon','review_submit']);
+  var counts = { review_start: 0, review_abandon: 0, review_submit: 0 };
+  (res.data || []).forEach(function(e) { counts[e.event]++; });
+
+  var starts = counts.review_start;
+  var abandons = counts.review_abandon;
+  var submits = counts.review_submit;
+  var abandonRate = starts > 0 ? Math.round((abandons / starts) * 100) : 0;
+  var convertRate = starts > 0 ? Math.round((submits / starts) * 100) : 0;
+
+  document.getElementById('body-funnel').innerHTML =
+    '<div class="funnel-row start">' +
+      '<div class="funnel-label">Started</div>' +
+      '<div class="funnel-bar-bg"><div class="funnel-bar-fill" style="width:100%">' + starts + '</div></div>' +
+      '<div class="funnel-pct">100%</div>' +
+    '</div>' +
+    '<div class="funnel-row abandon">' +
+      '<div class="funnel-label">Abandoned</div>' +
+      '<div class="funnel-bar-bg"><div class="funnel-bar-fill" style="width:' + abandonRate + '%">' + abandons + '</div></div>' +
+      '<div class="funnel-pct">' + abandonRate + '%</div>' +
+    '</div>' +
+    '<div class="funnel-row submit">' +
+      '<div class="funnel-label">Submitted</div>' +
+      '<div class="funnel-bar-bg"><div class="funnel-bar-fill" style="width:' + convertRate + '%">' + submits + '</div></div>' +
+      '<div class="funnel-pct">' + convertRate + '%</div>' +
+    '</div>' +
+    '<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);font-size:.75rem;color:var(--muted);font-family:var(--mono)">' +
+      (starts === 0 ? 'No review activity yet' : convertRate + '% conversion -- ' + abandonRate + '% drop-off') +
+    '</div>';
+}
+
+// ===== FILTER USAGE =====
+async function loadFilterUsage() {
+  var res = await sb.from('analytics').select('value').eq('event', 'filter_used');
+  var counts = {};
+  (res.data || []).forEach(function(e) {
+    if (e.value) counts[e.value] = (counts[e.value] || 0) + 1;
+  });
+  var sorted = Object.entries(counts).sort(function(a, b) { return b[1] - a[1]; });
+
+  if (!sorted.length) {
+    document.getElementById('body-filters').innerHTML = emptyHTML('No filter usage yet');
+    return;
+  }
+
+  document.getElementById('body-filters').innerHTML = '<div class="filter-pills">' +
+    sorted.map(function(entry) {
+      var f = entry[0], n = entry[1];
+      var icon = FILTER_ICONS[f] || '[filter]';
+      return '<div class="filter-pill">' + icon + ' ' + f + '<span class="filter-pill-count">' + n + '</span></div>';
+    }).join('') + '</div>';
+}
+
+// ===== CACHE HEALTH =====
+async function loadCacheHealth() {
+  var res = await sb.from('listings').select('city, last_refreshed, status').eq('status', 'active').order('last_refreshed', { ascending: false });
+  var cities = {};
+  (res.data || []).forEach(function(r) {
+    if (!cities[r.city]) cities[r.city] = { count: 0, last: r.last_refreshed };
+    cities[r.city].count++;
+  });
+
+  var sorted = Object.entries(cities).sort(function(a, b) {
+    return new Date(b[1].last) - new Date(a[1].last);
+  });
+  var warm = sorted.filter(function(entry) {
+    var v = entry[1];
+    return v.last && (Date.now() - new Date(v.last)) < 3 * 3600000;
+  }).length;
+
+  document.getElementById('badge-cache').textContent = warm + '/' + sorted.length + ' warm';
+
+  if (!sorted.length) {
+    document.getElementById('body-cache').innerHTML = emptyHTML('No cached cities');
+    return;
+  }
+
+  document.getElementById('body-cache').innerHTML = sorted.map(function(entry) {
+    var city = entry[0], v = entry[1];
+    var ageMs = v.last ? Date.now() - new Date(v.last) : Infinity;
+    var ageH = Math.round(ageMs / 3600000);
+    var cls = ageMs < 3 * 3600000 ? 'fresh' : ageMs < 24 * 3600000 ? 'stale' : 'old';
+    var label = ageMs === Infinity ? 'no timestamp' : ageH < 1 ? '< 1h old' : ageH + 'h old';
+    return '<div class="cache-item">' +
+      '<span class="cache-city">' + city + '</span>' +
+      '<span class="cache-count">' + v.count + ' listings</span>' +
+      '<span class="cache-age ' + cls + '">' + label + '</span>' +
+      '</div>';
+  }).join('');
+}
+
+// ===== LIVE ACTIVITY FEED =====
+async function loadActivityFeed() {
+  var res = await sb.from('analytics').select('*').order('created_at', { ascending: false }).limit(50);
+  if (!res.data || !res.data.length) {
+    document.getElementById('body-activity').innerHTML = emptyHTML('No activity yet -- analytics will appear as users interact with the site');
+    return;
+  }
+
+  document.getElementById('body-activity').innerHTML =
+    '<table class="data-table"><thead><tr>' +
+    '<th>Event</th><th>City</th><th>Value</th><th>Session</th><th>Time</th>' +
+    '</tr></thead><tbody>' +
+    res.data.map(function(e) {
+      var color = EVENT_COLORS[e.event] || 'var(--text)';
+      return '<tr>' +
+        '<td><span style="color:' + color + ';font-family:var(--mono);font-size:.75rem">' + e.event + '</span></td>' +
+        '<td style="color:var(--muted)">' + (e.city || '--') + '</td>' +
+        '<td style="color:var(--muted);font-size:.75rem;font-family:var(--mono)">' + (e.value || '--') + '</td>' +
+        '<td style="color:var(--muted);font-family:var(--mono);font-size:.7rem">' + (e.session_id ? e.session_id.slice(0,8)+'...' : '--') + '</td>' +
+        '<td style="color:var(--muted);font-family:var(--mono);font-size:.72rem;white-space:nowrap">' + timeAgo(e.created_at) + '</td>' +
+        '</tr>';
+    }).join('') +
+    '</tbody></table>';
+}
+
+// ===== DATA INTEGRITY (listings by source per city) =====
+async function loadDataIntegrity() {
+  var res = await sb.from('listings').select('city, source, status, last_refreshed').eq('status', 'active');
+  if (!res.data || !res.data.length) {
+    document.getElementById('body-integrity').innerHTML = emptyHTML('No listings yet');
+    return;
+  }
+
+  var bySrc = {};
+  res.data.forEach(function(r) {
+    var src = r.source || 'unknown';
+    bySrc[src] = (bySrc[src] || 0) + 1;
+  });
+
+  var total = res.data.length;
+  var cityBrkdn = {};
+  res.data.forEach(function(r) {
+    var city = r.city;
+    var src = r.source || 'unknown';
+    if (!cityBrkdn[city]) cityBrkdn[city] = { ai_generated:0, preseed:0, background_refresh:0, user_submitted:0, unknown:0 };
+    cityBrkdn[city][src] = (cityBrkdn[city][src] || 0) + 1;
+  });
+
+  var sorted = Object.entries(cityBrkdn).sort(function(a, b) {
+    var totA = Object.values(a[1]).reduce(function(s,v){return s+v;}, 0);
+    var totB = Object.values(b[1]).reduce(function(s,v){return s+v;}, 0);
+    return totB - totA;
+  });
+
+  var srcColor = { ai_generated:'var(--blue)', preseed:'var(--yellow)', background_refresh:'#a78bfa', user_submitted:'var(--green)', ai_seed:'#f97316', unknown:'var(--muted)' };
+  var srcLabel = { ai_generated:'AI Generated', preseed:'Pre-seeded', background_refresh:'BG Refresh', user_submitted:'User Submitted', ai_seed:'AI Reviews', unknown:'Unknown' };
+
+  var summaryHtml = '<div style="display:flex;gap:24px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border);flex-wrap:wrap">';
+  summaryHtml += '<div><div style="font-family:var(--mono);font-size:.65rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Total Listings</div>';
+  summaryHtml += '<div style="font-family:var(--mono);font-size:1.6rem;font-weight:700;color:var(--text)">' + total + '</div></div>';
+
+  Object.entries(bySrc).forEach(function(entry) {
+    var src = entry[0], count = entry[1];
+    var lbl = srcLabel[src] || src;
+    var col = srcColor[src] || 'var(--text)';
+    summaryHtml += '<div><div style="font-family:var(--mono);font-size:.65rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">' + lbl + '</div>';
+    summaryHtml += '<div style="font-family:var(--mono);font-size:1.6rem;font-weight:700;color:' + col + '">' + count + ' <span style="font-size:.9rem;opacity:.6">' + Math.round(count/total*100) + '%</span></div></div>';
+  });
+  summaryHtml += '</div>';
+
+  var tableHtml = '<table class="data-table"><thead><tr>' +
+    '<th>City</th><th>Total</th><th>AI Generated</th><th>Pre-seeded</th><th>BG Refresh</th><th>User Submitted</th>' +
+    '</tr></thead><tbody>' +
+    sorted.map(function(entry) {
+      var city = entry[0], c = entry[1];
+      var tot = Object.values(c).reduce(function(s,v){return s+v;}, 0);
+      return '<tr>' +
+        '<td style="font-weight:500">' + city + '</td>' +
+        '<td style="font-family:var(--mono)">' + tot + '</td>' +
+        '<td style="font-family:var(--mono);color:' + (c.ai_generated>0?'var(--blue)':'var(--muted)') + '">' + (c.ai_generated||0) + '</td>' +
+        '<td style="font-family:var(--mono);color:' + (c.preseed>0?'var(--yellow)':'var(--muted)') + '">' + (c.preseed||0) + '</td>' +
+        '<td style="font-family:var(--mono);color:' + (c.background_refresh>0?'#a78bfa':'var(--muted)') + '">' + (c.background_refresh||0) + '</td>' +
+        '<td style="font-family:var(--mono);color:' + (c.user_submitted>0?'var(--green)':'var(--muted)') + '">' + (c.user_submitted||0) + '</td>' +
+        '</tr>';
+    }).join('') + '</tbody></table>';
+
+  document.getElementById('body-integrity').innerHTML = summaryHtml + tableHtml;
+}
+
+// ===== SUBMISSIONS INBOX (with approve/reject buttons) =====
+async function loadSubmissions() {
+  var res = await sb.from('submissions').select('*').order('created_at', { ascending: false });
+  var pending = (res.data || []).filter(function(s) { return s.status === 'pending'; }).length;
+  document.getElementById('badge-subs').textContent = pending + ' pending';
+
+  if (!res.data || !res.data.length) {
+    document.getElementById('body-subs').innerHTML = '<div class="empty" style="padding:24px">No submissions yet</div>';
+    return;
+  }
+
+  document.getElementById('body-subs').innerHTML =
+    '<table class="data-table"><thead><tr>' +
+    '<th>Business</th><th>Type</th><th>City</th><th>Contact</th><th>Status</th><th>Date</th><th>Actions</th>' +
+    '</tr></thead><tbody>' +
+    (res.data || []).map(function(s) {
+      var actions = s.status === 'pending'
+        ? '<button class="act-btn approve" onclick="updateStatus(\'submissions\',\'' + s.id + '\',\'approved\',this)">Approve</button> ' +
+          '<button class="act-btn reject" onclick="updateStatus(\'submissions\',\'' + s.id + '\',\'rejected\',this)">Reject</button>'
+        : '--';
+      return '<tr>' +
+        '<td style="font-weight:500">' + (s.business_name || '--') + '</td>' +
+        '<td style="color:var(--muted)">' + (s.type || '--') + '</td>' +
+        '<td style="color:var(--muted)">' + (s.city || '--') + '</td>' +
+        '<td style="color:var(--muted);font-size:.75rem">' + (s.submitter_email || s.submitter_name || '--') + '</td>' +
+        '<td><span class="status-badge ' + s.status + '">' + s.status + '</span></td>' +
+        '<td style="color:var(--muted);font-family:var(--mono);font-size:.72rem">' + timeAgo(s.created_at) + '</td>' +
+        '<td>' + actions + '</td>' +
+        '</tr>';
+    }).join('') + '</tbody></table>';
+}
+
+// ===== SPONSOR MANAGER =====
+async function loadSponsorListings() {
+  var res = await sb.from('listings')
+    .select('listing_id, name, city, category, is_sponsored, rating, address, status')
+    .eq('status', 'active')
+    .order('is_sponsored', { ascending: false })
+    .order('city', { ascending: true })
+    .order('name', { ascending: true });
+
+  if (res.error || !res.data) {
+    document.getElementById('body-sponsors').innerHTML = '<div style="color:var(--accent);padding:16px">Error loading listings: ' + (res.error ? res.error.message : '') + '</div>';
+    return;
+  }
+
+  _allSponsorListings = res.data;
+
+  var cities = [...new Set(res.data.map(function(r) { return r.city; }).filter(Boolean))].sort();
+  var citySelect = document.getElementById('sponsor-city-filter');
+  citySelect.innerHTML = '<option value="">All cities</option>' +
+    cities.map(function(c) { return '<option value="' + c + '">' + c + '</option>'; }).join('');
+
+  var sponsoredCount = res.data.filter(function(r) { return r.is_sponsored; }).length;
+  document.getElementById('badge-sponsors').textContent = sponsoredCount + ' sponsored / ' + res.data.length + ' total';
+
+  renderSponsorTable(res.data);
+}
+
+function sponsorSearch(query) {
+  var cityFilter = document.getElementById('sponsor-city-filter').value;
+  var statusFilter = document.getElementById('sponsor-status-filter').value;
+  var q = (query || '').toLowerCase();
+  var filtered = _allSponsorListings;
+
+  if (q) filtered = filtered.filter(function(r) {
+    return (r.name || '').toLowerCase().includes(q) ||
+           (r.city || '').toLowerCase().includes(q) ||
+           (r.category || '').toLowerCase().includes(q);
+  });
+  if (cityFilter) filtered = filtered.filter(function(r) { return r.city === cityFilter; });
+  if (statusFilter === 'sponsored') filtered = filtered.filter(function(r) { return r.is_sponsored; });
+  if (statusFilter === 'unsponsored') filtered = filtered.filter(function(r) { return !r.is_sponsored; });
+
+  renderSponsorTable(filtered);
+}
+
+function renderSponsorTable(rows) {
+  if (!rows.length) {
+    document.getElementById('body-sponsors').innerHTML = '<div style="color:var(--muted);padding:20px;text-align:center">No listings found</div>';
+    return;
+  }
+
+  document.getElementById('body-sponsors').innerHTML =
+    '<table class="data-table" style="width:100%"><thead><tr>' +
+    '<th>Business</th><th>City</th><th>Category</th><th>Rating</th><th style="text-align:center">Status</th><th style="text-align:center">Action</th>' +
+    '</tr></thead><tbody>' +
+    rows.map(function(r) {
+      var escapedName = (r.name || '').replace(/'/g, "\\'");
+      var statusBadge = r.is_sponsored
+        ? '<span style="background:linear-gradient(135deg,#F59E0B,#D97706);color:white;padding:3px 10px;border-radius:50px;font-size:0.75rem;font-weight:900">Sponsored</span>'
+        : '<span style="background:#2a2a4a;color:#888;padding:3px 10px;border-radius:50px;font-size:0.75rem;font-weight:700">Unsponsored</span>';
+      var actionBtn = r.is_sponsored
+        ? '<button onclick="setSponsor(' + r.listing_id + ', false, \'' + escapedName + '\', this)" style="background:#3a1a1a;color:#ff6b6b;border:2px solid #ff6b6b;padding:5px 14px;border-radius:6px;font-size:0.8rem;font-weight:800;cursor:pointer">Remove Sponsor</button>'
+        : '<button onclick="setSponsor(' + r.listing_id + ', true, \'' + escapedName + '\', this)" style="background:linear-gradient(135deg,#F59E0B,#D97706);color:white;border:none;padding:5px 14px;border-radius:6px;font-size:0.8rem;font-weight:800;cursor:pointer">Make Sponsor</button>';
+      return '<tr id="sponsor-row-' + r.listing_id + '">' +
+        '<td style="font-weight:700;color:#e0e0ff">' + (r.name || '--') + '</td>' +
+        '<td style="color:#9d8fcc">' + (r.city || '--') + '</td>' +
+        '<td style="color:#9d8fcc;font-size:0.82rem">' + (r.category || '--') + '</td>' +
+        '<td style="color:#ffd166">' + (r.rating ? '* ' + Number(r.rating).toFixed(1) : '--') + '</td>' +
+        '<td style="text-align:center">' + statusBadge + '</td>' +
+        '<td style="text-align:center">' + actionBtn + '</td>' +
+        '</tr>';
+    }).join('') + '</tbody></table>' +
+    '<div style="margin-top:10px;font-size:0.78rem;color:#555;text-align:right">' + rows.length + ' listing' + (rows.length !== 1 ? 's' : '') + ' shown</div>';
+}
+
+async function setSponsor(listingId, sponsored, name, btn) {
+  btn.disabled = true;
+  btn.textContent = sponsored ? 'Saving...' : 'Removing...';
+
+  var res = await sb.from('listings').update({ is_sponsored: sponsored }).eq('listing_id', listingId);
+
+  if (res.error) {
+    btn.textContent = 'Error!';
+    btn.style.background = '#ff4444';
+    setTimeout(function() {
+      btn.disabled = false;
+      btn.textContent = sponsored ? 'Make Sponsor' : 'Remove Sponsor';
+    }, 2000);
+    return;
+  }
+
+  var listing = _allSponsorListings.find(function(r) { return r.listing_id === listingId; });
+  if (listing) listing.is_sponsored = sponsored;
+
+  var sponsoredCount = _allSponsorListings.filter(function(r) { return r.is_sponsored; }).length;
+  document.getElementById('badge-sponsors').textContent = sponsoredCount + ' sponsored / ' + _allSponsorListings.length + ' total';
+
+  var row = document.getElementById('sponsor-row-' + listingId);
+  if (row) {
+    row.style.background = sponsored ? 'rgba(245,158,11,0.15)' : 'rgba(255,107,107,0.1)';
+    setTimeout(function() {
+      sponsorSearch(document.getElementById('sponsor-q').value);
+    }, 600);
+  }
+}
+
+// ===== EMAIL LEADS =====
+async function loadLeads() {
+  var res = await sb.from('email_leads').select('*').order('created_at', { ascending: false });
+  document.getElementById('badge-leads').textContent = (res.data || []).length + ' total';
+
+  if (!res.data || !res.data.length) {
+    document.getElementById('body-leads').innerHTML = '<div class="empty" style="padding:24px">No email leads yet</div>';
+    return;
+  }
+
+  document.getElementById('body-leads').innerHTML =
+    '<table class="data-table"><thead><tr>' +
+    '<th>Email</th><th>City</th><th>Source</th><th>Date</th>' +
+    '</tr></thead><tbody>' +
+    res.data.map(function(l) {
+      return '<tr>' +
+        '<td style="font-family:var(--mono);font-size:.8rem">' + l.email + '</td>' +
+        '<td style="color:var(--muted)">' + (l.city || '--') + '</td>' +
+        '<td style="color:var(--muted);font-size:.75rem">' + (l.source || '--') + '</td>' +
+        '<td style="color:var(--muted);font-family:var(--mono);font-size:.72rem">' + timeAgo(l.created_at) + '</td>' +
+        '</tr>';
+    }).join('') + '</tbody></table>';
+}
+
+// ===== STATUS UPDATE =====
+async function updateStatus(table, id, status, btn) {
+  btn.disabled = true;
+  btn.textContent = '...';
+  try {
+    await dbWrite(table, id, { status: status });
+    if (table === 'submissions') loadSubmissions();
+    else loadAll();
+  } catch(e) {
+    btn.textContent = 'Error';
+    alert('Failed: ' + e.message);
+  }
+}
+
+// ===== AGENT TOOLS DEFINITION =====
+var AGENT_TOOLS = [
+  {
+    name: 'query_submissions',
+    description: 'Get all or filtered submissions from the database.',
+    input_schema: { type: 'object', properties: { status: { type: 'string', enum: ['pending','approved','rejected','all'] } }, required: [] }
+  },
+  {
+    name: 'query_reviews',
+    description: 'Get all or filtered reviews.',
+    input_schema: { type: 'object', properties: { status: { type: 'string' } }, required: [] }
+  },
+  {
+    name: 'query_sponsorships',
+    description: 'Get sponsorship inquiries. Plans: $49/mo listing, $199/mo banner, $219/mo bundle.',
+    input_schema: { type: 'object', properties: { status: { type: 'string' } }, required: [] }
+  },
+  {
+    name: 'query_listings',
+    description: 'Get active listings with city, category, rating, is_sponsored, source fields.',
+    input_schema: { type: 'object', properties: {}, required: [] }
+  },
+  {
+    name: 'query_email_leads',
+    description: 'Get email subscriber list with count, emails, cities, sources.',
+    input_schema: { type: 'object', properties: {}, required: [] }
+  },
+  {
+    name: 'query_analytics',
+    description: 'Query analytics events. Events: city_search, multi_city_session, review_start, review_abandon, review_submit, email_capture, filter_used, advertise_click, cache_hit, cache_miss. Each has city, value, session_id fields. Use to answer questions about traffic, funnel, filter usage, revenue intent clicks.',
+    input_schema: { type: 'object', properties: { event: { type: 'string' }, limit: { type: 'number' } }, required: [] }
+  },
+  {
+    name: 'update_submission_status',
+    description: 'Approve or reject a submission by ID.',
+    input_schema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string', enum: ['approved','rejected'] } }, required: ['id','status'] }
+  },
+  {
+    name: 'update_review_status',
+    description: 'Approve or reject a review by ID.',
+    input_schema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string', enum: ['approved','rejected'] } }, required: ['id','status'] }
+  },
+  {
+    name: 'update_sponsorship_status',
+    description: 'Update sponsorship status.',
+    input_schema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string', enum: ['active','cancelled','pending'] } }, required: ['id','status'] }
+  }
+];
+
+var AGENT_SYSTEM = 'You are the KiddBusy admin agent. You have direct database access via tools. Be concise and action-oriented. Use plain text, no markdown headers.\n\nTables: submissions (business listings awaiting approval), reviews (user reviews of listings), sponsorships (plans: $49/mo listing, $199/mo banner, $219/mo bundle), listings (active businesses with city, source, is_sponsored, last_refreshed, avg_rating, review_count), email_leads (newsletter signups with email, city, source), analytics (event log with event type, city, value, session_id).\n\nAnalytics events: city_search (user searched a city), multi_city_session (user searched multiple cities -- high intent), review_start/review_abandon/review_submit (review funnel), email_capture, filter_used (with value = filter name), advertise_click (revenue intent), cache_hit/cache_miss.\n\nWhen asked about city traffic, use query_analytics with event=city_search. When asked about review funnel or drop-off, use query_analytics and compute the rates yourself. Be specific with numbers.';
+
+// ===== AGENT TOOL EXECUTOR =====
+async function execTool(name, input) {
+  addLog('[tool] ' + name + ' ' + JSON.stringify(input).slice(0, 60), 'tool');
+  try {
+    switch(name) {
+      case 'query_submissions': {
+        var q = sb.from('submissions').select('*').order('created_at', { ascending: false });
+        if (input.status && input.status !== 'all') q = q.eq('status', input.status);
+        var r = await q;
+        return { count: (r.data||[]).length, submissions: r.data };
+      }
+      case 'query_reviews': {
+        var q2 = sb.from('reviews').select('*').order('created_at', { ascending: false });
+        if (input.status && input.status !== 'all') q2 = q2.eq('status', input.status);
+        var r2 = await q2;
+        return { count: (r2.data||[]).length, reviews: r2.data };
+      }
+      case 'query_sponsorships': {
+        var q3 = sb.from('sponsorships').select('*').order('created_at', { ascending: false });
+        if (input.status && input.status !== 'all') q3 = q3.eq('status', input.status);
+        var r3 = await q3;
+        return { count: (r3.data||[]).length, sponsorships: r3.data };
+      }
+      case 'query_listings': {
+        var r4 = await sb.from('listings').select('*').eq('status', 'active');
+        return { count: (r4.data||[]).length, listings: r4.data };
+      }
+      case 'query_email_leads': {
+        var r5 = await sb.from('email_leads').select('*').order('created_at', { ascending: false });
+        return { count: (r5.data||[]).length, leads: r5.data };
+      }
+      case 'query_analytics': {
+        var q6 = sb.from('analytics').select('*').order('created_at', { ascending: false }).limit(input.limit || 500);
+        if (input.event) q6 = q6.eq('event', input.event);
+        var r6 = await q6;
+        return { count: (r6.data||[]).length, events: r6.data };
+      }
+      case 'update_submission_status': {
+        await dbWrite('submissions', input.id, { status: input.status });
+        loadSubmissions();
+        return { success: true, id: input.id, new_status: input.status };
+      }
+      case 'update_review_status': {
+        await dbWrite('reviews', input.id, { status: input.status });
+        loadAll();
+        return { success: true, id: input.id, new_status: input.status };
+      }
+      case 'update_sponsorship_status': {
+        await dbWrite('sponsorships', input.id, { status: input.status });
+        return { success: true, id: input.id, new_status: input.status };
+      }
+      default:
+        return { error: 'Unknown tool: ' + name };
+    }
+  } catch(e) {
+    addLog('[error] ' + e.message, 'err');
+    return { error: e.message };
+  }
+}
+
+// ===== AGENT LOG =====
+function addLog(msg, type) {
+  var log = document.getElementById('agent-log');
+  var el = document.createElement('div');
+  el.className = 'log-line' + (type ? ' ' + type : '');
+  el.textContent = msg;
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ===== CHAT MESSAGE =====
+function addMsg(role, content, isTyping) {
+  var container = document.getElementById('chat-msgs');
+  var wrap = document.createElement('div');
+  wrap.className = 'msg ' + (role === 'user' ? 'user' : 'agent');
+  if (isTyping) wrap.id = 'typing-indicator';
+
+  var av = document.createElement('div');
+  av.className = 'msg-av';
+  av.textContent = role === 'user' ? 'H' : 'K';
+
+  var bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+
+  if (isTyping) {
+    bubble.innerHTML = '<div class="typing-dots"><div class="td"></div><div class="td"></div><div class="td"></div></div>';
+  } else {
+    // Sanitize and render with basic formatting
+    var safe = content
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/\n/g,'<br>')
+      .replace(/`([^`]+)`/g,'<code>$1</code>');
+    bubble.innerHTML = safe;
+  }
+
+  wrap.appendChild(av);
+  wrap.appendChild(bubble);
+  container.appendChild(wrap);
+  container.scrollTop = container.scrollHeight;
+  return wrap;
+}
+
+// ===== SEND MESSAGE =====
+function sendMsg() {
+  var ta = document.getElementById('chat-ta');
+  var text = ta.value.trim();
+  if (!text || agentBusy) return;
+  ta.value = '';
+  ta.style.height = 'auto';
+  runAgent(text);
+}
+
+function sendQuick(text) {
+  // Switch to agent tab
+  document.querySelectorAll('.tab').forEach(function(t, i) {
+    t.classList.toggle('active', i === 1);
+  });
+  document.querySelectorAll('.view').forEach(function(v, i) {
+    v.classList.toggle('active', i === 1);
+  });
+  runAgent(text);
+}
+
+// ===== AGENT LOOP =====
+async function runAgent(userText) {
+  if (agentBusy || !sb) return;
+  agentBusy = true;
+  document.getElementById('chat-send').disabled = true;
+
+  addMsg('user', userText);
+  convHistory.push({ role: 'user', content: userText });
+  addMsg('agent', '', true);
+  addLog('User: ' + userText.substring(0, 60));
+
+  try {
+    var messages = convHistory.slice();
+    var iterations = 0;
+
+    while (iterations < 15) {
+      iterations++;
+
+      var res = await fetch('/.netlify/functions/agent-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-requested-from': 'kiddbusy-hq' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 2048,
+          system: AGENT_SYSTEM,
+          tools: AGENT_TOOLS,
+          messages: messages
+        })
+      });
+
+      if (!res.ok) {
+        var errData = await res.json();
+        throw new Error(errData.error || 'API error ' + res.status);
+      }
+
+      var data = await res.json();
+      addLog('[' + iterations + '] stop=' + data.stop_reason);
+
+      if (data.stop_reason === 'tool_use') {
+        var toolUses = data.content.filter(function(b) { return b.type === 'tool_use'; });
+        var toolResults = [];
+
+        for (var i = 0; i < toolUses.length; i++) {
+          var tu = toolUses[i];
+          var result = await execTool(tu.name, tu.input);
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: tu.id,
+            content: JSON.stringify(result)
+          });
+        }
+
+        messages.push({ role: 'assistant', content: data.content });
+        messages.push({ role: 'user', content: toolResults });
+
+      } else {
+        // Final response
+        var textBlocks = data.content.filter(function(b) { return b.type === 'text'; });
+        var fullText = textBlocks.map(function(b) { return b.text; }).join('\n');
+
+        var indicator = document.getElementById('typing-indicator');
+        if (indicator) indicator.remove();
+
+        addMsg('agent', fullText);
+        convHistory.push({ role: 'assistant', content: fullText });
+        addLog('Done.', 'ok');
+
+        // Refresh dashboard data silently
+        loadAll();
+        break;
+      }
+    }
+
+    if (iterations >= 15) {
+      var indicator2 = document.getElementById('typing-indicator');
+      if (indicator2) indicator2.remove();
+      addMsg('agent', 'Hit iteration limit. Please try a more specific question.');
+    }
+
+  } catch(err) {
+    var indicator3 = document.getElementById('typing-indicator');
+    if (indicator3) indicator3.remove();
+    addMsg('agent', 'Error: ' + err.message);
+    addLog('[error] ' + err.message, 'err');
+  }
+
+  agentBusy = false;
+  document.getElementById('chat-send').disabled = false;
+}
+
+// ===== RUN SCHEDULED AGENT =====
+async function runScheduledAgent() {
+  var btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  btn.textContent = 'Running...';
+  addLog('Triggering scheduled agent...');
+
+  try {
+    var res = await fetch('/.netlify/functions/agent-scheduled');
+    var data = await res.json();
+    if (data.success) {
+      addLog('Agent complete.', 'ok');
+    } else {
+      addLog('Error: ' + (data.error || 'unknown'), 'err');
+    }
+    loadAll();
+  } catch(e) {
+    addLog('Failed to reach agent: ' + e.message, 'err');
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Run Agent';
+}
+
+// ===== AUTO RESIZE TEXTAREA =====
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+</script>
+</body>
+</html>
