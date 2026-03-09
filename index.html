@@ -305,7 +305,9 @@
   .card-desc { font-size: 0.88rem; color: var(--muted); line-height: 1.5; margin-bottom: 12px; }
   .card-meta { display: flex; justify-content: space-between; align-items: center; }
   .card-addr { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
-  .card-footer { display: flex; justify-content: space-between; align-items: center; }
+  .card-footer { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+  .card-footer-top { display: flex; justify-content: flex-start; align-items: center; }
+  .card-footer-actions { display: flex; justify-content: flex-end; align-items: center; }
   .review-btn {
     background: var(--plum); color: #fff;
     border: none; border-radius: 50px;
@@ -1724,11 +1726,15 @@ function renderActivities(list) {
         <div class="card-addr" style="margin-bottom:8px">📍 ${a.addr}</div>
         <div style="margin-bottom:12px"><span class="price-pill ${priceClass}">${priceLabel}</span></div>
         <div class="card-footer">
-          <div class="stars" id="stars-${a.id}">${stars}</div>
-          <div class="card-actions">
-            <button class="share-btn" onclick="sharePlace(this,'${a.name.replace(/'/g,"\\'")}','${(a.addr||'').replace(/'/g,"\\'")}','${(a.desc||'').replace(/'/g,"\\'")}','${(a.website||'').replace(/'/g,"\\'")}')">📤 Share</button>
-            <button class="review-btn" onclick="openReview(${a.id},'${a.name.replace(/'/g,"\\'")}')">✍️ Review</button>
-            ${Number(a.id) > 8 ? `<button class=\"claim-btn\" onclick=\"openClaimPortal(${a.id},'${a.name.replace(/'/g,"\\'")}','${(document.getElementById('citySelect')?.value || '').replace(/'/g,"\\'")}')\">🏷 Claim</button>` : ''}
+          <div class="card-footer-top">
+            <div class="stars" id="stars-${a.id}">${stars}</div>
+          </div>
+          <div class="card-footer-actions">
+            <div class="card-actions">
+              <button class="share-btn" onclick="sharePlace(this,'${a.name.replace(/'/g,"\\'")}','${(a.addr||'').replace(/'/g,"\\'")}','${(a.desc||'').replace(/'/g,"\\'")}','${(a.website||'').replace(/'/g,"\\'")}')">📤 Share</button>
+              <button class="review-btn" onclick="openReview(${a.id},'${a.name.replace(/'/g,"\\'")}')">✍️ Review</button>
+              ${Number(a.id) > 8 ? `<button class=\"claim-btn\" onclick=\"openClaimPortal(${a.id},'${a.name.replace(/'/g,"\\'")}','${(document.getElementById('citySelect')?.value || '').replace(/'/g,"\\'")}')\">🏷 Claim</button>` : ''}
+            </div>
           </div>
         </div>
         <button class="correction-btn" onclick="openCorrection(${a.id},'${a.name.replace(/'/g,"\\'")}')">🚩 Suggest a correction</button>
@@ -2335,11 +2341,15 @@ async function loadTopPicksForCity(cityLabel, source = 'ai_generated') {
           <div class="card-addr" style="margin-bottom:8px">📍 ${a.addr}</div>
           <div style="margin-bottom:12px"><span class="price-pill ${priceClass}">${priceLabel}</span></div>
           <div class="card-footer">
-            <div class="stars" id="stars-${a.id}">${stars}</div>
-            <div class="card-actions">
-              <button class="share-btn" onclick="sharePlace(this,'${safeName}','${(a.addr||'').replace(/'/g,"\\'")}','${(a.desc||'').replace(/'/g,"\\'")}','${safeWebsite}')">📤 Share</button>
-              <button class="review-btn" onclick="openReview(${a.id},'${safeName}')">✍️ Review</button>
-              <button class="claim-btn" onclick="openClaimPortal(${a.id},'${safeName}','${(cityLabel || '').replace(/'/g,"\\'")}')">🏷 Claim</button>
+            <div class="card-footer-top">
+              <div class="stars" id="stars-${a.id}">${stars}</div>
+            </div>
+            <div class="card-footer-actions">
+              <div class="card-actions">
+                <button class="share-btn" onclick="sharePlace(this,'${safeName}','${(a.addr||'').replace(/'/g,"\\'")}','${(a.desc||'').replace(/'/g,"\\'")}','${safeWebsite}')">📤 Share</button>
+                <button class="review-btn" onclick="openReview(${a.id},'${safeName}')">✍️ Review</button>
+                <button class="claim-btn" onclick="openClaimPortal(${a.id},'${safeName}','${(cityLabel || '').replace(/'/g,"\\'")}')">🏷 Claim</button>
+              </div>
             </div>
           </div>
           <div style="margin-top:8px;font-size:.75rem;color:var(--muted);font-weight:600">🤖 AI-sourced · verify before visiting</div>
@@ -2440,11 +2450,15 @@ function renderCachedListings(rows) {
         <div class="card-addr" style="margin-bottom:8px">📍 ${a.address || ''}</div>
         <div style="margin-bottom:12px"><span class="price-pill ${priceClass}">${priceLabel}</span></div>
         <div class="card-footer">
-          <div class="stars" id="stars-${a.listing_id}">${stars}</div>
-          <div class="card-actions">
-            <button class="share-btn" onclick="sharePlace(this,'${safeName}','${(a.address||'').replace(/'/g,"\\'")}','${(a.description||'').replace(/'/g,"\\'")}','${safeWebsite}')">📤 Share</button>
-            <button class="review-btn" onclick="openReview(${a.listing_id},'${safeName}')">✍️ Review</button>
-            <button class="claim-btn" onclick="openClaimPortal(${a.listing_id},'${safeName}','${(a.city||'').replace(/'/g,"\\'")}')">🏷 Claim</button>
+          <div class="card-footer-top">
+            <div class="stars" id="stars-${a.listing_id}">${stars}</div>
+          </div>
+          <div class="card-footer-actions">
+            <div class="card-actions">
+              <button class="share-btn" onclick="sharePlace(this,'${safeName}','${(a.address||'').replace(/'/g,"\\'")}','${(a.description||'').replace(/'/g,"\\'")}','${safeWebsite}')">📤 Share</button>
+              <button class="review-btn" onclick="openReview(${a.listing_id},'${safeName}')">✍️ Review</button>
+              <button class="claim-btn" onclick="openClaimPortal(${a.listing_id},'${safeName}','${(a.city||'').replace(/'/g,"\\'")}')">🏷 Claim</button>
+            </div>
           </div>
         </div>
         <div style="margin-top:8px;font-size:.75rem;color:var(--muted);font-weight:600">🤖 AI-sourced · verify before visiting</div>
