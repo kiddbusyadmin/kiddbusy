@@ -942,34 +942,34 @@ async function loadStats() {
   var uniqueCitiesAll = new Set(allSearches.map(function(e) { return e.city; }).filter(Boolean));
   var uniqueCitiesScoped = new Set(scopedSearches.map(function(e) { return e.city; }).filter(Boolean));
   document.getElementById('stat-cities').textContent = uniqueCitiesScoped.size;
-  document.getElementById('stat-cities-sub').textContent = rangeLbl + ': ' + uniqueCitiesScoped.size + ' | all: ' + uniqueCitiesAll.size;
+  document.getElementById('stat-cities-sub').textContent = 'all time: ' + uniqueCitiesAll.size;
 
   var multiCityAll = events.filter(function(e) { return e.event === 'multi_city_session'; });
   var multiCityScoped = windowEvents.filter(function(e) { return e.event === 'multi_city_session'; });
   document.getElementById('stat-multi').textContent = multiCityScoped.length;
-  document.getElementById('stat-multi-sub').textContent = rangeLbl + ': ' + multiCityScoped.length + ' | all: ' + multiCityAll.length;
+  document.getElementById('stat-multi-sub').textContent = 'all time: ' + multiCityAll.length;
 
   var emailData = results[2].data || [];
   var emailScoped = emailData.filter(function(e) { return isWithinRange(e.created_at, searchesRange); });
   document.getElementById('stat-emails').textContent = emailScoped.length;
-  document.getElementById('stat-emails-sub').textContent = rangeLbl + ': ' + emailScoped.length + ' | all: ' + emailData.length;
+  document.getElementById('stat-emails-sub').textContent = 'all time: ' + emailData.length;
 
   var reviewData = results[1].data || [];
   var reviewScoped = reviewData.filter(function(r) { return isWithinRange(r.created_at, searchesRange); });
-  var pendingRevs = reviewScoped.filter(function(r) { return r.status === 'pending'; });
+  var pendingRevsAll = reviewData.filter(function(r) { return r.status === 'pending'; });
   document.getElementById('stat-reviews').textContent = reviewScoped.length;
-  document.getElementById('stat-reviews-sub').textContent = 'pending (' + rangeLbl + '): ' + pendingRevs.length + ' | all: ' + reviewData.length;
+  document.getElementById('stat-reviews-sub').textContent = 'all time: ' + reviewData.length + ' | pending: ' + pendingRevsAll.length;
 
   var subData = submissionRows || [];
   var subScoped = subData.filter(function(s) { return isWithinRange(s.created_at, searchesRange); });
-  var pendingSubs = subScoped.filter(function(s) { return s.status === 'pending'; });
+  var pendingSubsAll = subData.filter(function(s) { return s.status === 'pending'; });
   document.getElementById('stat-subs').textContent = subScoped.length;
-  document.getElementById('stat-subs-sub').textContent = 'pending (' + rangeLbl + '): ' + pendingSubs.length + ' | all: ' + subData.length;
+  document.getElementById('stat-subs-sub').textContent = 'all time: ' + subData.length + ' | pending: ' + pendingSubsAll.length;
 
   var advClicksAll = events.filter(function(e) { return e.event === 'advertise_click'; });
   var advClicks = windowEvents.filter(function(e) { return e.event === 'advertise_click'; });
   document.getElementById('stat-adv').textContent = advClicks.length;
-  document.getElementById('stat-adv-sub').textContent = rangeLbl + ': ' + advClicks.length + ' | all: ' + advClicksAll.length;
+  document.getElementById('stat-adv-sub').textContent = 'all time: ' + advClicksAll.length;
 
   var hitsAllRows = results[3].data || [];
   var missAllRows = results[4].data || [];
@@ -982,7 +982,7 @@ async function loadStats() {
   var pct = total > 0 ? Math.round((hits / total) * 100) : null;
   var pctAll = totalAll > 0 ? Math.round((allHits / totalAll) * 100) : null;
   document.getElementById('stat-cache').textContent = pct == null ? '--' : (pct + '%');
-  document.getElementById('stat-cache-sub').textContent = rangeLbl + ': ' + (pct == null ? '--' : (pct + '%')) + ' | all: ' + (pctAll == null ? '--' : (pctAll + '%'));
+  document.getElementById('stat-cache-sub').textContent = 'all time: ' + (pctAll == null ? '--' : (pctAll + '%'));
 }
 
 // ===== TOP CITIES =====
