@@ -8,35 +8,49 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
 // ---- SUPABASE via REST ----
 async function dbQuery(table, params = {}) {
-  let url = `${SUPABASE_URL}/rest/v1/${table}?select=*&order=created_at.desc&limit=100`;
+  let url = `${SUPABASE_URL}/rest/v1/${table}?select=*&limit=100`;
   if (params.eq) {
     for (const [col, val] of Object.entries(params.eq)) {
       url += `&${col}=eq.${encodeURIComponent(val)}`;
     }
   }
-  const res = await fetch(url, {
-    headers: {
-      'apikey': SUPABASE_SERVICE_KEY,
-      'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-      'Content-Type': 'application/json'
-    }
-  });
-  if (!res.ok) throw new Error(`DB query failed: ${await res.text()}`);
-  return res.json();
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: {
+        'apikey': SUPABASE_SERVICE_KEY,
+        'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (fetchErr) {
+    throw new Error(`DB fetch network error on ${table}: ${fetchErr.message}`);
+  }
+  const text = await res.text();
+  if (!res.ok) throw new Error(`DB query failed on ${table} (${res.status}): ${text}`);
+  return JSON.parse(text);
 }
 
 async function dbUpdate(table, id, updates) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {
-    method: 'PATCH',
-    headers: {
-      'apikey': SUPABASE_SERVICE_KEY,
-      'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal'
-    },
-    body: JSON.stringify(updates)
-  });
-  if (!res.ok) throw new Error(`DB update failed: ${await res.text()}`);
+  let res;
+  try {
+    res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPABASE_SERVICE_KEY,
+        'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(updates)
+    });
+  } catch (fetchErr) {
+    throw new Error(`DB update network error on ${table}: ${fetchErr.message}`);
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`DB update failed on ${table} (${res.status}): ${text}`);
+  }
   return { success: true };
 }
 
@@ -298,6 +312,20 @@ exports.handler = async (event) => {
   const log = (msg) => { console.log(msg); logs.push(msg); };
 
   log(`[KiddBusy Agent] Starting ${new Date().toISOString()}`);
+  log(`[config] KB_DB_SERVICE_KEY=${SUPABASE_SERVICE_KEY ? "SET len=" + SUPABASE_SERVICE_KEY.length : "MISSING"}`);
+  log(`[config] ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY ? "SET" : "MISSING"}`);
+  log(`[config] RESEND_API_KEY=${RESEND_API_KEY ? "SET" : "MISSING"}`);
+
+  // Quick Supabase connectivity test
+  try {
+    const testRes = await fetch(`${SUPABASE_URL}/rest/v1/submissions?select=id&limit=1`, {
+      headers: { "apikey": SUPABASE_SERVICE_KEY, "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}` }
+    });
+    const testText = await testRes.text();
+    log(`[db-test] status=${testRes.status} body=${testText.substring(0, 150)}`);
+  } catch (e) {
+    log(`[db-test] FAILED: ${e.message}`);
+  }
 
   try {
     const summary = await runAgent(log);
