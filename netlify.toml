@@ -14,6 +14,21 @@
 [functions.db-proxy]
   timeout = 30
 
+[functions.photo-admin]
+  timeout = 30
+
+[functions.owner-claims]
+  timeout = 30
+
+[functions.owner-leads-enrich]
+  timeout = 900
+
+[functions.cmo-config]
+  timeout = 30
+
+[functions.unsubscribe]
+  timeout = 30
+
 # Daily cache warm — runs at 3am ET (8am UTC)
 [functions.daily-cache-warm]
   schedule = "0 8 * * *"
@@ -23,6 +38,21 @@
 [functions.agent-scheduled]
   schedule = "0 14 * * *"
   timeout = 900
+
+[[redirects]]
+  from = "/api/cmo-config"
+  to = "/.netlify/functions/cmo-config"
+  status = 200
+
+[[redirects]]
+  from = "/unsubscribe"
+  to = "/.netlify/functions/unsubscribe"
+  status = 200
+
+[[redirects]]
+  from = "/api/unsubscribe"
+  to = "/.netlify/functions/unsubscribe"
+  status = 200
 
 [[redirects]]
   from = "/api/search"
@@ -37,4 +67,19 @@
 [[redirects]]
   from = "/api/agent-run"
   to = "/.netlify/functions/agent-scheduled"
+  status = 200
+
+[[redirects]]
+  from = "/api/photo-admin"
+  to = "/.netlify/functions/photo-admin"
+  status = 200
+
+[[redirects]]
+  from = "/api/owner-claims"
+  to = "/.netlify/functions/owner-claims"
+  status = 200
+
+[[redirects]]
+  from = "/api/owner-leads-enrich"
+  to = "/.netlify/functions/owner-leads-enrich"
   status = 200

@@ -1,0 +1,85 @@
+const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+function json(statusCode, payload) {
+  return {
+    statusCode,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  };
+}
+
+async function sbFetch(path, { method = 'GET', body = null, prefer = null } = {}) {
+  const headers = {
+    apikey: SUPABASE_SERVICE_KEY,
+    Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+    'Content-Type': 'application/json'
+  };
+  if (prefer) headers.Prefer = prefer;
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : null
+  });
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  return { response, data };
+}
+
+exports.handler = async (event) => {
+  const source = (event.headers['x-requested-from'] || event.headers['X-Requested-From'] || '').toLowerCase();
+  if (source !== 'kiddbusy-hq') {
+    return json(403, { error: 'Forbidden' });
+  }
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+    return json(500, { error: 'Supabase service configuration missing' });
+  }
+
+  if (event.httpMethod === 'GET') {
+    const { response, data } = await sbFetch('cmo_agent_settings?id=eq.1&select=*');
+    if (!response.ok) return json(response.status, { error: 'Failed to read CMO config', details: data });
+    const row = Array.isArray(data) && data.length ? data[0] : null;
+    return json(200, { success: true, config: row });
+  }
+
+  if (event.httpMethod !== 'POST') {
+    return json(405, { error: 'Method not allowed' });
+  }
+
+  let body = {};
+  try {
+    body = JSON.parse(event.body || '{}');
+  } catch {
+    return json(400, { error: 'Invalid JSON body' });
+  }
+
+  const allowed = [
+    'execution_mode',
+    'auto_send_enabled',
+    'max_emails_per_day',
+    'monthly_email_send_cap',
+    'contact_cap',
+    'updated_at'
+  ];
+  const patch = {};
+  for (const k of allowed) {
+    if (Object.prototype.hasOwnProperty.call(body, k)) patch[k] = body[k];
+  }
+  patch.updated_at = new Date().toISOString();
+
+  const { response, data } = await sbFetch('cmo_agent_settings?id=eq.1', {
+    method: 'PATCH',
+    body: patch,
+    prefer: 'return=representation'
+  });
+  if (!response.ok) return json(response.status, { error: 'Failed to update CMO config', details: data });
+
+  const row = Array.isArray(data) && data.length ? data[0] : null;
+  return json(200, { success: true, config: row });
+};
+

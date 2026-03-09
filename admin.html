@@ -223,6 +223,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
     <div class="tab active" onclick="switchTab('dash',this)" id="tab-dash">Dashboard</div>
     <div class="tab" onclick="switchTab('submissions',this)" id="tab-submissions">Submissions</div>
     <div class="tab" onclick="switchTab('locations',this)" id="tab-locations">Locations</div>
+    <div class="tab" onclick="switchTab('photos',this)" id="tab-photos">Photos</div>
+    <div class="tab" onclick="switchTab('ownerkpi',this)" id="tab-ownerkpi">Owner KPI</div>
+    <div class="tab" onclick="switchTab('cmo',this)" id="tab-cmo">CMO</div>
     <div class="tab" onclick="switchTab('cache',this)" id="tab-cache">Cache</div>
     <div class="tab" onclick="switchTab('activity',this)" id="tab-activity">Activity</div>
     <div class="tab" onclick="switchTab('integrity',this)" id="tab-integrity">Integrity</div>
@@ -245,9 +248,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
   <!-- STAT CARDS - all 8 from original -->
   <div class="stats-row">
     <div class="stat-card red">
-      <div class="stat-label">Searches Today</div>
+      <div class="stat-label" id="stat-searches-label">Searches (24h)</div>
       <div class="stat-value" id="stat-searches-today">--</div>
       <div class="stat-sub" id="stat-searches-sub">all time: --</div>
+      <div style="margin-top:8px">
+        <select id="searches-range" onchange="onSearchRangeChange()" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-family:var(--mono);font-size:.68rem;outline:none">
+          <option value="24h" selected>Last 24 hrs</option>
+          <option value="7d">Last 7 days</option>
+          <option value="30d">Last month</option>
+          <option value="all">All time</option>
+        </select>
+      </div>
     </div>
     <div class="stat-card blue">
       <div class="stat-label">Unique Cities</div>
@@ -321,6 +332,19 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
     </div>
   </div>
 
+  <!-- SHARE INSIGHTS -->
+  <div class="panels full">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Top Share Cities</div>
+        <div class="panel-badge" id="badge-share-cities">--</div>
+      </div>
+      <div class="panel-body" id="body-share-cities">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+
   <!-- EMAIL LEADS -->
   <div class="panels full">
     <div class="panel">
@@ -383,6 +407,188 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
   </div>
 </div>
 </div><!-- /view-locations -->
+
+<!-- PHOTOS VIEW -->
+<div class="view" id="view-photos">
+<div class="locations-inner">
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Image Moderation Queue</div>
+      <div class="panel-badge" id="badge-photos">--</div>
+    </div>
+    <div class="sponsor-search-bar">
+      <input id="photo-q" type="text" placeholder="Search business, city, email..." oninput="filterPhotoQueue()">
+      <select id="photo-status-filter" onchange="filterPhotoQueue()">
+        <option value="">All statuses</option>
+        <option value="pending">Pending</option>
+        <option value="auto_approved">Auto-approved (unlinked)</option>
+        <option value="approved">Approved</option>
+        <option value="rejected">Rejected</option>
+      </select>
+    </div>
+    <div id="body-photos">
+      <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+    </div>
+  </div>
+</div>
+</div><!-- /view-photos -->
+
+<!-- OWNER KPI VIEW -->
+<div class="view" id="view-ownerkpi">
+<div class="locations-inner">
+  <div class="stats-row" style="margin-bottom:16px">
+    <div class="stat-card blue">
+      <div class="stat-label">Claim Starts</div>
+      <div class="stat-value" id="ownerkpi-starts">--</div>
+      <div class="stat-sub">owner_claim_start</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Verified</div>
+      <div class="stat-value" id="ownerkpi-verified">--</div>
+      <div class="stat-sub">owner_claim_verified</div>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-label">Abandons</div>
+      <div class="stat-value" id="ownerkpi-abandons">--</div>
+      <div class="stat-sub">owner_claim_abandon</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-label">Update Saves</div>
+      <div class="stat-value" id="ownerkpi-updates">--</div>
+      <div class="stat-sub">owner_update_saved</div>
+    </div>
+  </div>
+
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Owner Funnel</div>
+        <div class="panel-badge" id="ownerkpi-funnel-rate">--</div>
+      </div>
+      <div class="panel-body" id="ownerkpi-funnel-body">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Claims by Status</div>
+        <div class="panel-badge" id="ownerkpi-claims-count">--</div>
+      </div>
+      <div class="panel-body" id="ownerkpi-claims-body">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:20px">
+    <div class="panel-header">
+      <div class="panel-title">Recent Owner Events</div>
+      <div class="panel-badge">analytics</div>
+    </div>
+    <div class="panel-body" id="ownerkpi-events-body">
+      <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+    </div>
+  </div>
+</div>
+</div><!-- /view-ownerkpi -->
+
+<!-- CMO VIEW -->
+<div class="view" id="view-cmo">
+<div class="locations-inner">
+  <div class="date-banner">// CMO AGENT CONTROL CENTER</div>
+  <div class="stats-row" style="margin-bottom:16px">
+    <div class="stat-card blue">
+      <div class="stat-label">Sessions (Monthly)</div>
+      <div class="stat-value" id="cmo-sessions">--</div>
+      <div class="stat-sub">target: 1,000 unique/month</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Signup Conversion</div>
+      <div class="stat-value" id="cmo-signup-conv">--</div>
+      <div class="stat-sub">target: 10.0%</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-label">Owner Claim Conv</div>
+      <div class="stat-value" id="cmo-owner-conv">--</div>
+      <div class="stat-sub">target: 1 claim/city/week</div>
+    </div>
+    <div class="stat-card yellow">
+      <div class="stat-label">Sponsor Revenue Pace</div>
+      <div class="stat-value" id="cmo-sponsor-pace">--</div>
+      <div class="stat-sub">target: $1,000/month</div>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-label">Unsubscribe Rate</div>
+      <div class="stat-value" id="cmo-unsub-rate">--</div>
+      <div class="stat-sub">must stay under 5%</div>
+    </div>
+  </div>
+
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Execution Mode</div>
+        <div class="panel-badge" id="cmo-mode-badge">drafts for approval</div>
+      </div>
+      <div class="panel-body">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+          <div style="font-size:.82rem;color:var(--muted);max-width:540px;line-height:1.6">
+            CMO agent generates drafts for email/social/copy by default.
+            Enable <strong style="color:var(--text)">Auto Send</strong> only when you are ready.
+          </div>
+          <label style="display:inline-flex;align-items:center;gap:10px;font-family:var(--mono);font-size:.74rem;color:var(--text)">
+            <input id="cmo-auto-send" type="checkbox" style="accent-color:var(--accent);transform:scale(1.15)">
+            Auto Send Enabled
+          </label>
+        </div>
+        <div style="margin-top:14px;display:flex;gap:8px">
+          <button class="topbar-btn primary" onclick="saveCmoConfig()">Save CMO Settings</button>
+          <button class="topbar-btn" onclick="loadCmoDashboard()">Reload</button>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Guardrails</div>
+        <div class="panel-badge">locked</div>
+      </div>
+      <div class="panel-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 18px;font-size:.78rem;color:var(--muted)">
+          <div>- legal/compliance limits</div>
+          <div>- no paid ads</div>
+          <div>- no low-confidence lead outreach</div>
+          <div>- no copy changes without approval</div>
+          <div>- monthly email cap: 3,000</div>
+          <div>- contact cap: 1,000</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:20px">
+    <div class="panel-header">
+      <div class="panel-title">CMO Scope Snapshot</div>
+      <div class="panel-badge">90-day plan</div>
+    </div>
+    <div class="panel-body">
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Area</th><th>Configured Direction</th></tr></thead>
+          <tbody>
+            <tr><td>Primary Growth Goal</td><td>Traffic</td></tr>
+            <tr><td>Top Audiences</td><td>Parents + Owners (50/50 split)</td></tr>
+            <tr><td>Channels</td><td>Email, on-site copy/CTAs, social drafts, owner outreach, ad landing page copy tests</td></tr>
+            <tr><td>Email Streams</td><td>Parent city newsletter, owner claim outreach, re-engagement, sponsorship sales</td></tr>
+            <tr><td>Brand Voice</td><td>Playful and fun</td></tr>
+            <tr><td>Cadence</td><td>Daily</td></tr>
+            <tr><td>KPI Priority</td><td>1) Sessions, 2) Signup Conversion, 3) Sponsorship Lead Conversion, 4) Owner Claim Conversion, 5) CTR</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+</div><!-- /view-cmo -->
 
 <!-- CACHE VIEW -->
 <div class="view" id="view-cache">
@@ -486,7 +692,11 @@ var convHistory = [];
 var agentBusy = false;
 var refreshTimer = null;
 var locationsLoaded = false;
+var photosLoaded = false;
+var _allSubmissionPhotos = [];
+var searchesRange = '24h';
 var LOGIN_STATE_KEY = 'kiddbusy_hq_unlocked';
+var _cmoConfig = null;
 
 var EVENT_COLORS = {
   city_search:'#4d9fff', multi_city_session:'#7c5cbf',
@@ -539,6 +749,15 @@ function switchTab(name, el) {
   if (name === 'locations' && !locationsLoaded && sb) {
     loadSponsorListings();
   }
+  if (name === 'photos' && sb) {
+    loadPhotoQueue();
+  }
+  if (name === 'ownerkpi' && sb) {
+    loadOwnerKpis();
+  }
+  if (name === 'cmo') {
+    loadCmoDashboard();
+  }
 }
 
 // ===== HELPERS =====
@@ -555,6 +774,32 @@ function timeAgo(ts) {
 function isToday(ts) {
   var d = new Date(ts), now = new Date();
   return d.toDateString() === now.toDateString();
+}
+
+function isWithinRange(ts, rangeKey) {
+  if (!ts) return false;
+  if (rangeKey === 'all') return true;
+  var nowMs = Date.now();
+  var tMs = new Date(ts).getTime();
+  if (!Number.isFinite(tMs)) return false;
+  var delta = nowMs - tMs;
+  if (rangeKey === '24h') return delta <= 24 * 60 * 60 * 1000;
+  if (rangeKey === '7d') return delta <= 7 * 24 * 60 * 60 * 1000;
+  if (rangeKey === '30d') return delta <= 30 * 24 * 60 * 60 * 1000;
+  return true;
+}
+
+function searchesRangeLabel(rangeKey) {
+  if (rangeKey === '7d') return 'Searches (7d)';
+  if (rangeKey === '30d') return 'Searches (30d)';
+  if (rangeKey === 'all') return 'Searches (All)';
+  return 'Searches (24h)';
+}
+
+function onSearchRangeChange() {
+  var sel = document.getElementById('searches-range');
+  searchesRange = sel ? sel.value : '24h';
+  loadStats();
 }
 
 function loadingHTML() {
@@ -590,6 +835,20 @@ async function fetchAdminSubmissions(status, limit) {
   return payload.submissions || [];
 }
 
+async function photoAdmin(action, payload) {
+  var body = Object.assign({ action: action }, payload || {});
+  var res = await fetch('/api/photo-admin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
+    body: JSON.stringify(body)
+  });
+  var out = await res.json();
+  if (!res.ok) {
+    throw new Error((out && out.error) ? out.error : 'Photo admin request failed');
+  }
+  return out;
+}
+
 // ===== LOAD ALL =====
 async function loadAll() {
   if (!sb) return;
@@ -602,12 +861,21 @@ async function loadAll() {
     loadTopCities(),
     loadReviewFunnel(),
     loadFilterUsage(),
+    loadShareCities(),
     loadCacheHealth(),
     loadActivityFeed(),
     loadDataIntegrity(),
     loadSubmissions(),
-    loadLeads()
+    loadLeads(),
+    loadOwnerKpis()
   ]);
+
+  if (document.getElementById('view-photos').classList.contains('active')) {
+    loadPhotoQueue();
+  }
+  if (document.getElementById('view-cmo').classList.contains('active')) {
+    loadCmoDashboard();
+  }
 
   document.getElementById('last-updated').textContent =
     'updated ' + new Date().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' });
@@ -630,11 +898,12 @@ async function loadStats() {
   }
 
   var events = results[0].data || [];
-  var todayEvents = events.filter(function(e) { return isToday(e.created_at); });
+  var windowEvents = events.filter(function(e) { return isWithinRange(e.created_at, searchesRange); });
   var allSearches = events.filter(function(e) { return e.event === 'city_search'; });
-  var todaySearches = todayEvents.filter(function(e) { return e.event === 'city_search'; });
+  var scopedSearches = windowEvents.filter(function(e) { return e.event === 'city_search'; });
 
-  document.getElementById('stat-searches-today').textContent = todaySearches.length;
+  document.getElementById('stat-searches-label').textContent = searchesRangeLabel(searchesRange);
+  document.getElementById('stat-searches-today').textContent = scopedSearches.length;
   document.getElementById('stat-searches-sub').textContent = 'all time: ' + allSearches.length;
 
   var uniqueCities = new Set(allSearches.map(function(e) { return e.city; }).filter(Boolean));
@@ -747,6 +1016,58 @@ async function loadFilterUsage() {
       var icon = FILTER_ICONS[f] || '[filter]';
       return '<div class="filter-pill">' + icon + ' ' + f + '<span class="filter-pill-count">' + n + '</span></div>';
     }).join('') + '</div>';
+}
+
+// ===== SHARE CITY INSIGHTS =====
+function parseShareValue(value) {
+  if (!value) return { method: 'unknown', listing_name: null };
+  try {
+    var obj = JSON.parse(value);
+    return {
+      method: obj && obj.method ? String(obj.method) : 'unknown',
+      listing_name: obj && obj.listing_name ? String(obj.listing_name) : null
+    };
+  } catch (_) {
+    // Older events stored listing name directly in value.
+    return { method: 'legacy_unknown', listing_name: String(value) };
+  }
+}
+
+async function loadShareCities() {
+  var res = await sb.from('analytics').select('city,value').eq('event', 'share_click');
+  var rows = res.data || [];
+  if (!rows.length) {
+    document.getElementById('badge-share-cities').textContent = '0 events';
+    document.getElementById('body-share-cities').innerHTML = emptyHTML('No share clicks yet');
+    return;
+  }
+
+  var cityCounts = {};
+  var methods = {};
+  rows.forEach(function(r) {
+    var city = (r.city && String(r.city).trim()) ? String(r.city).trim() : 'Unknown';
+    cityCounts[city] = (cityCounts[city] || 0) + 1;
+    var parsed = parseShareValue(r.value);
+    methods[parsed.method] = (methods[parsed.method] || 0) + 1;
+  });
+
+  var sorted = Object.entries(cityCounts).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 10);
+  var max = sorted[0] ? sorted[0][1] : 1;
+  var methodSummary = Object.entries(methods).sort(function(a, b) { return b[1] - a[1]; }).map(function(entry) {
+    return entry[0] + ': ' + entry[1];
+  }).join(' | ');
+
+  document.getElementById('badge-share-cities').textContent = rows.length + ' share clicks';
+  document.getElementById('body-share-cities').innerHTML =
+    '<div style=\"font-size:.74rem;color:var(--muted);font-family:var(--mono);margin-bottom:12px\">Methods: ' + (methodSummary || '--') + '</div>' +
+    sorted.map(function(entry) {
+      var city = entry[0], count = entry[1];
+      var pct = Math.round((count / max) * 100);
+      return '<div class=\"city-bar-wrap\">' +
+        '<div class=\"city-bar-label\">' + city + '<span>' + count + ' share click' + (count !== 1 ? 's' : '') + '</span></div>' +
+        '<div class=\"city-bar-bg\"><div class=\"city-bar-fill\" style=\"width:' + pct + '%\"></div></div>' +
+        '</div>';
+    }).join('');
 }
 
 // ===== CACHE HEALTH =====
@@ -863,6 +1184,176 @@ async function loadDataIntegrity() {
 
   var tableHtml = '<div class="table-wrap"><table class="data-table"><thead><tr><th>City</th><th>Total</th>' + headCols + '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>';
   document.getElementById('body-integrity').innerHTML = summaryHtml + tableHtml;
+}
+
+// ===== OWNER KPI =====
+async function loadOwnerKpis() {
+  try {
+    var eventsRes = await sb.from('analytics').select('*').order('created_at', { ascending: false }).limit(1500);
+    var allEvents = eventsRes.data || [];
+    var ownerEvents = allEvents.filter(function(e) { return String(e.event || '').indexOf('owner_') === 0; });
+    var counts = {};
+    ownerEvents.forEach(function(e) { counts[e.event] = (counts[e.event] || 0) + 1; });
+
+    var starts = counts.owner_claim_start || 0;
+    var verified = counts.owner_claim_verified || 0;
+    var abandons = counts.owner_claim_abandon || 0;
+    var updates = counts.owner_update_saved || 0;
+    var conversion = starts > 0 ? Math.round((verified / starts) * 100) : 0;
+    var abandonRate = starts > 0 ? Math.round((abandons / starts) * 100) : 0;
+
+    var claimsRes = await sb.from('owner_claims').select('status, owner_email, listing_id, created_at').order('created_at', { ascending: false }).limit(200);
+    var changesRes = await sb.from('owner_change_requests').select('status, change_type, created_at').order('created_at', { ascending: false }).limit(200);
+
+    document.getElementById('ownerkpi-starts').textContent = starts;
+    document.getElementById('ownerkpi-verified').textContent = verified;
+    document.getElementById('ownerkpi-abandons').textContent = abandons;
+    document.getElementById('ownerkpi-updates').textContent = updates;
+    document.getElementById('ownerkpi-funnel-rate').textContent = conversion + '% verify / ' + abandonRate + '% abandon';
+
+    document.getElementById('ownerkpi-funnel-body').innerHTML =
+      '<div class=\"funnel-row start\"><div class=\"funnel-label\">Started</div><div class=\"funnel-bar-bg\"><div class=\"funnel-bar-fill\" style=\"width:100%\">' + starts + '</div></div><div class=\"funnel-pct\">100%</div></div>' +
+      '<div class=\"funnel-row submit\"><div class=\"funnel-label\">Verified</div><div class=\"funnel-bar-bg\"><div class=\"funnel-bar-fill\" style=\"width:' + conversion + '%\">' + verified + '</div></div><div class=\"funnel-pct\">' + conversion + '%</div></div>' +
+      '<div class=\"funnel-row abandon\"><div class=\"funnel-label\">Abandoned</div><div class=\"funnel-bar-bg\"><div class=\"funnel-bar-fill\" style=\"width:' + abandonRate + '%\">' + abandons + '</div></div><div class=\"funnel-pct\">' + abandonRate + '%</div></div>';
+
+    var claims = claimsRes.data || [];
+    var claimByStatus = {};
+    claims.forEach(function(c) { claimByStatus[c.status || 'unknown'] = (claimByStatus[c.status || 'unknown'] || 0) + 1; });
+    var statusRows = Object.entries(claimByStatus).sort(function(a,b){ return b[1]-a[1]; });
+    document.getElementById('ownerkpi-claims-count').textContent = claims.length + ' recent claims';
+    document.getElementById('ownerkpi-claims-body').innerHTML = statusRows.length
+      ? statusRows.map(function(r) {
+          return '<div class=\"cache-item\"><span class=\"cache-city\">' + r[0] + '</span><span class=\"cache-count\">' + r[1] + '</span></div>';
+        }).join('')
+      : emptyHTML('No owner claims yet');
+
+    var eventsPreview = ownerEvents.slice(0, 80);
+    document.getElementById('ownerkpi-events-body').innerHTML = eventsPreview.length
+      ? '<table class=\"data-table\"><thead><tr><th>Event</th><th>City</th><th>Value</th><th>Time</th></tr></thead><tbody>' +
+        eventsPreview.map(function(e) {
+          return '<tr><td style=\"font-family:var(--mono);font-size:.74rem\">' + e.event + '</td><td style=\"color:var(--muted)\">' + (e.city || '--') + '</td><td style=\"color:var(--muted)\">' + (e.value || '--') + '</td><td style=\"font-family:var(--mono);font-size:.72rem;color:var(--muted)\">' + timeAgo(e.created_at) + '</td></tr>';
+        }).join('') + '</tbody></table>'
+      : emptyHTML('No owner events yet');
+
+    // Keep one lightweight KPI available to the agent path.
+    window.__ownerKpiSnapshot = {
+      starts: starts,
+      verified: verified,
+      abandons: abandons,
+      updates: updates,
+      conversion_percent: conversion,
+      abandon_percent: abandonRate,
+      claims_count: claims.length,
+      changes_count: (changesRes.data || []).length
+    };
+  } catch (e) {
+    document.getElementById('ownerkpi-funnel-body').innerHTML = '<div class=\"empty\" style=\"padding:24px;color:var(--accent)\">Owner KPI unavailable: ' + e.message + '</div>';
+    document.getElementById('ownerkpi-claims-body').innerHTML = emptyHTML('Run owner claims migration first');
+    document.getElementById('ownerkpi-events-body').innerHTML = emptyHTML('No owner event data yet');
+  }
+}
+
+// ===== CMO DASHBOARD =====
+async function fetchCmoConfig() {
+  var res = await fetch('/api/cmo-config', { headers: { 'X-Requested-From': 'kiddbusy-hq' } });
+  var out = await res.json();
+  if (!res.ok) throw new Error(out.error || 'Failed to load CMO config');
+  _cmoConfig = out.config || null;
+  return _cmoConfig;
+}
+
+async function loadCmoKpis() {
+  var eventsRes = await sb.from('analytics').select('event,created_at,session_id').order('created_at', { ascending: false }).limit(3000);
+  var leadsRes = await sb.from('email_leads').select('created_at').order('created_at', { ascending: false }).limit(3000);
+  var claimsRes = await sb.from('owner_claims').select('status,created_at').order('created_at', { ascending: false }).limit(3000);
+  var sponsorRes = await sb.from('sponsorships').select('status,created_at,plan').order('created_at', { ascending: false }).limit(3000);
+  var unsubRes = await sb.from('email_preferences').select('email,unsubscribed').eq('unsubscribed', true).limit(3000);
+
+  var events = eventsRes.data || [];
+  var leads = leadsRes.data || [];
+  var claims = claimsRes.data || [];
+  var sponsors = sponsorRes.data || [];
+  var unsubs = unsubRes.data || [];
+
+  var now = Date.now();
+  var monthMs = 30 * 24 * 60 * 60 * 1000;
+  var monthEvents = events.filter(function(e) {
+    return e.created_at && (now - new Date(e.created_at).getTime()) <= monthMs;
+  });
+  var monthLeads = leads.filter(function(e) {
+    return e.created_at && (now - new Date(e.created_at).getTime()) <= monthMs;
+  });
+  var monthClaims = claims.filter(function(c) {
+    return c.created_at && (now - new Date(c.created_at).getTime()) <= monthMs;
+  });
+  var monthSponsors = sponsors.filter(function(s) {
+    return s.created_at && (now - new Date(s.created_at).getTime()) <= monthMs;
+  });
+
+  var sessionSet = new Set(monthEvents.map(function(e) { return e.session_id || ''; }).filter(Boolean));
+  var sessions = sessionSet.size;
+  var signupConv = sessions > 0 ? ((monthLeads.length / sessions) * 100) : 0;
+
+  var claimStarts = monthEvents.filter(function(e) { return e.event === 'owner_claim_start'; }).length;
+  var claimVerified = monthEvents.filter(function(e) { return e.event === 'owner_claim_verified'; }).length;
+  var ownerConv = claimStarts > 0 ? ((claimVerified / claimStarts) * 100) : 0;
+
+  var monthlyRevenue = monthSponsors.reduce(function(sum, s) {
+    if (String(s.status || '').toLowerCase() !== 'active') return sum;
+    var plan = String(s.plan || '').toLowerCase();
+    if (plan.indexOf('49') >= 0 || plan.indexOf('listing') >= 0) return sum + 49;
+    if (plan.indexOf('199') >= 0 || plan.indexOf('banner') >= 0) return sum + 199;
+    if (plan.indexOf('219') >= 0 || plan.indexOf('bundle') >= 0) return sum + 219;
+    return sum;
+  }, 0);
+
+  var unsubRate = leads.length > 0 ? ((unsubs.length / leads.length) * 100) : 0;
+
+  document.getElementById('cmo-sessions').textContent = sessions;
+  document.getElementById('cmo-signup-conv').textContent = signupConv.toFixed(1) + '%';
+  document.getElementById('cmo-owner-conv').textContent = ownerConv.toFixed(1) + '%';
+  document.getElementById('cmo-sponsor-pace').textContent = '$' + monthlyRevenue;
+  document.getElementById('cmo-unsub-rate').textContent = unsubRate.toFixed(1) + '%';
+}
+
+async function loadCmoDashboard() {
+  try {
+    await fetchCmoConfig();
+    await loadCmoKpis();
+
+    var autoSend = !!(_cmoConfig && _cmoConfig.auto_send_enabled);
+    var mode = (_cmoConfig && _cmoConfig.execution_mode) ? _cmoConfig.execution_mode : (autoSend ? 'auto_send_enabled' : 'drafts_for_approval');
+    var toggle = document.getElementById('cmo-auto-send');
+    if (toggle) toggle.checked = autoSend;
+    document.getElementById('cmo-mode-badge').textContent = mode === 'auto_send_enabled' ? 'auto send enabled' : 'drafts for approval';
+  } catch (e) {
+    document.getElementById('cmo-mode-badge').textContent = 'config unavailable';
+  }
+}
+
+async function saveCmoConfig() {
+  var autoSend = !!(document.getElementById('cmo-auto-send') && document.getElementById('cmo-auto-send').checked);
+  var payload = {
+    auto_send_enabled: autoSend,
+    execution_mode: autoSend ? 'auto_send_enabled' : 'drafts_for_approval'
+  };
+  var btns = Array.from(document.querySelectorAll('#view-cmo .topbar-btn'));
+  btns.forEach(function(b) { b.disabled = true; });
+  try {
+    var res = await fetch('/api/cmo-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
+      body: JSON.stringify(payload)
+    });
+    var out = await res.json();
+    if (!res.ok) throw new Error(out.error || 'Failed to save CMO config');
+    _cmoConfig = out.config || _cmoConfig;
+    document.getElementById('cmo-mode-badge').textContent = autoSend ? 'auto send enabled' : 'drafts for approval';
+  } catch (e) {
+    alert('CMO settings save failed: ' + e.message);
+  } finally {
+    btns.forEach(function(b) { b.disabled = false; });
+  }
 }
 
 // ===== SUBMISSIONS INBOX (with approve/reject buttons) =====
@@ -1029,6 +1520,121 @@ async function setSponsor(listingId, sponsored, name, btn) {
   }
 }
 
+// ===== PHOTO QUEUE =====
+async function loadPhotoQueue() {
+  document.getElementById('body-photos').innerHTML = loadingHTML();
+  try {
+    var payload = await photoAdmin('list_submission_photos', { limit: 500 });
+    _allSubmissionPhotos = payload.photos || [];
+    photosLoaded = true;
+    var pendingLike = _allSubmissionPhotos.filter(function(p) {
+      return p.status === 'pending' || p.status === 'auto_approved';
+    }).length;
+    document.getElementById('badge-photos').textContent = pendingLike + ' actionable / ' + _allSubmissionPhotos.length + ' total';
+    filterPhotoQueue();
+  } catch (e) {
+    document.getElementById('body-photos').innerHTML = '<div class=\"empty\" style=\"padding:24px;color:var(--accent)\">Failed to load photos: ' + e.message + '</div>';
+  }
+}
+
+function filterPhotoQueue() {
+  var q = (document.getElementById('photo-q').value || '').toLowerCase();
+  var status = document.getElementById('photo-status-filter').value;
+  var rows = _allSubmissionPhotos.slice();
+
+  if (status) {
+    rows = rows.filter(function(p) { return p.status === status; });
+  }
+  if (q) {
+    rows = rows.filter(function(p) {
+      return (p.business_name || '').toLowerCase().includes(q) ||
+        (p.city || '').toLowerCase().includes(q) ||
+        (p.submitter_email || '').toLowerCase().includes(q) ||
+        (p.submitter_name || '').toLowerCase().includes(q);
+    });
+  }
+
+  renderPhotoQueue(rows);
+}
+
+function photoStatusBadge(status) {
+  var s = String(status || 'pending');
+  if (s === 'approved') return '<span class=\"status-badge approved\">approved</span>';
+  if (s === 'rejected') return '<span class=\"status-badge rejected\">rejected</span>';
+  if (s === 'auto_approved') return '<span class=\"status-badge\" style=\"background:rgba(124,92,191,.2);color:#bfa4ff\">auto</span>';
+  return '<span class=\"status-badge pending\">pending</span>';
+}
+
+function renderPhotoQueue(rows) {
+  if (!rows || !rows.length) {
+    document.getElementById('body-photos').innerHTML = '<div class=\"empty\" style=\"padding:24px\">No photos in queue</div>';
+    return;
+  }
+
+  document.getElementById('body-photos').innerHTML =
+    '<div class=\"table-wrap\"><table class=\"data-table\"><thead><tr>' +
+    '<th>Preview</th><th>Business</th><th>City</th><th>Owner?</th><th>Submitter</th><th>Status</th><th>Linked Listing</th><th>Date</th><th>Actions</th>' +
+    '</tr></thead><tbody>' +
+    rows.map(function(p) {
+      var image = p.source_url
+        ? '<a href=\"' + p.source_url + '\" target=\"_blank\" rel=\"noopener\" style=\"display:inline-block\"><img src=\"' + p.source_url + '\" alt=\"photo\" style=\"width:64px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--border)\"></a>'
+        : '--';
+      var submitter = [p.submitter_name || '--', p.submitter_email || '--'].join('<br>');
+      var linked = p.listing_id ? ('#' + p.listing_id) : '--';
+      var needsAction = (p.status === 'pending' || p.status === 'auto_approved');
+      var actionHtml = '--';
+      if (needsAction) {
+        actionHtml =
+          '<button class=\"act-btn approve\" onclick=\"approveSubmissionPhoto(' + p.submission_photo_id + ')\">Approve</button> ' +
+          '<button class=\"act-btn reject\" onclick=\"rejectSubmissionPhoto(' + p.submission_photo_id + ')\">Reject</button>';
+      }
+      return '<tr>' +
+        '<td>' + image + '</td>' +
+        '<td style=\"font-weight:600\">' + (p.business_name || '--') + '</td>' +
+        '<td style=\"color:var(--muted)\">' + (p.city || '--') + '</td>' +
+        '<td style=\"font-family:var(--mono);font-size:.72rem\">' + (p.is_owner ? 'yes' : 'no') + '</td>' +
+        '<td style=\"font-size:.74rem;color:var(--muted)\">' + submitter + '</td>' +
+        '<td>' + photoStatusBadge(p.status) + '</td>' +
+        '<td style=\"font-family:var(--mono);font-size:.72rem\">' + linked + '</td>' +
+        '<td style=\"font-family:var(--mono);font-size:.72rem;color:var(--muted)\">' + (p.created_at ? timeAgo(p.created_at) : '--') + '</td>' +
+        '<td>' + actionHtml + '</td>' +
+        '</tr>';
+    }).join('') +
+    '</tbody></table></div>';
+}
+
+async function approveSubmissionPhoto(submissionPhotoId) {
+  var listingInput = prompt('Optional: listing ID to link this photo to. Leave blank for auto-match by business + city.');
+  var listingId = listingInput && listingInput.trim() ? Number(listingInput.trim()) : null;
+  if (listingInput && (!Number.isFinite(listingId) || listingId <= 0)) {
+    alert('Listing ID must be a positive number.');
+    return;
+  }
+  try {
+    await photoAdmin('approve_submission_photo', {
+      submission_photo_id: submissionPhotoId,
+      listing_id: listingId || null
+    });
+    await loadPhotoQueue();
+    if (locationsLoaded) loadSponsorListings();
+  } catch (e) {
+    alert('Approve failed: ' + e.message);
+  }
+}
+
+async function rejectSubmissionPhoto(submissionPhotoId) {
+  var reason = prompt('Reason for rejection (optional):', 'Not the correct location');
+  try {
+    await photoAdmin('reject_submission_photo', {
+      submission_photo_id: submissionPhotoId,
+      reason: reason || 'Rejected by admin'
+    });
+    await loadPhotoQueue();
+  } catch (e) {
+    alert('Reject failed: ' + e.message);
+  }
+}
+
 // ===== EMAIL LEADS =====
 async function loadLeads() {
   var res = await sb.from('email_leads').select('*').order('created_at', { ascending: false });
@@ -1094,6 +1700,16 @@ var AGENT_TOOLS = [
     input_schema: { type: 'object', properties: {}, required: [] }
   },
   {
+    name: 'query_submission_photos',
+    description: 'Get submission photo moderation queue with statuses: pending, auto_approved, approved, rejected.',
+    input_schema: { type: 'object', properties: { status: { type: 'string' }, limit: { type: 'number' } }, required: [] }
+  },
+  {
+    name: 'query_owner_kpis',
+    description: 'Get owner claim funnel KPIs including starts, verified, abandons, updates.',
+    input_schema: { type: 'object', properties: {}, required: [] }
+  },
+  {
     name: 'query_email_leads',
     description: 'Get email subscriber list with count, emails, cities, sources.',
     input_schema: { type: 'object', properties: {}, required: [] }
@@ -1117,10 +1733,20 @@ var AGENT_TOOLS = [
     name: 'update_sponsorship_status',
     description: 'Update sponsorship status.',
     input_schema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string', enum: ['active','cancelled','pending'] } }, required: ['id','status'] }
+  },
+  {
+    name: 'approve_submission_photo',
+    description: 'Approve and publish a submission photo by submission_photo_id. Optional listing_id can be supplied.',
+    input_schema: { type: 'object', properties: { submission_photo_id: { type: 'number' }, listing_id: { type: 'number' } }, required: ['submission_photo_id'] }
+  },
+  {
+    name: 'reject_submission_photo',
+    description: 'Reject a submission photo by submission_photo_id.',
+    input_schema: { type: 'object', properties: { submission_photo_id: { type: 'number' }, reason: { type: 'string' } }, required: ['submission_photo_id'] }
   }
 ];
 
-var AGENT_SYSTEM = 'You are the KiddBusy admin agent. You have direct database access via tools. Be concise and action-oriented. Use plain text, no markdown headers.\n\nTables: submissions (business listings awaiting approval), reviews (user reviews of listings), sponsorships (plans: $49/mo listing, $199/mo banner, $219/mo bundle), listings (active businesses with city, source, is_sponsored, last_refreshed, avg_rating, review_count), email_leads (newsletter signups with email, city, source), analytics (event log with event type, city, value, session_id).\n\nAnalytics events: city_search (user searched a city), multi_city_session (user searched multiple cities -- high intent), review_start/review_abandon/review_submit (review funnel), email_capture, filter_used (with value = filter name), advertise_click (revenue intent), cache_hit/cache_miss.\n\nWhen asked about city traffic, use query_analytics with event=city_search. When asked about review funnel or drop-off, use query_analytics and compute the rates yourself. Be specific with numbers.';
+var AGENT_SYSTEM = 'You are the KiddBusy admin agent. You have direct database access via tools. Be concise and action-oriented. Use plain text, no markdown headers.\n\nTables: submissions (business listings awaiting approval), reviews (user reviews of listings), submission_photos (image moderation queue), owner_claims (owner verification requests), owner_change_requests (owner edits), sponsorships (plans: $49/mo listing, $199/mo banner, $219/mo bundle), listings (active businesses with city, source, is_sponsored, last_refreshed, avg_rating, review_count), email_leads (newsletter signups with email, city, source), analytics (event log with event type, city, value, session_id).\n\nAnalytics events include core site events plus owner events: owner_claim_open, owner_claim_start, owner_claim_code_sent, owner_claim_verify_attempt, owner_claim_verified, owner_claim_abandon, owner_dashboard_open, owner_update_submit, owner_update_saved.\n\nWhen asked about city traffic, use query_analytics with event=city_search. When asked about owner funnel, use query_owner_kpis and/or query_analytics to calculate conversion and abandon rates.';
 
 // ===== AGENT TOOL EXECUTOR =====
 async function execTool(name, input) {
@@ -1147,6 +1773,14 @@ async function execTool(name, input) {
         var r4 = await sb.from('listings').select('*').eq('status', 'active');
         return { count: (r4.data||[]).length, listings: r4.data };
       }
+      case 'query_submission_photos': {
+        var r4b = await photoAdmin('list_submission_photos', { status: input.status || '', limit: input.limit || 200 });
+        return { count: (r4b.photos||[]).length, submission_photos: r4b.photos || [] };
+      }
+      case 'query_owner_kpis': {
+        await loadOwnerKpis();
+        return window.__ownerKpiSnapshot || { starts: 0, verified: 0, abandons: 0, updates: 0 };
+      }
       case 'query_email_leads': {
         var r5 = await sb.from('email_leads').select('*').order('created_at', { ascending: false });
         return { count: (r5.data||[]).length, leads: r5.data };
@@ -1170,6 +1804,16 @@ async function execTool(name, input) {
       case 'update_sponsorship_status': {
         await dbWrite('sponsorships', input.id, { status: input.status });
         return { success: true, id: input.id, new_status: input.status };
+      }
+      case 'approve_submission_photo': {
+        var r7 = await photoAdmin('approve_submission_photo', { submission_photo_id: input.submission_photo_id, listing_id: input.listing_id || null });
+        loadPhotoQueue();
+        return { success: true, result: r7 };
+      }
+      case 'reject_submission_photo': {
+        var r8 = await photoAdmin('reject_submission_photo', { submission_photo_id: input.submission_photo_id, reason: input.reason || 'Rejected by agent' });
+        loadPhotoQueue();
+        return { success: true, result: r8 };
       }
       default:
         return { error: 'Unknown tool: ' + name };

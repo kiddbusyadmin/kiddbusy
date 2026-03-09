@@ -261,6 +261,16 @@
     font-size: 4rem;
     position: relative;
   }
+  .card-thumb-photo {
+    background: #EDE7F6;
+    overflow: hidden;
+  }
+  .card-thumb-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
   .open-badge {
     position: absolute; top: 12px; right: 12px;
     background: var(--grass); color: #fff;
@@ -302,6 +312,22 @@
     display: inline-flex; align-items: center; gap: 4px;
   }
   .share-btn:hover { border-color: var(--plum); color: var(--plum); transform: scale(1.05); }
+  .claim-btn {
+    background: transparent;
+    color: var(--muted);
+    border: 2px solid #d5cced;
+    border-radius: 50px;
+    padding: 5px 12px;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 800;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all .2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .claim-btn:hover { border-color: var(--sky); color: var(--plum); transform: scale(1.05); }
   .sponsored-badge {
     position: absolute; top: 10px; left: 10px;
     background: linear-gradient(135deg, #F59E0B, #D97706);
@@ -313,6 +339,21 @@
   .activity-card { position: relative; }
   .share-btn.copied { border-color: #22c55e; color: #22c55e; }
   .card-actions { display: flex; align-items: center; gap: 8px; }
+  .price-pill {
+    border-radius: 50px;
+    padding: 4px 10px;
+    font-size: 0.76rem;
+    font-weight: 900;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+  }
+  .price-free { background: #dcfce7; color: #166534; }
+  .price-low { background: #e0f2fe; color: #075985; }
+  .price-mid { background: #fef3c7; color: #92400e; }
+  .price-high { background: #fee2e2; color: #991b1b; }
+  .price-unknown { background: #e5e7eb; color: #374151; }
   .category-filter {
     cursor: pointer;
     transition: color .15s;
@@ -552,6 +593,19 @@
   .sponsor-pitch p { font-size: .83rem; color: var(--muted); line-height: 1.5; margin-bottom: 6px; font-weight: 600; }
   .sponsor-learn-more { font-size: .83rem; font-weight: 800; color: var(--plum); text-decoration: none; }
   .sponsor-learn-more:hover { text-decoration: underline; }
+  .owner-photo-wrap {
+    background: rgba(108,63,197,0.06);
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .owner-photo-wrap small {
+    display: block;
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 0.76rem;
+    line-height: 1.4;
+  }
 
   /* ── ADVERTISE PAGE ── */
   .adpage-hero {
@@ -982,6 +1036,11 @@
           <span class="checkbox-custom" style="--cb-color:#FFCF2F"></span>
           <span>Yes, I'm interested in a <strong>Sponsored Listing</strong> — contact me with details</span>
         </label>
+      </div>
+      <div class="form-group full owner-photo-wrap" id="ownerPhotoWrap" style="display:none">
+        <label>Business Photo (owner upload)</label>
+        <input type="file" id="sb-photo" accept="image/jpeg,image/png,image/webp,image/gif" />
+        <small>Owner uploads are auto-approved. Use a clear horizontal photo of your real location.</small>
       </div>
     </div>
     <button class="submit-btn" onclick="submitPlace()">Submit for Review 🚀</button>
@@ -1424,7 +1483,12 @@ function track(event, city = null, value = null) {
 // ── SHARE ──
 function sharePlace(btn, name, address, desc) {
   const text = `🎉 Check out ${name}!\n📍 ${address}\n${desc ? desc.split('|')[0].trim() + '\n' : ''}🔗 ${window.location.href}`;
+  const city = (document.getElementById('citySelect') && document.getElementById('citySelect').value)
+    ? document.getElementById('citySelect').value
+    : null;
+  let method = 'copy_clipboard';
   if (navigator.share) {
+    method = 'native_share';
     navigator.share({ title: name, text, url: window.location.href })
       .catch(() => {});
   } else {
@@ -1434,7 +1498,7 @@ function sharePlace(btn, name, address, desc) {
       setTimeout(() => { btn.innerHTML = '📤 Share'; btn.classList.remove('copied'); }, 2000);
     });
   }
-  track('share_click', null, name);
+  track('share_click', city, JSON.stringify({ method, listing_name: name }));
 }
 
 // ── UPSERT LISTING & GET STABLE ID ──
@@ -1543,6 +1607,69 @@ function sortListingsForDisplay(rows) {
   });
 }
 
+function getCardPhotoUrl(a) {
+  if (!a || !a.photo_url) return '';
+  const st = String(a.photo_status || '').toLowerCase();
+  if (!st || st === 'active') return String(a.photo_url);
+  return '';
+}
+
+function escapeAttr(v) {
+  return String(v || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+function renderCardThumb(a, fallbackBg) {
+  const photoUrl = getCardPhotoUrl(a);
+  if (photoUrl) {
+    return `<div class=\"card-thumb card-thumb-photo\"><img class=\"card-thumb-img\" src=\"${escapeAttr(photoUrl)}\" alt=\"${escapeAttr(a && a.name ? a.name : 'Location photo')}\" loading=\"lazy\" referrerpolicy=\"no-referrer\" /></div>`;
+  }
+  return `<div class=\"card-thumb\" style=\"background:${fallbackBg}\"><span style=\"filter:drop-shadow(2px 4px 6px rgba(0,0,0,.15))\">${a && a.emoji ? a.emoji : '🎉'}</span></div>`;
+}
+
+function normalizePriceLabel(raw, tags) {
+  const v = String(raw || '').trim().toLowerCase();
+  if (v === 'free' || v === '$0') return 'Free';
+  if (v === '$' || v === '$$' || v === '$$$') return v;
+  if (v === 'low') return '$';
+  if (v === 'medium' || v === 'mid') return '$$';
+  if (v === 'high' || v === 'premium') return '$$$';
+
+  const tagList = Array.isArray(tags)
+    ? tags.map(t => String(t || '').toLowerCase())
+    : String(tags || '').split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+  if (tagList.includes('free')) return 'Free';
+  if (tagList.includes('paid')) return '$$';
+  return 'Unknown';
+}
+
+function getPriceLabel(activity) {
+  if (!activity) return 'Unknown';
+  const raw = activity.cost_tier || activity.cost || activity.price_tier || activity.price || activity.price_label || '';
+  return normalizePriceLabel(raw, activity.tags);
+}
+
+function getPriceClass(label) {
+  if (label === 'Free') return 'price-free';
+  if (label === '$') return 'price-low';
+  if (label === '$$') return 'price-mid';
+  if (label === '$$$') return 'price-high';
+  return 'price-unknown';
+}
+
+function openClaimPortal(listingId, name, city) {
+  if (!listingId || Number(listingId) <= 0) {
+    alert('This listing is not claimable yet.');
+    return;
+  }
+  const qs = new URLSearchParams({
+    listing_id: String(listingId),
+    listing_name: String(name || ''),
+    city: String(city || '')
+  });
+  track('owner_claim_click', city || null, String(listingId));
+  window.location.href = '/owner.html?' + qs.toString();
+}
+
 // ── RENDER ACTIVITIES ──
 function renderActivities(list) {
   const grid = document.getElementById('activitiesGrid');
@@ -1551,25 +1678,26 @@ function renderActivities(list) {
     const tagHtml = a.ages.map(t => `<span class="card-age-tag">${t}</span>`).join('');
     const bg = { '🏃':'#FFE8E8','🌳':'#E8FFE8','🎨':'#E8EAFF','🎮':'#FFF3E0','🦁':'#FFF8E0','🖌️':'#FCE4EC' }[a.emoji] || '#F5F0FF';
     const catKey = a.category.toLowerCase().replace(/[^a-z]/g,'');
+    const priceLabel = getPriceLabel(a);
+    const priceClass = getPriceClass(priceLabel);
     const sponsoredBadge = a.is_sponsored ? '<div class="sponsored-badge">⭐ Sponsored</div>' : '';
     return `
     <div class="activity-card">
       ${sponsoredBadge}
-      <div class="card-thumb" style="background:${bg}">
-        <span style="filter:drop-shadow(2px 4px 6px rgba(0,0,0,.15))">${a.emoji}</span>
-        
-      </div>
+      ${renderCardThumb(a, bg)}
       <div class="card-body">
         <div class="card-category category-filter" onclick="filterByCategory('${a.category}')" title="Filter by ${a.category}">${a.category} <span style="font-size:.7rem;opacity:.6">▼</span></div>
         <div class="card-name">${a.name}</div>
         <div class="card-tags">${tagHtml}</div>
         <div class="card-desc">${a.desc}</div>
-        <div class="card-addr" style="margin-bottom:12px">📍 ${a.addr}</div>
+        <div class="card-addr" style="margin-bottom:8px">📍 ${a.addr}</div>
+        <div style="margin-bottom:12px"><span class="price-pill ${priceClass}">${priceLabel}</span></div>
         <div class="card-footer">
           <div class="stars" id="stars-${a.id}">${stars}</div>
           <div class="card-actions">
             <button class="share-btn" onclick="sharePlace(this,'${a.name.replace(/'/g,"\\'")}','${(a.addr||'').replace(/'/g,"\\'")}','${(a.desc||'').replace(/'/g,"\\'")}')">📤 Share</button>
             <button class="review-btn" onclick="openReview(${a.id},'${a.name.replace(/'/g,"\\'")}')">✍️ Review</button>
+            <button class="claim-btn" onclick="openClaimPortal(${Number(a.id) > 8 ? a.id : 0},'${a.name.replace(/'/g,"\\'")}','${(document.getElementById('citySelect')?.value || '').replace(/'/g,"\\'")}')">🏷 Claim</button>
           </div>
         </div>
         <button class="correction-btn" onclick="openCorrection(${a.id},'${a.name.replace(/'/g,"\\'")}')">🚩 Suggest a correction</button>
@@ -1838,6 +1966,9 @@ async function submitPlace() {
   const name = document.getElementById('sb-name').value.trim();
   const type = document.getElementById('sb-type').value;
   const city = document.getElementById('sb-city').value.trim();
+  const isOwner = document.getElementById('sb-isowner')?.checked || false;
+  const submitterName = document.getElementById('sb-submitter').value.trim() || null;
+  const submitterEmail = document.getElementById('sb-email').value.trim() || null;
   if (!name || !type || !city) { alert('Please fill in Name, Type, and City!'); return; }
 
   try {
@@ -1848,10 +1979,10 @@ async function submitPlace() {
       address: document.getElementById('sb-addr').value.trim() || null,
       url: document.getElementById('sb-url').value.trim() || null,
       description: document.getElementById('sb-desc').value.trim() || null,
-      submitter_name: document.getElementById('sb-submitter').value.trim() || null,
-      submitter_email: document.getElementById('sb-email').value.trim() || null,
+      submitter_name: submitterName,
+      submitter_email: submitterEmail,
       age_range: document.getElementById('sb-age').value || null,
-      is_owner: document.getElementById('sb-isowner')?.checked || false,
+      is_owner: isOwner,
       wants_sponsorship: false,
       status: 'pending'
     });
@@ -1860,15 +1991,45 @@ async function submitPlace() {
     console.warn('Submission exception:', e);
   }
 
+  let photoResult = null;
+  const photoInput = document.getElementById('sb-photo');
+  if (isOwner && photoInput && photoInput.files && photoInput.files[0]) {
+    try {
+      photoResult = await uploadOwnerSubmissionPhoto(photoInput.files[0], {
+        business_name: name,
+        city,
+        submitter_name: submitterName,
+        submitter_email: submitterEmail
+      });
+    } catch (e) {
+      console.warn('Owner photo upload failed:', e);
+    }
+  }
+
   // Always show success and reset form
-  document.getElementById('submitSuccess').classList.add('visible');
+  const successEl = document.getElementById('submitSuccess');
+  if (photoResult && photoResult.auto_published) {
+    successEl.textContent = 'Thanks. Submission received and your owner photo is now live on the listing card.';
+  } else if (photoResult && photoResult.success) {
+    successEl.textContent = 'Thanks. Submission received and your photo was uploaded for command center review.';
+  } else {
+    successEl.textContent = 'Thanks. Our team will review your submission within 24 hours.';
+  }
+  successEl.classList.add('visible');
   track('submit_place', city, name);
   ['sb-name','sb-city','sb-addr','sb-url','sb-desc','sb-submitter','sb-email'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('sb-type').value = '';
   document.getElementById('sb-age').value = '';
+  if (photoInput) photoInput.value = '';
+  const ownerCheckbox = document.getElementById('sb-isowner');
+  if (ownerCheckbox) ownerCheckbox.checked = false;
+  toggleSponsorBox();
   submitRating = 0;
   document.querySelectorAll('#submitStars span').forEach(s => s.classList.remove('active'));
-  setTimeout(() => document.getElementById('submitSuccess').classList.remove('visible'), 5000);
+  setTimeout(() => {
+    successEl.classList.remove('visible');
+    successEl.textContent = 'Thanks. Our team will review your submission within 24 hours.';
+  }, 5000);
 }
 
 // ── ADVERTISE PAGE ──
@@ -1891,6 +2052,54 @@ function hideAdvertisePage() {
 function toggleSponsorBox() {
   const checked = document.getElementById('sb-isowner').checked;
   document.getElementById('sponsorBox').style.display = checked ? 'block' : 'none';
+  const ownerPhotoWrap = document.getElementById('ownerPhotoWrap');
+  if (ownerPhotoWrap) ownerPhotoWrap.style.display = checked ? 'block' : 'none';
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = function() {
+      const result = String(reader.result || '');
+      const idx = result.indexOf(',');
+      resolve(idx >= 0 ? result.slice(idx + 1) : result);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadOwnerSubmissionPhoto(file, meta) {
+  if (!file) return null;
+  const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+  if (!allowed.includes(file.type)) {
+    throw new Error('Unsupported file type. Use JPG, PNG, WEBP, or GIF.');
+  }
+  if (file.size > 6 * 1024 * 1024) {
+    throw new Error('File too large. Max 6MB.');
+  }
+
+  const fileBase64 = await fileToBase64(file);
+  const res = await fetch('/api/photo-admin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
+    body: JSON.stringify({
+      action: 'submit_submission_photo',
+      business_name: meta.business_name,
+      city: meta.city,
+      submitter_name: meta.submitter_name || null,
+      submitter_email: meta.submitter_email || null,
+      is_owner: true,
+      file_name: file.name,
+      mime_type: file.type,
+      file_base64: fileBase64
+    })
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error((data && data.error) ? data.error : 'Photo upload failed');
+  }
+  return data;
 }
 
 function submitAdvertise() {
@@ -2052,7 +2261,7 @@ async function loadTopPicksForCity(cityLabel, source = 'ai_generated') {
     if (ids.length > 0) {
       const { data: sponsorRows } = await sb
         .from('listings')
-        .select('listing_id,is_sponsored,rating')
+        .select('listing_id,is_sponsored,rating,photo_url,photo_status')
         .in('listing_id', ids);
       const sponsorById = {};
       (sponsorRows || []).forEach(r => { sponsorById[r.listing_id] = r; });
@@ -2061,7 +2270,9 @@ async function loadTopPicksForCity(cityLabel, source = 'ai_generated') {
         return {
           ...a,
           is_sponsored: !!(row && row.is_sponsored),
-          rating: row && typeof row.rating === 'number' ? row.rating : a.rating
+          rating: row && typeof row.rating === 'number' ? row.rating : a.rating,
+          photo_url: row && row.photo_url ? row.photo_url : null,
+          photo_status: row && row.photo_status ? row.photo_status : null
         };
       });
     }
@@ -2077,25 +2288,26 @@ async function loadTopPicksForCity(cityLabel, source = 'ai_generated') {
       const tagHtml = a.ages.map(t => `<span class="card-age-tag">${t}</span>`).join('');
       const bg = { '🏃':'#FFE8E8','🌳':'#E8FFE8','🎨':'#E8EAFF','🎮':'#FFF3E0','🦁':'#FFF8E0','💦':'#E0F7FF','🎭':'#FFF0F5','📚':'#FFFBE0','🍦':'#FFF0E0','🏆':'#E8FFEF','💃':'#F9E8FF','🔬':'#E8F4FF' }[a.emoji] || '#F5F0FF';
       const safeName = a.name.replace(/'/g, "\\'");
+      const priceLabel = getPriceLabel(a);
+      const priceClass = getPriceClass(priceLabel);
       const sponsoredBadge = a.is_sponsored ? '<div class="sponsored-badge">⭐ Sponsored</div>' : '';
       return `
       <div class="activity-card">
         ${sponsoredBadge}
-        <div class="card-thumb" style="background:${bg}">
-          <span style="filter:drop-shadow(2px 4px 6px rgba(0,0,0,.15))">${a.emoji}</span>
-          
-        </div>
+        ${renderCardThumb(a, bg)}
         <div class="card-body">
           <div class="card-category">${a.category}</div>
           <div class="card-name">${a.name}</div>
           <div class="card-tags">${tagHtml}</div>
           <div class="card-desc">${a.desc}</div>
-          <div class="card-addr" style="margin-bottom:12px">📍 ${a.addr}</div>
+          <div class="card-addr" style="margin-bottom:8px">📍 ${a.addr}</div>
+          <div style="margin-bottom:12px"><span class="price-pill ${priceClass}">${priceLabel}</span></div>
           <div class="card-footer">
             <div class="stars" id="stars-${a.id}">${stars}</div>
             <div class="card-actions">
               <button class="share-btn" onclick="sharePlace(this,'${safeName}','${(a.addr||'').replace(/'/g,"\\'")}','${(a.desc||'').replace(/'/g,"\\'")}')">📤 Share</button>
               <button class="review-btn" onclick="openReview(${a.id},'${safeName}')">✍️ Review</button>
+              <button class="claim-btn" onclick="openClaimPortal(${a.id},'${safeName}','${(cityLabel || '').replace(/'/g,"\\'")}')">🏷 Claim</button>
             </div>
           </div>
           <div style="margin-top:8px;font-size:.75rem;color:var(--muted);font-weight:600">🤖 AI-sourced · verify before visiting</div>
@@ -2180,25 +2392,26 @@ function renderCachedListings(rows) {
     const tagHtml = ages.map(t => `<span class="card-age-tag">${t.trim()}</span>`).join('');
     const cardBg = bg[a.emoji] || '#F5F0FF';
     const safeName = (a.name || '').replace(/'/g, "\\'");
+    const priceLabel = getPriceLabel(a);
+    const priceClass = getPriceClass(priceLabel);
     const sponsoredBadge = a.is_sponsored ? '<div class="sponsored-badge">⭐ Sponsored</div>' : '';
     return `
     <div class="activity-card">
       ${sponsoredBadge}
-      <div class="card-thumb" style="background:${cardBg}">
-        <span style="filter:drop-shadow(2px 4px 6px rgba(0,0,0,.15))">${a.emoji || '🎉'}</span>
-        
-      </div>
+      ${renderCardThumb(a, cardBg)}
       <div class="card-body">
         <div class="card-category">${a.category || ''}</div>
         <div class="card-name">${a.name}</div>
         <div class="card-tags">${tagHtml}</div>
         <div class="card-desc">${a.description || ''}</div>
-        <div class="card-addr" style="margin-bottom:12px">📍 ${a.address || ''}</div>
+        <div class="card-addr" style="margin-bottom:8px">📍 ${a.address || ''}</div>
+        <div style="margin-bottom:12px"><span class="price-pill ${priceClass}">${priceLabel}</span></div>
         <div class="card-footer">
           <div class="stars" id="stars-${a.listing_id}">${stars}</div>
           <div class="card-actions">
             <button class="share-btn" onclick="sharePlace(this,'${safeName}','${(a.address||'').replace(/'/g,"\\'")}','${(a.description||'').replace(/'/g,"\\'")}')">📤 Share</button>
             <button class="review-btn" onclick="openReview(${a.listing_id},'${safeName}')">✍️ Review</button>
+            <button class="claim-btn" onclick="openClaimPortal(${a.listing_id},'${safeName}','${(a.city||'').replace(/'/g,"\\'")}')">🏷 Claim</button>
           </div>
         </div>
         <div style="margin-top:8px;font-size:.75rem;color:var(--muted);font-weight:600">🤖 AI-sourced · verify before visiting</div>

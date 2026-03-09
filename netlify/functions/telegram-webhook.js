@@ -7,6 +7,7 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_ALLOWED_CHAT_ID = process.env.TELEGRAM_CHAT_ID; // your personal chat ID
+const { sendCompliantEmail } = require('./_email-compliance');
 
 // ---- TELEGRAM ----
 async function sendTelegram(chatId, text) {
@@ -58,20 +59,13 @@ async function dbUpdate(table, id, updates) {
 
 // ---- EMAIL ----
 async function sendEmail(to, subject, body, fromName = 'KiddBusy') {
-  const isHtml = body.trim().startsWith('<');
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from: `${fromName} <admin@kiddbusy.com>`,
-      to: [to],
-      subject,
-      ...(isHtml ? { html: body } : { text: body })
-    })
+  return sendCompliantEmail({
+    to,
+    subject,
+    body,
+    fromName,
+    campaignType: 'telegram_agent'
   });
-  const result = await res.json();
-  if (!res.ok) throw new Error(result.message || 'Email failed');
-  return result;
 }
 
 // ---- TOOL EXECUTOR ----

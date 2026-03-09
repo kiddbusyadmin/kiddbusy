@@ -1,5 +1,6 @@
 // Autonomous KiddBusy Agent - runs on a schedule
 // Uses fetch only — no npm dependencies required
+const { sendCompliantEmail } = require('./_email-compliance');
 
 const SUPABASE_URL = process.env.KB_DB_URL || 'https://wgwexzyqaiwosgraaczi.supabase.co';
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY;
@@ -58,23 +59,13 @@ async function dbUpdate(table, id, updates) {
 
 // ---- EMAIL via Resend ----
 async function sendEmail(to, subject, body, fromName = 'KiddBusy') {
-  const isHtml = body.trim().startsWith('<');
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${RESEND_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      from: `${fromName} <admin@kiddbusy.com>`,
-      to: [to],
-      subject,
-      ...(isHtml ? { html: body } : { text: body })
-    })
+  return sendCompliantEmail({
+    to,
+    subject,
+    body,
+    fromName,
+    campaignType: 'scheduled_agent'
   });
-  const result = await res.json();
-  if (!res.ok) throw new Error(result.message || 'Email failed');
-  return result;
 }
 
 // ---- TELEGRAM ----
