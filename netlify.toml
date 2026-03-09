@@ -47,6 +47,9 @@
   schedule = "0 15 * * *"
   timeout = 30
 
+[functions.cmo-blog-run]
+  timeout = 30
+
 [[redirects]]
   from = "/api/cmo-config"
   to = "/.netlify/functions/cmo-config"
@@ -99,7 +102,7 @@
 
 [[redirects]]
   from = "/api/cmo-blog-run"
-  to = "/.netlify/functions/cmo-blog-scheduled"
+  to = "/.netlify/functions/cmo-blog-run"
   status = 200
 
 [[redirects]]
