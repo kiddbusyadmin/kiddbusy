@@ -8,7 +8,7 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
 // ---- SUPABASE via REST ----
 async function dbQuery(table, params = {}) {
-    let url = `${SUPABASE_URL}/rest/v1/${table}?select=*&limit=100`;
+  let url = `${SUPABASE_URL}/rest/v1/${table}?select=*&limit=100`;
   if (params.eq) {
     for (const [col, val] of Object.entries(params.eq)) {
       url += `&${col}=eq.${encodeURIComponent(val)}`;
@@ -196,53 +196,28 @@ async function runAgent(log) {
 
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-  const systemPrompt = `You are the autonomous KiddBusy business agent. You run every morning to keep the business running smoothly.
+  const systemPrompt = `You are the autonomous KiddBusy admin agent. Today: ${today}.
 
-Your tasks today:
-1. Query all pending submissions — approve legitimate kid-friendly businesses with enough info, reject duplicates or those missing info
-2. Query all pending reviews — approve genuine helpful ones, reject spam or inappropriate ones
-3. Query pending sponsorships — send inquiry received email to any new ones not yet contacted
-4. Send a daily summary email to admin@kiddbusy.com with everything you did
+TASKS: Query pending submissions, reviews, sponsorships. Process each one. Send emails. End with daily summary to admin@kiddbusy.com.
 
-EMAIL TEMPLATES — personalize with real data from the database:
+APPROVAL RULES:
+- Submissions: approve if legit kid-friendly business with enough info. Reject if duplicate or missing key info.
+- Reviews: approve if genuine/helpful. Reject if spam or inappropriate.
+- Sponsorships: send inquiry received email to any new pending ones.
 
-SUBMISSION APPROVED (is_owner = true):
-Subject: Your listing is live on KiddBusy!
-<p>Hi {submitter_name},</p><p>Great news — <strong>{business_name}</strong> is now live on KiddBusy.com! Families in {city} can now find you when looking for fun things to do with their kids.</p><p>Want to stand out even more? Our sponsorship options put your business at the top of search results:</p><ul><li><strong>Sponsored Listing</strong> — $49/month</li><li><strong>Banner Ad</strong> — $199/month</li><li><strong>Bundle</strong> — $219/month (best value!)</li></ul><p>Interested? Just reply to this email!</p><p>Warmly,<br>The KiddBusy Team</p>
+EMAIL TEMPLATES (personalize with real DB data):
 
-SUBMISSION APPROVED (is_owner = false):
-Subject: The listing you submitted is live on KiddBusy!
-<p>Hi {submitter_name},</p><p>Thanks to you, <strong>{business_name}</strong> is now live on KiddBusy.com! Families in {city} can find it when looking for fun things to do with their kids.</p><p>We love having community members like you help build the directory — thank you!</p><p>Warmly,<br>The KiddBusy Team</p>
+Submission approved (is_owner=true): Subject "Your listing is live on KiddBusy!" - congrats, listing live in {city}, mention sponsorship options ($49/mo listing, $199/mo banner, $219/mo bundle).
+Submission approved (is_owner=false): Subject "The listing you submitted is live!" - thank community member, no upsell.
+Submission rejected (missing info): Subject "A note about your submission" - ask for missing fields.
+Submission rejected (duplicate): Subject "A note about your submission" - note it may already exist.
+Review approved: Subject "Your KiddBusy review is live!" - thank reviewer.
+Review rejected: Subject "About your recent review" - didn't meet guidelines, encourage resubmit.
+Sponsorship pending: Subject "Thanks for your interest in sponsoring KiddBusy!" - confirm receipt, list plans.
 
-SUBMISSION REJECTED (missing info):
-Subject: A note about your KiddBusy submission
-<p>Hi {submitter_name},</p><p>Thank you for submitting <strong>{business_name}</strong>! We need a bit more information to complete your profile: {missing_fields}. Please reply and we'll get your listing up right away!</p><p>Warmly,<br>The KiddBusy Team</p>
+Sign all emails: "The KiddBusy Team"
 
-SUBMISSION REJECTED (duplicate):
-Subject: A note about your KiddBusy submission
-<p>Hi {submitter_name},</p><p>It looks like <strong>{business_name}</strong> may already have a listing on our site. Reply if you'd like to claim or update it!</p><p>Warmly,<br>The KiddBusy Team</p>
-
-REVIEW APPROVED:
-Subject: Your KiddBusy review is live!
-<p>Hi {reviewer_name},</p><p>Your review of <strong>{business_name}</strong> is now live on KiddBusy! Thank you for helping other families find great places to go.</p><p>Warmly,<br>The KiddBusy Team</p>
-
-REVIEW REJECTED:
-Subject: About your recent KiddBusy review
-<p>Hi {reviewer_name},</p><p>We weren't able to publish your review as it didn't meet our community guidelines. We welcome honest, helpful reviews focused on the family experience. Feel free to resubmit!</p><p>Warmly,<br>The KiddBusy Team</p>
-
-SPONSORSHIP INQUIRY RECEIVED:
-Subject: Thanks for your interest in sponsoring KiddBusy!
-<p>Hi {first_name},</p><p>Thank you for reaching out about sponsoring <strong>{business_name}</strong> on KiddBusy! We'll be in touch within 1 business day.</p><p>Quick overview: Sponsored Listing ($49/mo), Banner Ad ($199/mo), Bundle ($219/mo).</p><p>Warmly,<br>The KiddBusy Team</p>
-
-DAILY SUMMARY (always send this last to admin@kiddbusy.com):
-Subject: KiddBusy Daily Agent Report — ${today}
-List everything processed: submissions approved/rejected with business names, reviews processed, sponsorship emails sent, and any issues encountered. Be specific.
-
-RULES:
-- Process everything pending — don't skip items
-- Always send the correct email after each action
-- Use good judgment on borderline cases and note them in the summary
-- Today: ${today}`;
+DAILY SUMMARY to admin@kiddbusy.com: List every action taken with business names. Be specific.`;
 
   let messages = [{
     role: 'user',
@@ -265,7 +240,7 @@ RULES:
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096,
+        max_tokens: 2048,
         system: systemPrompt,
         tools,
         messages
@@ -312,6 +287,7 @@ exports.handler = async (event) => {
   const log = (msg) => { console.log(msg); logs.push(msg); };
 
   log(`[KiddBusy Agent] Starting ${new Date().toISOString()}`);
+  log(`[config] SUPABASE_URL=${SUPABASE_URL}`);
   log(`[config] KB_DB_SERVICE_KEY=${SUPABASE_SERVICE_KEY ? "SET len=" + SUPABASE_SERVICE_KEY.length : "MISSING"}`);
   log(`[config] ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY ? "SET" : "MISSING"}`);
   log(`[config] RESEND_API_KEY=${RESEND_API_KEY ? "SET" : "MISSING"}`);
