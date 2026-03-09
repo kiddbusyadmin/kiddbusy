@@ -8,7 +8,7 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
 // ---- SUPABASE via REST ----
 async function dbQuery(table, params = {}) {
-  let url = `${SUPABASE_URL}/rest/v1/${table}?select=*&imit=100`;
+    let url = `${SUPABASE_URL}/rest/v1/${table}?select=*&limit=100`;
   if (params.eq) {
     for (const [col, val] of Object.entries(params.eq)) {
       url += `&${col}=eq.${encodeURIComponent(val)}`;
