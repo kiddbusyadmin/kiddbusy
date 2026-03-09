@@ -1,6 +1,6 @@
 // CONFIG
 const ADMIN_PASSWORD = 'kiddbusy2024';
-const SUPABASE_URL = 'https://wgbdwpbexfcxijcrxyii.supabase.co';
+const SUPABASE_URL = 'https://wgwexzyqaiwosgraaczi.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indnd2V4enlxYWl3b3NncmFhY3ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODEwNzUsImV4cCI6MjA4ODI1NzA3NX0.IS8u4SL1XeLh9KgD4c2Pl9BiGNg0zkiNauUzu_QtKH8';
 const ANTHROPIC_API_URL = '/.netlify/functions/agent-proxy';
 
@@ -8,7 +8,7 @@ const ANTHROPIC_API_URL = '/.netlify/functions/agent-proxy';
 let conversationHistory = [];
 let isLoading = false;
 let _supabase = null;
-function getSupabase() {
+function getSupabase() 
   if (!_supabase) _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   return _supabase;
 }
