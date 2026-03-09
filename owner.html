@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KiddBusy Owner Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0d1020; --card:#171b2f; --card2:#1f2440; --border:#313a66;
+  --text:#f3f5ff; --muted:#8f98c5; --accent:#57b5ff; --ok:#1fd18a; --bad:#ff6577;
+  --mono:'Space Mono',monospace; --sans:'DM Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:radial-gradient(circle at 15% 10%,#2a3d7a 0,#0d1020 55%);color:var(--text);min-height:100vh;padding:24px}
+.wrap{max-width:900px;margin:0 auto}
+.brand{font-family:var(--mono);font-size:.9rem;letter-spacing:2px;color:var(--accent);text-transform:uppercase;margin-bottom:18px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px}
+.card h2{font-size:1rem;margin-bottom:8px}
+.pill{display:inline-block;border:1px solid var(--border);border-radius:999px;padding:4px 10px;color:var(--muted);font-family:var(--mono);font-size:.68rem}
+.help{color:var(--muted);font-size:.87rem;line-height:1.5;margin-bottom:12px}
+label{display:block;font-size:.78rem;color:var(--muted);margin:12px 0 6px;font-family:var(--mono);letter-spacing:.5px;text-transform:uppercase}
+input,textarea{width:100%;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font:inherit;outline:none}
+textarea{min-height:110px;resize:vertical}
+input:focus,textarea:focus{border-color:var(--accent)}
+button{border:0;border-radius:10px;padding:10px 14px;background:var(--accent);color:#051424;font-weight:700;cursor:pointer}
+button.secondary{background:transparent;border:1px solid var(--border);color:var(--text)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.msg{margin-top:10px;font-size:.85rem;color:var(--muted)}
+.msg.ok{color:var(--ok)}
+.msg.bad{color:var(--bad)}
+.hidden{display:none}
+.listing{background:#12172b;border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:10px}
+.listing strong{display:block;font-size:1rem}
+.listing span{display:block;color:var(--muted);font-size:.82rem;margin-top:4px}
+.note{font-size:.78rem;color:var(--muted);margin-top:8px}
+@media (max-width:860px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">KIDDBUSY OWNER PORTAL</div>
+
+  <div class="grid">
+    <section class="card" id="claimCard">
+      <h2>Claim Your Listing</h2>
+      <p class="help">Enter your business email to verify ownership. If your email domain matches the listing website, access is approved instantly.</p>
+      <div class="pill" id="listingPill">No listing selected</div>
+      <div class="listing" id="listingBox" class="hidden">
+        <strong id="listingName">--</strong>
+        <span id="listingCity">--</span>
+      </div>
+
+      <label for="ownerName">Your Name</label>
+      <input id="ownerName" placeholder="Jane Owner" />
+
+      <label for="ownerEmail">Business Email</label>
+      <input id="ownerEmail" type="email" placeholder="you@business.com" />
+
+      <label for="ownerPhone">Phone (optional)</label>
+      <input id="ownerPhone" placeholder="(555) 555-5555" />
+
+      <div class="row">
+        <button id="startBtn" onclick="startClaim()">Send Verification Code</button>
+      </div>
+      <div class="msg" id="claimMsg"></div>
+
+      <div id="verifyBox" class="hidden" style="margin-top:14px">
+        <label for="claimCode">Verification Code</label>
+        <input id="claimCode" placeholder="6-digit code" maxlength="6" />
+        <div class="row">
+          <button id="verifyBtn" onclick="verifyClaim()">Verify Claim</button>
+        </div>
+        <div class="msg" id="verifyMsg"></div>
+      </div>
+    </section>
+
+    <section class="card" id="ownerDash">
+      <h2>Owner Listing Manager</h2>
+      <p class="help">Once verified, you can update your listing description and upload a real photo that replaces the emoji card image.</p>
+
+      <div id="dashLocked" class="msg">Complete claim verification to unlock editing.</div>
+
+      <div id="dashForm" class="hidden">
+        <label for="dashDesc">Description</label>
+        <textarea id="dashDesc" placeholder="Describe what families should expect..."></textarea>
+
+        <label for="dashAddr">Address</label>
+        <input id="dashAddr" placeholder="Street address" />
+
+        <label for="dashWebsite">Website</label>
+        <input id="dashWebsite" placeholder="https://your-site.com" />
+
+        <label for="dashPhoto">Listing Photo (optional)</label>
+        <input id="dashPhoto" type="file" accept="image/jpeg,image/png,image/webp,image/gif" />
+        <div class="note">Max 6MB. Uploaded owner photos are auto-approved and go live after save.</div>
+
+        <div class="row">
+          <button id="saveBtn" onclick="saveOwnerUpdates()">Save Changes</button>
+          <button class="secondary" onclick="refreshSession()">Reload</button>
+        </div>
+        <div class="msg" id="dashMsg"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+let claimId = null;
+let claimStarted = false;
+let claimVerified = false;
+let sessionToken = localStorage.getItem('kb_owner_session') || '';
+let currentListingId = null;
+let currentListingCity = '';
+let currentListingName = '';
+const ownerSessionId = Math.random().toString(36).slice(2);
+
+function q(name) {
+  const p = new URLSearchParams(location.search);
+  return p.get(name) || '';
+}
+
+function setMsg(id, text, ok) {
+  const el = document.getElementById(id);
+  el.textContent = text || '';
+  el.className = 'msg' + (text ? (ok ? ' ok' : ' bad') : '');
+}
+
+async function api(action, payload) {
+  const res = await fetch('/api/owner-claims', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-owner' },
+    body: JSON.stringify(Object.assign({ action }, payload || {}))
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+async function track(event, value) {
+  try {
+    await api('log_event', {
+      event,
+      city: currentListingCity || null,
+      value: value || null,
+      session_id: ownerSessionId
+    });
+  } catch (_) {}
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = function() {
+      const raw = String(reader.result || '');
+      const i = raw.indexOf(',');
+      resolve(i >= 0 ? raw.slice(i + 1) : raw);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function startClaim() {
+  const owner_name = document.getElementById('ownerName').value.trim();
+  const owner_email = document.getElementById('ownerEmail').value.trim();
+  const owner_phone = document.getElementById('ownerPhone').value.trim();
+
+  if (!currentListingId) {
+    setMsg('claimMsg', 'Missing listing ID in the link.', false);
+    return;
+  }
+  if (!owner_email || owner_email.indexOf('@') < 0) {
+    setMsg('claimMsg', 'Enter a valid business email.', false);
+    return;
+  }
+
+  document.getElementById('startBtn').disabled = true;
+  setMsg('claimMsg', 'Sending code...', true);
+  try {
+    const out = await api('start_claim', {
+      listing_id: currentListingId,
+      owner_name,
+      owner_email,
+      owner_phone
+    });
+    claimId = out.claim_id;
+    claimStarted = true;
+    document.getElementById('verifyBox').classList.remove('hidden');
+    setMsg('claimMsg', out.email_sent ? 'Code sent. Check your inbox.' : 'Code generated. Email delivery failed; try again later.', !!out.email_sent);
+    track('owner_claim_code_step_open', String(claimId || ''));
+  } catch (e) {
+    setMsg('claimMsg', e.message, false);
+  } finally {
+    document.getElementById('startBtn').disabled = false;
+  }
+}
+
+async function verifyClaim() {
+  const owner_email = document.getElementById('ownerEmail').value.trim();
+  const code = document.getElementById('claimCode').value.trim();
+  if (!claimId) {
+    setMsg('verifyMsg', 'Start claim first.', false);
+    return;
+  }
+  if (!code) {
+    setMsg('verifyMsg', 'Enter verification code.', false);
+    return;
+  }
+
+  document.getElementById('verifyBtn').disabled = true;
+  setMsg('verifyMsg', 'Verifying...', true);
+  try {
+    const out = await api('verify_claim', { claim_id: claimId, owner_email, code });
+    sessionToken = out.session_token || '';
+    if (sessionToken) localStorage.setItem('kb_owner_session', sessionToken);
+    claimVerified = !!out.approved;
+
+    if (out.approved) {
+      setMsg('verifyMsg', 'Verified. Owner access unlocked.', true);
+      await refreshSession();
+    } else {
+      setMsg('verifyMsg', 'Verified, pending manual review. We will notify you by email.', false);
+    }
+  } catch (e) {
+    setMsg('verifyMsg', e.message, false);
+  } finally {
+    document.getElementById('verifyBtn').disabled = false;
+  }
+}
+
+async function refreshSession() {
+  if (!sessionToken) return;
+  try {
+    const out = await api('get_session', { session_token: sessionToken });
+    const listing = out.listing || {};
+    currentListingId = listing.listing_id || currentListingId;
+    currentListingName = listing.name || currentListingName;
+    currentListingCity = listing.city || currentListingCity;
+
+    if ((out.claim || {}).status === 'approved') {
+      document.getElementById('dashLocked').classList.add('hidden');
+      document.getElementById('dashForm').classList.remove('hidden');
+      document.getElementById('dashDesc').value = listing.description || '';
+      document.getElementById('dashAddr').value = listing.address || '';
+      document.getElementById('dashWebsite').value = listing.website || '';
+      claimVerified = true;
+      track('owner_dashboard_ready', String(currentListingId || ''));
+    } else {
+      document.getElementById('dashLocked').textContent = 'Claim status: ' + (out.claim ? out.claim.status : 'pending_review') + '. Editing unlocks after approval.';
+      document.getElementById('dashLocked').classList.remove('hidden');
+      document.getElementById('dashForm').classList.add('hidden');
+      claimVerified = false;
+    }
+  } catch (e) {
+    setMsg('dashMsg', e.message, false);
+  }
+}
+
+async function saveOwnerUpdates() {
+  if (!sessionToken) {
+    setMsg('dashMsg', 'Session missing. Verify claim again.', false);
+    return;
+  }
+
+  const payload = {
+    session_token: sessionToken,
+    description: document.getElementById('dashDesc').value.trim() || null,
+    address: document.getElementById('dashAddr').value.trim() || null,
+    website: document.getElementById('dashWebsite').value.trim() || null
+  };
+
+  const file = document.getElementById('dashPhoto').files[0];
+  if (file) {
+    if (file.size > 6 * 1024 * 1024) {
+      setMsg('dashMsg', 'Photo too large. Max 6MB.', false);
+      return;
+    }
+    payload.file_name = file.name;
+    payload.mime_type = file.type || 'image/jpeg';
+    payload.file_base64 = await fileToBase64(file);
+  }
+
+  document.getElementById('saveBtn').disabled = true;
+  setMsg('dashMsg', 'Saving changes...', true);
+  try {
+    await api('submit_update', payload);
+    setMsg('dashMsg', 'Saved. Your listing updates are now live.', true);
+    document.getElementById('dashPhoto').value = '';
+    track('owner_update_saved', String(currentListingId || ''));
+  } catch (e) {
+    setMsg('dashMsg', e.message, false);
+  } finally {
+    document.getElementById('saveBtn').disabled = false;
+  }
+}
+
+async function init() {
+  currentListingId = Number(q('listing_id')) || null;
+  currentListingName = q('listing_name') || '';
+  currentListingCity = q('city') || '';
+
+  document.getElementById('listingPill').textContent = currentListingId ? ('Listing #' + currentListingId) : 'No listing selected';
+  if (currentListingName || currentListingCity) {
+    document.getElementById('listingName').textContent = currentListingName || '--';
+    document.getElementById('listingCity').textContent = currentListingCity || '--';
+    document.getElementById('listingBox').classList.remove('hidden');
+  }
+
+  track('owner_claim_open', String(currentListingId || ''));
+
+  if (sessionToken) {
+    await refreshSession();
+  }
+}
+
+window.addEventListener('beforeunload', function() {
+  if (claimStarted && !claimVerified) {
+    navigator.sendBeacon('/api/owner-claims', JSON.stringify({
+      action: 'abandon_claim',
+      claim_id: claimId,
+      city: currentListingCity || null,
+      reason: 'beforeunload'
+    }));
+  }
+});
+
+init();
+</script>
+</body>
+</html>

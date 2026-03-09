@@ -309,16 +309,16 @@
   .review-btn {
     background: var(--plum); color: #fff;
     border: none; border-radius: 50px;
-    padding: 6px 14px; font-family: 'Nunito', sans-serif;
-    font-weight: 800; font-size: 0.8rem;
+    padding: 4px 10px; font-family: 'Nunito', sans-serif;
+    font-weight: 800; font-size: 0.72rem;
     cursor: pointer; transition: background .2s, transform .1s;
   }
   .review-btn:hover { background: #5730A8; transform: scale(1.05); }
   .share-btn {
     background: transparent; color: var(--muted);
     border: 2px solid #e8e0f5; border-radius: 50px;
-    padding: 5px 12px; font-family: 'Nunito', sans-serif;
-    font-weight: 800; font-size: 0.8rem;
+    padding: 4px 10px; font-family: 'Nunito', sans-serif;
+    font-weight: 800; font-size: 0.72rem;
     cursor: pointer; transition: all .2s;
     display: inline-flex; align-items: center; gap: 4px;
   }
@@ -328,10 +328,10 @@
     color: var(--muted);
     border: 2px solid #d5cced;
     border-radius: 50px;
-    padding: 5px 12px;
+    padding: 4px 10px;
     font-family: 'Nunito', sans-serif;
     font-weight: 800;
-    font-size: 0.8rem;
+    font-size: 0.72rem;
     cursor: pointer;
     transition: all .2s;
     display: inline-flex;
@@ -349,7 +349,7 @@
   }
   .activity-card { position: relative; }
   .share-btn.copied { border-color: #22c55e; color: #22c55e; }
-  .card-actions { display: flex; align-items: center; gap: 8px; }
+  .card-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
   .price-pill {
     border-radius: 50px;
     padding: 4px 10px;
@@ -1728,7 +1728,7 @@ function renderActivities(list) {
           <div class="card-actions">
             <button class="share-btn" onclick="sharePlace(this,'${a.name.replace(/'/g,"\\'")}','${(a.addr||'').replace(/'/g,"\\'")}','${(a.desc||'').replace(/'/g,"\\'")}','${(a.website||'').replace(/'/g,"\\'")}')">📤 Share</button>
             <button class="review-btn" onclick="openReview(${a.id},'${a.name.replace(/'/g,"\\'")}')">✍️ Review</button>
-            <button class="claim-btn" onclick="openClaimPortal(${Number(a.id) > 8 ? a.id : 0},'${a.name.replace(/'/g,"\\'")}','${(document.getElementById('citySelect')?.value || '').replace(/'/g,"\\'")}')">🏷 Claim</button>
+            ${Number(a.id) > 8 ? `<button class=\"claim-btn\" onclick=\"openClaimPortal(${a.id},'${a.name.replace(/'/g,"\\'")}','${(document.getElementById('citySelect')?.value || '').replace(/'/g,"\\'")}')\">🏷 Claim</button>` : ''}
           </div>
         </div>
         <button class="correction-btn" onclick="openCorrection(${a.id},'${a.name.replace(/'/g,"\\'")}')">🚩 Suggest a correction</button>
