@@ -84,6 +84,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 .panel-title{font-family:var(--mono);font-size:.78rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);}
 .panel-badge{font-family:var(--mono);font-size:.68rem;padding:3px 8px;border-radius:4px;background:var(--surface2);color:var(--muted);}
 .panel-body{padding:16px 20px;}
+.panel-body.compact{padding:10px 14px;max-height:130px;overflow:auto;}
+.table-wrap{overflow:auto;}
 
 /* Data table */
 .data-table{width:100%;border-collapse:collapse;font-size:.82rem;}
@@ -111,7 +113,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 
 /* Filter pills */
 .filter-pills{display:flex;flex-wrap:wrap;gap:8px;}
-.filter-pill{display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-size:.78rem;transition:border-color .2s;}
+.filter-pill{display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 9px;font-size:.74rem;transition:border-color .2s;}
 .filter-pill:hover{border-color:var(--accent2);}
 .filter-pill-count{font-family:var(--mono);font-weight:700;color:var(--accent2);}
 
@@ -219,7 +221,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
   <div class="topbar-logo">Kidd<span>Busy</span></div>
   <div class="tabs">
     <div class="tab active" onclick="switchTab('dash',this)" id="tab-dash">Dashboard</div>
+    <div class="tab" onclick="switchTab('submissions',this)" id="tab-submissions">Submissions</div>
     <div class="tab" onclick="switchTab('locations',this)" id="tab-locations">Locations</div>
+    <div class="tab" onclick="switchTab('cache',this)" id="tab-cache">Cache</div>
+    <div class="tab" onclick="switchTab('activity',this)" id="tab-activity">Activity</div>
+    <div class="tab" onclick="switchTab('integrity',this)" id="tab-integrity">Integrity</div>
     <div class="tab" onclick="switchTab('agent',this)" id="tab-agent">Agent</div>
   </div>
   <div class="topbar-right">
@@ -302,62 +308,14 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
     </div>
   </div>
 
-  <!-- FILTER USAGE + CACHE HEALTH -->
-  <div class="panels">
+  <!-- FILTER USAGE -->
+  <div class="panels full">
     <div class="panel">
       <div class="panel-header">
         <div class="panel-title">Filter Usage</div>
         <div class="panel-badge">all time</div>
       </div>
-      <div class="panel-body" id="body-filters">
-        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
-      </div>
-    </div>
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Cache Health</div>
-        <div class="panel-badge" id="badge-cache">--</div>
-      </div>
-      <div class="panel-body" id="body-cache">
-        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- LIVE ACTIVITY FEED -->
-  <div class="panels full">
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Live Activity Feed</div>
-        <div class="panel-badge">last 50 events</div>
-      </div>
-      <div class="panel-body" id="body-activity">
-        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- DATA INTEGRITY -->
-  <div class="panels full">
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Listings Data Integrity</div>
-        <div class="panel-badge">organic vs seeded</div>
-      </div>
-      <div class="panel-body" id="body-integrity">
-        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- SUBMISSIONS INBOX -->
-  <div class="panels full">
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Submissions Inbox</div>
-        <div class="panel-badge" id="badge-subs">--</div>
-      </div>
-      <div id="body-subs">
+      <div class="panel-body compact" id="body-filters">
         <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
       </div>
     </div>
@@ -378,6 +336,24 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 
 </div>
 </div><!-- /view-dash -->
+
+<!-- SUBMISSIONS VIEW -->
+<div class="view" id="view-submissions">
+<div class="locations-inner">
+  <div class="date-banner">// SUBMISSIONS REVIEW</div>
+  <div class="panels full">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Submissions Inbox</div>
+        <div class="panel-badge" id="badge-subs">--</div>
+      </div>
+      <div id="body-subs">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div><!-- /view-submissions -->
 
 <!-- LOCATIONS VIEW -->
 <div class="view" id="view-locations">
@@ -407,6 +383,60 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
   </div>
 </div>
 </div><!-- /view-locations -->
+
+<!-- CACHE VIEW -->
+<div class="view" id="view-cache">
+<div class="locations-inner">
+  <div class="date-banner">// CACHE HEALTH</div>
+  <div class="panels full">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Cache Health</div>
+        <div class="panel-badge" id="badge-cache">--</div>
+      </div>
+      <div class="panel-body" id="body-cache">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div><!-- /view-cache -->
+
+<!-- ACTIVITY VIEW -->
+<div class="view" id="view-activity">
+<div class="locations-inner">
+  <div class="date-banner">// LIVE ACTIVITY FEED</div>
+  <div class="panels full">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Live Activity Feed</div>
+        <div class="panel-badge">last 50 events</div>
+      </div>
+      <div class="panel-body" id="body-activity">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div><!-- /view-activity -->
+
+<!-- INTEGRITY VIEW -->
+<div class="view" id="view-integrity">
+<div class="locations-inner">
+  <div class="date-banner">// LISTINGS SOURCE INTEGRITY</div>
+  <div class="panels full">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Listings Source Integrity</div>
+        <div class="panel-badge" id="badge-integrity">by source</div>
+      </div>
+      <div class="panel-body" id="body-integrity">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div><!-- /view-integrity -->
 
 <!-- AGENT VIEW -->
 <div class="view" id="view-agent">
@@ -790,59 +820,48 @@ async function loadDataIntegrity() {
     return;
   }
 
-  var bySrc = {};
-  res.data.forEach(function(r) {
-    var src = r.source || 'unknown';
-    bySrc[src] = (bySrc[src] || 0) + 1;
-  });
-
   var total = res.data.length;
-  var cityBrkdn = {};
+  var bySource = {};
+  var byCity = {};
+
   res.data.forEach(function(r) {
-    var city = r.city;
-    var src = r.source || 'unknown';
-    if (!cityBrkdn[city]) cityBrkdn[city] = { ai_generated:0, preseed:0, background_refresh:0, user_submitted:0, unknown:0 };
-    cityBrkdn[city][src] = (cityBrkdn[city][src] || 0) + 1;
+    var src = (r.source || 'unknown').toLowerCase();
+    var city = r.city || 'Unknown';
+    bySource[src] = (bySource[src] || 0) + 1;
+    if (!byCity[city]) byCity[city] = {};
+    byCity[city][src] = (byCity[city][src] || 0) + 1;
   });
 
-  var sorted = Object.entries(cityBrkdn).sort(function(a, b) {
-    var totA = Object.values(a[1]).reduce(function(s,v){return s+v;}, 0);
-    var totB = Object.values(b[1]).reduce(function(s,v){return s+v;}, 0);
-    return totB - totA;
+  var sources = Object.keys(bySource).sort(function(a, b) { return bySource[b] - bySource[a]; });
+  var citiesSorted = Object.entries(byCity).sort(function(a, b) {
+    var totalA = Object.values(a[1]).reduce(function(s, v) { return s + v; }, 0);
+    var totalB = Object.values(b[1]).reduce(function(s, v) { return s + v; }, 0);
+    return totalB - totalA;
   });
-
-  var srcColor = { ai_generated:'var(--blue)', preseed:'var(--yellow)', background_refresh:'#a78bfa', user_submitted:'var(--green)', ai_seed:'#f97316', unknown:'var(--muted)' };
-  var srcLabel = { ai_generated:'AI Generated', preseed:'Pre-seeded', background_refresh:'BG Refresh', user_submitted:'User Submitted', ai_seed:'AI Reviews', unknown:'Unknown' };
 
   var summaryHtml = '<div style="display:flex;gap:24px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border);flex-wrap:wrap">';
-  summaryHtml += '<div><div style="font-family:var(--mono);font-size:.65rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Total Listings</div>';
+  summaryHtml += '<div><div style="font-family:var(--mono);font-size:.65rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Total Active Listings</div>';
   summaryHtml += '<div style="font-family:var(--mono);font-size:1.6rem;font-weight:700;color:var(--text)">' + total + '</div></div>';
-
-  Object.entries(bySrc).forEach(function(entry) {
-    var src = entry[0], count = entry[1];
-    var lbl = srcLabel[src] || src;
-    var col = srcColor[src] || 'var(--text)';
-    summaryHtml += '<div><div style="font-family:var(--mono);font-size:.65rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">' + lbl + '</div>';
-    summaryHtml += '<div style="font-family:var(--mono);font-size:1.6rem;font-weight:700;color:' + col + '">' + count + ' <span style="font-size:.9rem;opacity:.6">' + Math.round(count/total*100) + '%</span></div></div>';
+  sources.forEach(function(src) {
+    var count = bySource[src];
+    summaryHtml += '<div><div style="font-family:var(--mono);font-size:.65rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">' + src.replace(/_/g, ' ') + '</div>';
+    summaryHtml += '<div style="font-family:var(--mono);font-size:1.3rem;font-weight:700;color:var(--blue)">' + count + ' <span style="font-size:.9rem;opacity:.6">' + Math.round((count / total) * 100) + '%</span></div></div>';
   });
   summaryHtml += '</div>';
 
-  var tableHtml = '<table class="data-table"><thead><tr>' +
-    '<th>City</th><th>Total</th><th>AI Generated</th><th>Pre-seeded</th><th>BG Refresh</th><th>User Submitted</th>' +
-    '</tr></thead><tbody>' +
-    sorted.map(function(entry) {
-      var city = entry[0], c = entry[1];
-      var tot = Object.values(c).reduce(function(s,v){return s+v;}, 0);
-      return '<tr>' +
-        '<td style="font-weight:500">' + city + '</td>' +
-        '<td style="font-family:var(--mono)">' + tot + '</td>' +
-        '<td style="font-family:var(--mono);color:' + (c.ai_generated>0?'var(--blue)':'var(--muted)') + '">' + (c.ai_generated||0) + '</td>' +
-        '<td style="font-family:var(--mono);color:' + (c.preseed>0?'var(--yellow)':'var(--muted)') + '">' + (c.preseed||0) + '</td>' +
-        '<td style="font-family:var(--mono);color:' + (c.background_refresh>0?'#a78bfa':'var(--muted)') + '">' + (c.background_refresh||0) + '</td>' +
-        '<td style="font-family:var(--mono);color:' + (c.user_submitted>0?'var(--green)':'var(--muted)') + '">' + (c.user_submitted||0) + '</td>' +
-        '</tr>';
-    }).join('') + '</tbody></table>';
+  var headCols = sources.map(function(src) { return '<th>' + src.replace(/_/g, ' ') + '</th>'; }).join('');
+  var rowsHtml = citiesSorted.map(function(entry) {
+    var city = entry[0];
+    var counts = entry[1];
+    var cityTotal = Object.values(counts).reduce(function(s, v) { return s + v; }, 0);
+    var srcCells = sources.map(function(src) {
+      var n = counts[src] || 0;
+      return '<td style="font-family:var(--mono);color:' + (n ? 'var(--text)' : 'var(--muted)') + '">' + n + '</td>';
+    }).join('');
+    return '<tr><td style="font-weight:500">' + city + '</td><td style="font-family:var(--mono)">' + cityTotal + '</td>' + srcCells + '</tr>';
+  }).join('');
 
+  var tableHtml = '<div class="table-wrap"><table class="data-table"><thead><tr><th>City</th><th>Total</th>' + headCols + '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>';
   document.getElementById('body-integrity').innerHTML = summaryHtml + tableHtml;
 }
 
@@ -864,8 +883,8 @@ async function loadSubmissions() {
   }
 
   document.getElementById('body-subs').innerHTML =
-    '<table class="data-table"><thead><tr>' +
-    '<th>Business</th><th>Type</th><th>City</th><th>Contact</th><th>Status</th><th>Date</th><th>Actions</th>' +
+    '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+    '<th>Business</th><th>Type</th><th>City</th><th>Address</th><th>Owner?</th><th>Sponsor?</th><th>Name</th><th>Email</th><th>URL</th><th>Description</th><th>Status</th><th>Date</th><th>Actions</th>' +
     '</tr></thead><tbody>' +
     (rows || []).map(function(s) {
       var matchKey = encodeURIComponent(JSON.stringify({
@@ -883,12 +902,18 @@ async function loadSubmissions() {
         '<td style="font-weight:500">' + (s.business_name || '--') + '</td>' +
         '<td style="color:var(--muted)">' + (s.type || '--') + '</td>' +
         '<td style="color:var(--muted)">' + (s.city || '--') + '</td>' +
-        '<td style="color:var(--muted);font-size:.75rem">' + (s.submitter_email || s.submitter_name || '--') + '</td>' +
+        '<td style="color:var(--muted);font-size:.75rem">' + (s.address || '--') + '</td>' +
+        '<td style="font-family:var(--mono);font-size:.72rem">' + (s.is_owner ? 'yes' : 'no') + '</td>' +
+        '<td style="font-family:var(--mono);font-size:.72rem">' + (s.wants_sponsorship ? 'yes' : 'no') + '</td>' +
+        '<td style="color:var(--muted);font-size:.75rem">' + (s.submitter_name || '--') + '</td>' +
+        '<td style="color:var(--muted);font-size:.75rem">' + (s.submitter_email || '--') + '</td>' +
+        '<td style="color:var(--muted);font-size:.75rem">' + (s.url ? '<a href=\"' + s.url + '\" target=\"_blank\" rel=\"noopener\" style=\"color:var(--blue)\">open</a>' : '--') + '</td>' +
+        '<td style="color:var(--muted);font-size:.75rem;max-width:260px;white-space:normal">' + ((s.description || '--').toString().slice(0, 220)) + '</td>' +
         '<td><span class="status-badge ' + s.status + '">' + s.status + '</span></td>' +
         '<td style="color:var(--muted);font-family:var(--mono);font-size:.72rem">' + (s.created_at ? timeAgo(s.created_at) : '--') + '</td>' +
         '<td>' + actions + '</td>' +
         '</tr>';
-    }).join('') + '</tbody></table>';
+    }).join('') + '</tbody></table></div>';
 }
 
 // ===== SPONSOR MANAGER =====
