@@ -40,7 +40,7 @@ exports.handler = async (event) => {
     return json(400, { error: 'Invalid JSON body' });
   }
 
-  const { action, table, id, updates } = body;
+  const { action, table, id, updates, match } = body;
 
   if (action !== 'update') {
     return json(400, { error: 'Unsupported action' });
@@ -48,10 +48,6 @@ exports.handler = async (event) => {
 
   if (!ALLOWED_TABLES[table]) {
     return json(400, { error: 'Unsupported table' });
-  }
-
-  if (!id) {
-    return json(400, { error: 'Missing id' });
   }
 
   if (!updates || typeof updates !== 'object') {
@@ -68,9 +64,60 @@ exports.handler = async (event) => {
     return json(400, { error: 'Invalid status for table' });
   }
 
-  const url = `${SUPABASE_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`;
+  const buildSubmissionFilter = (m) => {
+    const keys = ['business_name', 'submitter_email', 'city', 'status'];
+    const parts = [];
+    for (const key of keys) {
+      const value = m && typeof m[key] === 'string' ? m[key].trim() : '';
+      if (value) parts.push(`${key}=eq.${encodeURIComponent(value)}`);
+    }
+    return parts;
+  };
+
+  let filterParts = [];
+  if (id) {
+    filterParts = [`id=eq.${encodeURIComponent(id)}`];
+  } else if (table === 'submissions') {
+    filterParts = buildSubmissionFilter(match);
+    if (filterParts.length < 2) {
+      return json(400, { error: 'Missing id and insufficient submission match fields' });
+    }
+  } else {
+    return json(400, { error: 'Missing id' });
+  }
+
+  const filterQuery = filterParts.join('&');
+  const url = `${SUPABASE_URL}/rest/v1/${table}?${filterQuery}`;
 
   try {
+    // For submissions without id, require exactly one match.
+    if (!id && table === 'submissions') {
+      const preflight = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=business_name,submitter_email,city,status&${filterQuery}&limit=2`, {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_SERVICE_KEY,
+          'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const preflightText = await preflight.text();
+      let rows = [];
+      try {
+        rows = preflightText ? JSON.parse(preflightText) : [];
+      } catch {
+        rows = [];
+      }
+      if (!preflight.ok) {
+        return json(preflight.status, { error: 'Supabase preflight failed', details: preflightText });
+      }
+      if (!Array.isArray(rows) || rows.length === 0) {
+        return json(404, { error: 'No matching submission found for update' });
+      }
+      if (rows.length > 1) {
+        return json(409, { error: 'Ambiguous submission match; multiple rows found' });
+      }
+    }
+
     const response = await fetch(url, {
       method: 'PATCH',
       headers: {

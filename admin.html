@@ -516,11 +516,11 @@ function emptyHTML(msg) {
 }
 
 // ===== WRITE OPS via db-proxy =====
-async function dbWrite(table, id, updates) {
+async function dbWrite(table, id, updates, match) {
   var res = await fetch('/.netlify/functions/db-proxy', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
-    body: JSON.stringify({ action: 'update', table: table, id: id, updates: updates })
+    body: JSON.stringify({ action: 'update', table: table, id: id, updates: updates, match: match || null })
   });
   if (!res.ok) {
     var e = await res.json();
@@ -830,9 +830,16 @@ async function loadSubmissions() {
     '<th>Business</th><th>Type</th><th>City</th><th>Contact</th><th>Status</th><th>Date</th><th>Actions</th>' +
     '</tr></thead><tbody>' +
     (res.data || []).map(function(s) {
+      var matchKey = encodeURIComponent(JSON.stringify({
+        business_name: s.business_name || '',
+        submitter_email: s.submitter_email || '',
+        city: s.city || '',
+        status: s.status || ''
+      }));
+      var idArg = s.id ? '\'' + s.id + '\'' : 'null';
       var actions = s.status === 'pending'
-        ? '<button class="act-btn approve" onclick="updateStatus(\'submissions\',\'' + s.id + '\',\'approved\',this)">Approve</button> ' +
-          '<button class="act-btn reject" onclick="updateStatus(\'submissions\',\'' + s.id + '\',\'rejected\',this)">Reject</button>'
+        ? '<button class="act-btn approve" onclick="updateStatus(\'submissions\',' + idArg + ',\'approved\',this,\'' + matchKey + '\')">Approve</button> ' +
+          '<button class="act-btn reject" onclick="updateStatus(\'submissions\',' + idArg + ',\'rejected\',this,\'' + matchKey + '\')">Reject</button>'
         : '--';
       return '<tr>' +
         '<td style="font-weight:500">' + (s.business_name || '--') + '</td>' +
@@ -977,11 +984,15 @@ async function loadLeads() {
 }
 
 // ===== STATUS UPDATE =====
-async function updateStatus(table, id, status, btn) {
+async function updateStatus(table, id, status, btn, matchKey) {
   btn.disabled = true;
   btn.textContent = '...';
   try {
-    await dbWrite(table, id, { status: status });
+    var match = null;
+    if (!id && matchKey) {
+      match = JSON.parse(decodeURIComponent(matchKey));
+    }
+    await dbWrite(table, id, { status: status }, match);
     if (table === 'submissions') loadSubmissions();
     else loadAll();
   } catch(e) {
