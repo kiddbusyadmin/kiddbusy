@@ -48,11 +48,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 
 /* VIEWS */
 .view{display:none;flex:1;overflow:hidden;}
-.view.active{display:flex;flex-direction:column;}
+.view.active{display:flex;flex-direction:column;overflow-y:auto;}
 
 /* ===================== DASHBOARD ===================== */
 #view-dash{overflow-y:auto;}
 #view-locations{overflow-y:auto;}
+#view-agent{overflow:hidden;}
 .dash-inner{padding:24px 32px;max-width:1400px;margin:0 auto;}
 .locations-inner{padding:24px 32px;max-width:1400px;margin:0 auto;}
 .date-banner{font-family:var(--mono);font-size:.68rem;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:20px;}
