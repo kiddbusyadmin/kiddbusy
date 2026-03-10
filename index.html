@@ -251,6 +251,28 @@
     position: absolute; font-size: 2.5rem; animation: float 4s ease-in-out infinite;
     pointer-events: none;
   }
+  body.hero-mock-citypark .hero {
+    padding-top: 72px;
+    padding-bottom: 96px;
+    background-position: center 42%;
+  }
+  body.hero-mock-citypark .city-picker-wrap {
+    max-width: 560px;
+    margin-top: 18px;
+  }
+  body.hero-mock-citypark .stacked-picker {
+    background: rgba(255,255,255,0.14);
+    border: 1px solid rgba(255,255,255,0.28);
+    border-radius: 24px;
+    padding: 12px;
+    backdrop-filter: blur(2px);
+  }
+  body.hero-mock-citypark .pick-row {
+    margin: 0;
+  }
+  body.hero-mock-citypark .find-btn {
+    margin-top: 2px;
+  }
   @keyframes float {
     0%,100% { transform: translateY(0); }
     50% { transform: translateY(-14px); }
@@ -3304,9 +3326,10 @@ function applyHeroMockVariantFromQuery() {
     var hero = document.querySelector('.hero');
     if (!hero) return;
     if (variant === 'citypark' || variant === 'city_park' || variant === 'city-park') {
+      document.body.classList.add('hero-mock-citypark');
       hero.style.background = "linear-gradient(135deg, rgba(26,18,48,0.60) 0%, rgba(108,63,197,0.42) 100%), url('https://wgwexzyqaiwosgraaczi.supabase.co/storage/v1/object/public/listing-photos/branding/search-backgrounds/kiddbusy/1773165482061-3.png')";
       hero.style.backgroundSize = 'cover';
-      hero.style.backgroundPosition = 'center';
+      hero.style.backgroundPosition = 'center 42%';
       document.documentElement.style.setProperty('--hero-overlay-pattern', 'radial-gradient(circle at 20% 15%, rgba(255,255,255,0.16), transparent 45%)');
     }
   } catch (_) {}
