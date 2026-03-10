@@ -307,8 +307,6 @@ exports.handler = async function handler(event, context) {
 
   const city = safeString(body.city, 100);
   const type = safeString(body.type, 20);
-  const source = String(event.headers['x-requested-from'] || event.headers['X-Requested-From'] || '').toLowerCase();
-  const providerOverride = source === 'kiddbusy-hq' ? safeString(body.provider_override, 20).toLowerCase() : '';
   if (!city) return json(400, { error: 'Invalid city' });
   if (type !== 'activities' && type !== 'events') {
     return json(400, { error: 'Invalid type' });
@@ -321,24 +319,16 @@ exports.handler = async function handler(event, context) {
   });
 
   let anthropicErr = null;
-  if (providerOverride !== 'openai') {
-    try {
-      const primary = await callAnthropic(city, type, today);
-      return json(200, {
-        provider: primary.provider,
-        fallback_used: false,
-        content: [{ type: 'text', text: JSON.stringify(primary.items) }]
-      });
-    } catch (err) {
-      anthropicErr = err;
-      if (providerOverride === 'anthropic') {
-        return json(503, {
-          error: 'Anthropic provider unavailable',
-          primary_error: String(err && err.message ? err.message : err)
-        });
-      }
-      console.warn('[search] anthropic failed, trying openai fallback:', err && err.message ? err.message : err);
-    }
+  try {
+    const primary = await callAnthropic(city, type, today);
+    return json(200, {
+      provider: primary.provider,
+      fallback_used: false,
+      content: [{ type: 'text', text: JSON.stringify(primary.items) }]
+    });
+  } catch (err) {
+    anthropicErr = err;
+    console.warn('[search] anthropic failed, trying openai fallback:', err && err.message ? err.message : err);
   }
 
   try {
