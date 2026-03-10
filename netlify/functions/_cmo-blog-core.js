@@ -105,10 +105,16 @@ async function getCityListingContext(city, limit) {
   var safeCity = encodeURIComponent(String(city || '').trim());
   if (!safeCity) return [];
   var maxRows = clampNumber(limit, 3, 20, 10);
-  var q = 'listings?select=name,category,address,website&city=ilike.*' + safeCity + '*&status=eq.active&order=rating.desc.nullslast&limit=' + String(maxRows);
+  var fetchRows = clampNumber(maxRows * 8, 10, 120, 40);
+  var q = 'listings?select=name,category,address,website,is_sponsored&city=ilike.*' + safeCity + '*&status=eq.active&order=rating.desc.nullslast&limit=' + String(fetchRows);
   var result = await sbFetch(q);
   if (!result.response.ok || !Array.isArray(result.data)) return [];
-  return result.data;
+  var filtered = [];
+  for (var i = 0; i < result.data.length; i += 1) {
+    if (isLikelyFreePublicListing(result.data[i])) filtered.push(result.data[i]);
+    if (filtered.length >= maxRows) break;
+  }
+  return filtered;
 }
 
 function pickTargetCity(cities, preferredCity) {
@@ -154,6 +160,75 @@ function countNameMentions(text, names) {
   return hits;
 }
 
+function safeLower(v) {
+  return String(v || '').trim().toLowerCase();
+}
+
+function isPublicDomain(website) {
+  var url = safeLower(website);
+  if (!url) return false;
+  return (
+    url.indexOf('.gov') >= 0 ||
+    url.indexOf('.edu') >= 0 ||
+    url.indexOf('publiclibrary') >= 0 ||
+    url.indexOf('parks') >= 0 ||
+    url.indexOf('recreation') >= 0 ||
+    url.indexOf('cityof') >= 0 ||
+    url.indexOf('county') >= 0
+  );
+}
+
+function isLikelyFreePublicListing(row) {
+  var r = row || {};
+  if (r.is_sponsored === true) return false;
+  var hay = safeLower([r.name, r.category, r.address, r.website].join(' '));
+  if (!hay) return false;
+
+  var blocked = [
+    'museum',
+    'zoo',
+    'aquarium',
+    'theater',
+    'cinema',
+    'trampoline',
+    'arcade',
+    'play cafe',
+    'gymnastics',
+    'music school',
+    'dance studio',
+    'class',
+    'camp',
+    'restaurant',
+    'cafe',
+    'brewery',
+    'ticket',
+    'admission',
+    'membership'
+  ];
+  for (var i = 0; i < blocked.length; i += 1) {
+    if (hay.indexOf(blocked[i]) >= 0) return false;
+  }
+
+  var freePublicSignals = [
+    'park',
+    'playground',
+    'library',
+    'trail',
+    'greenway',
+    'nature center',
+    'community center',
+    'splash pad',
+    'beach',
+    'riverwalk',
+    'public pool',
+    'plaza'
+  ];
+  for (var j = 0; j < freePublicSignals.length; j += 1) {
+    if (hay.indexOf(freePublicSignals[j]) >= 0) return true;
+  }
+  return isPublicDomain(r.website);
+}
+
 function stripTags(html) {
   return String(html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -194,6 +269,28 @@ function hasCurrentTimeAnchor(text) {
   return false;
 }
 
+function hasCommercialSignals(text) {
+  var hay = safeLower(text);
+  if (!hay) return false;
+  var blocked = [
+    'museum',
+    'zoo',
+    'aquarium',
+    'ticket',
+    'tickets',
+    'admission',
+    'membership',
+    'book now',
+    'reserve now',
+    'buy now',
+    'price:'
+  ];
+  for (var i = 0; i < blocked.length; i += 1) {
+    if (hay.indexOf(blocked[i]) >= 0) return true;
+  }
+  return false;
+}
+
 function hasStrongLocalSignals(post, targetCity, localListingNames) {
   var city = String(targetCity || '').trim().toLowerCase();
   var body = String((post && post.body_html) || '').toLowerCase();
@@ -204,6 +301,7 @@ function hasStrongLocalSignals(post, targetCity, localListingNames) {
   if (!city || combined.indexOf(city) < 0) return false;
   if (wordCount(stripTags(body)) < 220) return false;
   if (!hasCurrentTimeAnchor(combined)) return false;
+  if (hasCommercialSignals(combined)) return false;
 
   var mentions = countNameMentions(combined, localListingNames || []);
   if (localListingNames && localListingNames.length) {
@@ -213,7 +311,7 @@ function hasStrongLocalSignals(post, targetCity, localListingNames) {
   }
 
   // Fallback heuristic when no local listing names are available.
-  var anchors = ['museum', 'park', 'library', 'zoo', 'children', 'downtown', 'neighborhood'];
+  var anchors = ['park', 'library', 'trail', 'playground', 'greenway', 'neighborhood', 'public'];
   var anchorHits = 0;
   for (var i = 0; i < anchors.length; i += 1) {
     if (combined.indexOf(anchors[i]) >= 0) anchorHits += 1;
@@ -309,7 +407,6 @@ async function generateBatch(cities, existingTitles, batchSize, preferredCity) {
   var prompt = [
     'Generate exactly ' + String(batchSize) + ' unique blog posts for KiddBusy as a JSON array.',
     'Primary city for all posts in this batch: ' + targetCity + '.',
-    'Use web search for current local facts before writing.',
     cityContext,
     'Hard rules:',
     '- 220-380 words per post in body_html.',
@@ -318,7 +415,8 @@ async function generateBatch(cities, existingTitles, batchSize, preferredCity) {
     '- tags must be 4-6 items.',
     '- read_minutes integer 3-10.',
     '- city must be exactly "' + targetCity + '" (not null).',
-    '- Include at least 3 specific local places by exact name from the Known local listings block.',
+    '- Include at least 3 specific free/public spaces by exact name from the Known local listings block.',
+    '- Do not mention businesses, private venues, museums, zoos, ticketed attractions, classes, or paid admissions.',
     '- Include a <h2>Local Picks</h2> section with a <ul> and at least 3 <li> entries.',
     '- Include official site links when available in context.',
     '- Use full names as provided in context. Do not invent place names.',
@@ -454,6 +552,14 @@ async function getPublishedSeedPosts(limit) {
   return result.data;
 }
 
+async function getPublishedCmoPosts(limit) {
+  var capped = clampNumber(limit, 1, 200, 40);
+  var q = 'blog_posts?select=id,city,slug,title&source=eq.cmo_agent&status=eq.published&order=published_at.asc&limit=' + String(capped);
+  var result = await sbFetch(q);
+  if (!result.response.ok || !Array.isArray(result.data)) return [];
+  return result.data;
+}
+
 async function getArchivedSeedPosts(limit) {
   var capped = clampNumber(limit, 1, 200, 40);
   var q = 'blog_posts?select=id,city,slug,title&source=eq.cmo_seed&status=eq.archived&order=updated_at.desc&limit=' + String(capped);
@@ -513,13 +619,15 @@ async function runCmoBlog(event) {
       50
     );
     var repairSeeded = !!body.repair_seeded;
+    var repairPublishedCmo = !!body.repair_published_cmo;
+    var repairAny = repairSeeded || repairPublishedCmo;
     var restoreSeeded = !!body.restore_seeded;
     var distributionEnabled = Object.prototype.hasOwnProperty.call(body, 'distribution_enabled')
       ? !!body.distribution_enabled
       : !!settings.blog_distribution_enabled;
     var forcePublishGenerated = Object.prototype.hasOwnProperty.call(body, 'force_publish_generated')
       ? !!body.force_publish_generated
-      : !!repairSeeded;
+      : !!repairAny;
     var publishRate = clampNumber(
       Object.prototype.hasOwnProperty.call(body, 'publish_rate') ? body.publish_rate : settings.blog_publish_rate_per_day,
       1,
@@ -529,10 +637,10 @@ async function runCmoBlog(event) {
     var maxGeneratePerRun = clampNumber(
       Object.prototype.hasOwnProperty.call(body, 'max_generate_per_run')
         ? body.max_generate_per_run
-        : (repairSeeded ? 3 : 1),
+        : (repairAny ? 3 : 1),
       0,
       5,
-      (repairSeeded ? 3 : 1)
+      (repairAny ? 3 : 1)
     );
     var targetCity = Object.prototype.hasOwnProperty.call(body, 'target_city') ? String(body.target_city || '').trim() : '';
 
@@ -540,8 +648,10 @@ async function runCmoBlog(event) {
     var identity = await getIdentitySets();
     var plannedCityRotation = [];
     var archivedSeedCount = 0;
+    var archivedCmoCount = 0;
     var restoredSeedCount = 0;
     var seedBacklogCount = 0;
+    var cmoBacklogCount = 0;
     var repairWindow = [];
 
     if (restoreSeeded) {
@@ -576,13 +686,30 @@ async function runCmoBlog(event) {
         if (plannedCityRotation.length === 0 && cities.length) plannedCityRotation = cities.slice(0, 10);
       }
     }
+    if (repairPublishedCmo) {
+      var publishedCmo = await getPublishedCmoPosts(100);
+      cmoBacklogCount = publishedCmo.length;
+      if (publishedCmo.length) {
+        repairWindow = publishedCmo.slice(0, maxGeneratePerRun);
+        var seenCmoCities = {};
+        for (var c = 0; c < repairWindow.length; c += 1) {
+          var cmoCity = String((repairWindow[c] && repairWindow[c].city) || '').trim();
+          if (!cmoCity) continue;
+          var cKey = cmoCity.toLowerCase();
+          if (seenCmoCities[cKey]) continue;
+          seenCmoCities[cKey] = true;
+          plannedCityRotation.push(cmoCity);
+        }
+        if (plannedCityRotation.length === 0 && cities.length) plannedCityRotation = cities.slice(0, 10);
+      }
+    }
 
     var already = await countDraftsToday();
     var remaining = queueTarget - already;
     if (remaining < 0) remaining = 0;
     if (remaining > 200) remaining = 200;
     if (remaining > maxGeneratePerRun) remaining = maxGeneratePerRun;
-    if (repairSeeded && repairWindow.length > 0 && remaining < repairWindow.length) remaining = repairWindow.length;
+    if (repairAny && repairWindow.length > 0 && remaining < repairWindow.length) remaining = repairWindow.length;
     if (remaining > 80) remaining = 80;
 
     var generated = [];
@@ -631,12 +758,12 @@ async function runCmoBlog(event) {
     } else if (distributionEnabled) {
       published = await publishFromQueue(publishRate);
     }
-    if (repairSeeded && repairWindow.length && generated.length) {
+    if (repairAny && repairWindow.length && generated.length) {
       var archiveCount = generated.length;
       if (archiveCount > repairWindow.length) archiveCount = repairWindow.length;
-      archivedSeedCount = await archivePostsByIds(
-        repairWindow.slice(0, archiveCount).map(function (row) { return row.id; })
-      );
+      var archived = await archivePostsByIds(repairWindow.slice(0, archiveCount).map(function (row) { return row.id; }));
+      if (repairSeeded) archivedSeedCount = archived;
+      if (repairPublishedCmo) archivedCmoCount = archived;
     }
 
     var depth = await queueDepth();
@@ -652,9 +779,12 @@ async function runCmoBlog(event) {
         max_generate_per_run: maxGeneratePerRun,
         target_city: targetCity || null,
         repair_seeded: repairSeeded,
+        repair_published_cmo: repairPublishedCmo,
         archived_seed_count: archivedSeedCount,
+        archived_cmo_count: archivedCmoCount,
         restored_seed_count: restoredSeedCount,
         seed_backlog_count: seedBacklogCount,
+        cmo_backlog_count: cmoBacklogCount,
         force_publish_generated: forcePublishGenerated,
         generated_count: generated.length,
         published_count: published.length,
@@ -671,9 +801,12 @@ async function runCmoBlog(event) {
       max_generate_per_run: maxGeneratePerRun,
       target_city: targetCity || null,
       repair_seeded: repairSeeded,
+      repair_published_cmo: repairPublishedCmo,
       archived_seed_count: archivedSeedCount,
+      archived_cmo_count: archivedCmoCount,
       restored_seed_count: restoredSeedCount,
       seed_backlog_count: seedBacklogCount,
+      cmo_backlog_count: cmoBacklogCount,
       force_publish_generated: forcePublishGenerated,
       generated_count: generated.length,
       published_count: published.length,
