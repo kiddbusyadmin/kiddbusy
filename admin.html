@@ -352,6 +352,19 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
     </div>
   </div>
 
+  <!-- EVENT SOURCE CATALOG -->
+  <div class="panels full">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Event Source Catalog</div>
+        <div class="panel-badge" id="badge-event-sources">--</div>
+      </div>
+      <div class="panel-body" id="body-event-sources">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+
   <!-- EMAIL LEADS -->
   <div class="panels full">
     <div class="panel">
@@ -1086,6 +1099,7 @@ async function loadAll() {
     loadReviewFunnel(),
     loadFilterUsage(),
     loadShareCities(),
+    loadEventSourceCatalog(),
     loadCacheHealth(),
     loadActivityFeed(),
     loadDataIntegrity(),
@@ -1315,6 +1329,72 @@ async function loadShareCities() {
         '<div class=\"city-bar-bg\"><div class=\"city-bar-fill\" style=\"width:' + pct + '%\"></div></div>' +
         '</div>';
     }).join('');
+}
+
+function eventSourceDomain(url) {
+  var raw = String(url || '').trim();
+  if (!raw) return '';
+  try {
+    var host = new URL(raw).hostname || '';
+    return host.replace(/^www\./i, '').toLowerCase();
+  } catch (_) {
+    return '';
+  }
+}
+
+async function loadEventSourceCatalog() {
+  try {
+    var res = await sb.from('events').select('source_url, city').order('last_refreshed', { ascending: false }).limit(4000);
+    var rows = res.data || [];
+    var withUrls = rows.filter(function(r) { return r && r.source_url; });
+    if (!withUrls.length) {
+      document.getElementById('badge-event-sources').textContent = '0 sources';
+      document.getElementById('body-event-sources').innerHTML = emptyHTML('No event source URLs cached yet');
+      return;
+    }
+
+    var domainCounts = {};
+    var domainSamples = {};
+    withUrls.forEach(function(r) {
+      var domain = eventSourceDomain(r.source_url);
+      if (!domain) return;
+      domainCounts[domain] = (domainCounts[domain] || 0) + 1;
+      if (!domainSamples[domain]) domainSamples[domain] = [];
+      if (domainSamples[domain].length < 3) {
+        domainSamples[domain].push({ url: r.source_url, city: r.city || '--' });
+      }
+    });
+
+    var sorted = Object.entries(domainCounts).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 20);
+    if (!sorted.length) {
+      document.getElementById('badge-event-sources').textContent = '0 sources';
+      document.getElementById('body-event-sources').innerHTML = emptyHTML('No valid source domains found');
+      return;
+    }
+
+    var topRows = sorted.map(function(entry) {
+      var domain = entry[0];
+      var count = entry[1];
+      var samples = domainSamples[domain] || [];
+      var sampleLinks = samples.map(function(s) {
+        return '<a href="' + s.url + '" target="_blank" rel="noopener noreferrer" style="color:var(--blue);text-decoration:none">' + domain + '</a> <span style="color:var(--muted)">(' + s.city + ')</span>';
+      }).join('<br>');
+      return '<tr>' +
+        '<td style="font-family:var(--mono);font-size:.74rem">' + domain + '</td>' +
+        '<td><span class="status-badge status-approved">' + count + '</span></td>' +
+        '<td style="font-size:.73rem;line-height:1.45">' + (sampleLinks || '--') + '</td>' +
+      '</tr>';
+    }).join('');
+
+    document.getElementById('badge-event-sources').textContent = Object.keys(domainCounts).length + ' domains';
+    document.getElementById('body-event-sources').innerHTML =
+      '<table class="data-table"><thead><tr><th>Source Domain</th><th>Events</th><th>Sample Links</th></tr></thead><tbody>' +
+      topRows +
+      '</tbody></table>';
+  } catch (e) {
+    document.getElementById('badge-event-sources').textContent = 'unavailable';
+    document.getElementById('body-event-sources').innerHTML = '<div class="empty" style="color:var(--accent)">Event source catalog unavailable: ' + e.message + '</div>';
+  }
 }
 
 // ===== CACHE HEALTH =====
