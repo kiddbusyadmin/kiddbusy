@@ -128,35 +128,48 @@ exports.handler = async (event) => {
   }
 
   const action = safeText(body.action, 80) || 'generate_ig_profile_options';
-  if (action !== 'generate_ig_profile_options') {
+  if (action !== 'generate_ig_profile_options' && action !== 'generate_ig_profile_option') {
     return json(400, { error: 'Unsupported action' });
   }
   const brandName = safeText(body.brand_name, 80) || 'KiddBusy';
   const prompts = profilePrompts(brandName);
   const stamp = Date.now();
-  const out = [];
-
-  for (let i = 0; i < prompts.length; i += 1) {
-    const item = prompts[i];
+  const generateOne = async (idx) => {
+    const optionIndex = Math.max(1, Math.min(prompts.length, Number(idx) || 1));
+    const item = prompts[optionIndex - 1];
     const img = await callOpenAiImage(item.prompt, { size: '1024x1024', quality: 'high', model: OPENAI_IMAGE_MODEL });
-    const path = `branding/instagram/${cleanSegment(brandName)}/${stamp}-${i + 1}.png`;
+    const path = `branding/instagram/${cleanSegment(brandName)}/${stamp}-${optionIndex}.png`;
     const upload = await uploadBinaryToStorage(path, img.bytes, img.mimeType);
     if (!upload.response.ok) {
-      return json(upload.response.status, { error: 'Storage upload failed', details: upload.data, at_option: i + 1 });
+      throw new Error('Storage upload failed');
     }
-    out.push({
-      option: i + 1,
+    return {
+      option: optionIndex,
       label: item.label,
       prompt: item.prompt,
       image_url: `${SUPABASE_URL}/storage/v1/object/public/${PHOTO_BUCKET}/${path}`
-    });
+    };
+  };
+
+  if (action === 'generate_ig_profile_option') {
+    try {
+      const one = await generateOne(body.option || 1);
+      return json(200, {
+        success: true,
+        brand_name: brandName,
+        count: 1,
+        model_used: OPENAI_IMAGE_MODEL,
+        options: [one]
+      });
+    } catch (err) {
+      return json(500, { error: err.message || 'Option generation failed' });
+    }
   }
 
-  return json(200, {
-    success: true,
-    brand_name: brandName,
-    count: out.length,
-    model_used: OPENAI_IMAGE_MODEL,
-    options: out
-  });
+  // Multi-option path (kept for compatibility; may time out on some providers).
+  const out = [];
+  for (let i = 1; i <= prompts.length; i += 1) {
+    out.push(await generateOne(i));
+  }
+  return json(200, { success: true, brand_name: brandName, count: out.length, model_used: OPENAI_IMAGE_MODEL, options: out });
 };
