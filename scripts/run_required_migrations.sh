@@ -14,6 +14,7 @@ MIGRATIONS=(
   "supabase/migrations/20260309_blog_posts.sql"
   "supabase/migrations/20260309_cmo_blog_queue_settings.sql"
   "supabase/migrations/20260309_owner_contact_messages.sql"
+  "supabase/migrations/20260310_events_source_url.sql"
 )
 
 for m in "${MIGRATIONS[@]}"; do

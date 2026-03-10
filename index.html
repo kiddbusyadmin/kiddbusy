@@ -2480,6 +2480,27 @@ function renderCachedListings(rows) {
 const EVENTS_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 function renderEvents(events) {
+  function esc(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function normUrl(u) {
+    const raw = String(u || '').trim();
+    if (!raw) return '';
+    try {
+      const parsed = new URL(raw);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+      return parsed.toString();
+    } catch (_) {
+      return '';
+    }
+  }
+
   document.getElementById('eventsList').innerHTML = events.map(e => `
     <div class="event-card">
       <div class="event-date-box">
@@ -2487,11 +2508,57 @@ function renderEvents(events) {
         <div class="event-day">${e.day || e.event_day || ''}</div>
       </div>
       <div class="event-info">
-        <div class="event-name">${e.name}</div>
-        <div class="event-detail">📌 ${e.detail || ''}</div>
+        <div class="event-name">${esc(e.name)}</div>
+        <div class="event-detail">📌 ${esc(e.detail || '')}</div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          ${normUrl(e.source_url || e.url || e.link)
+            ? `<a href="${esc(normUrl(e.source_url || e.url || e.link))}" target="_blank" rel="noopener noreferrer" onclick="track('event_source_click', document.getElementById('eventsCity').textContent, '${esc(e.name)}')" style="display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--ink);font-weight:700;font-size:.75rem;text-decoration:none">🔗 Event Link</a>`
+            : ''
+          }
+          <button class="share-btn" style="padding:6px 10px;font-size:.75rem;border-radius:8px" onclick="shareEvent('${esc(e.name)}','${esc(e.detail || '')}','${esc(normUrl(e.source_url || e.url || e.link))}')">📤 Share</button>
+        </div>
       </div>
       <span class="${(e.free || e.is_free) ? 'event-free' : 'event-paid'}">${(e.free || e.is_free) ? 'FREE' : 'Paid'}</span>
     </div>`).join('');
+}
+
+function extractFirstUrl(text) {
+  const m = String(text || '').match(/https?:\/\/[^\s)]+/i);
+  return m ? m[0] : '';
+}
+
+function normalizeEventUrl(u) {
+  const raw = String(u || '').trim();
+  if (!raw) return '';
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+    return parsed.toString();
+  } catch (_) {
+    return '';
+  }
+}
+
+async function shareEvent(name, detail, url) {
+  const city = document.getElementById('eventsCity') ? document.getElementById('eventsCity').textContent : null;
+  const cleanUrl = normalizeEventUrl(url) || normalizeEventUrl(extractFirstUrl(detail));
+  const text = cleanUrl ? `${name}\n${detail}\n${cleanUrl}` : `${name}\n${detail}`;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: name, text: detail, url: cleanUrl || undefined });
+      track('event_share_click', city, cleanUrl ? `${name}|${cleanUrl}` : name);
+      return;
+    }
+  } catch (_) {
+    // User cancelled or share failed; continue to clipboard fallback.
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    track('event_share_click', city, cleanUrl ? `${name}|${cleanUrl}` : name);
+    alert('Event details copied to clipboard');
+  } catch (_) {
+    alert('Unable to share this event right now.');
+  }
 }
 
 function showEventsSkeletons() {
@@ -2565,7 +2632,17 @@ async function loadEventsForCity(cityLabel) {
     const clean = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '');
     const match = clean.match(/\[[\s\S]*\]/);
     if (!match) throw new Error('No JSON array in response');
-    const events = JSON.parse(match[0]);
+    const events = JSON.parse(match[0]).map(e => {
+      const sourceUrl = normalizeEventUrl(e.source_url || e.url || e.link || extractFirstUrl(e.detail));
+      return {
+        month: e.month,
+        day: e.day,
+        name: e.name,
+        detail: e.detail,
+        free: e.free,
+        source_url: sourceUrl
+      };
+    });
 
     // Upsert to Supabase — delete old events for this city first, then insert fresh ones
     await sb.from('events').delete().ilike('city', cityLabel);
@@ -2576,9 +2653,27 @@ async function loadEventsForCity(cityLabel) {
       name: e.name,
       detail: e.detail,
       is_free: e.free,
+      source_url: e.source_url,
       last_refreshed: new Date().toISOString()
     }));
-    await sb.from('events').insert(rows);
+    let insertOk = false;
+    try {
+      const ins = await sb.from('events').insert(rows);
+      insertOk = !ins.error;
+    } catch (_) {}
+    if (!insertOk) {
+      // Backward compatibility: if source_url column is missing, retry without it.
+      const fallbackRows = rows.map(r => ({
+        city: r.city,
+        month: r.month,
+        day: r.day,
+        name: r.name,
+        detail: r.detail,
+        is_free: r.is_free,
+        last_refreshed: r.last_refreshed
+      }));
+      await sb.from('events').insert(fallbackRows);
+    }
 
     renderEvents(events);
     freshnessEl.textContent = 'Just updated';

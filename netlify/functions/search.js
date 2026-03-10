@@ -54,7 +54,8 @@ Each object must have these exact keys:
 - day (string, 2-digit e.g. "08")
 - name (string, event name)
 - detail (string, format: "Venue · Address · Time · Brief description")
-- free (boolean)`;
+- free (boolean)
+- source_url (string, direct event page URL or primary source page URL, must start with https://)`;
 
   const isActivities = type === 'activities';
 
@@ -67,7 +68,7 @@ Each object must have these exact keys:
       role: 'user',
       content: isActivities
         ? `Find 20 real, well-known kid-friendly activities in "${city}" good to visit today (${today}). Search the web for accurate, current places. Include a good variety of categories. Return only the JSON array.`
-        : `Find 8 real upcoming kid-friendly events in "${city}" happening soon after today (${today}). Include story times, workshops, festivals, museum events. Use real upcoming dates. Return only the JSON array.`
+        : `Find 8 real upcoming kid-friendly events in "${city}" happening soon after today (${today}). Include story times, workshops, festivals, museum events. Use real upcoming dates and include a direct source_url for each event. Return only the JSON array.`
     }]
   };
 
