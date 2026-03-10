@@ -41,6 +41,28 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:14px 2
 .chip:hover{background:rgba(255,255,255,.35)}
 .status-row{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:center}
 .status{color:#f4eeff;font-size:.86rem;font-weight:800;letter-spacing:.2px}
+.geo-banner{
+  margin-top:10px;
+  background:rgba(255,255,255,.92);
+  border:1px solid rgba(255,255,255,.55);
+  border-radius:12px;
+  box-shadow:0 2px 12px rgba(0,0,0,.10);
+  padding:8px 10px;
+  display:none;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.geo-banner.visible{display:flex}
+.geo-banner-text{color:#5f4e8f;font-size:.78rem;font-weight:700;line-height:1.25}
+.geo-banner-actions{display:inline-flex;align-items:center;gap:6px;flex-shrink:0}
+.geo-banner-change{
+  border:1px solid #d8c9f4;background:#fff;color:#6c3fc5;border-radius:999px;
+  padding:4px 10px;font-size:.72rem;font-weight:800;cursor:pointer;
+}
+.geo-banner-close{
+  border:none;background:transparent;color:#8f80b4;font-size:1rem;line-height:1;cursor:pointer;padding:2px 4px;
+}
 .grid{display:grid;grid-template-columns:1fr;gap:14px;margin-top:16px}
 .event-card{display:grid;grid-template-columns:72px 1fr auto;gap:14px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:13px;box-shadow:0 8px 24px rgba(65,49,100,.08)}
 .event-date{background:linear-gradient(180deg,#f2e8ff,#ebe0ff);border-radius:12px;padding:10px 7px;text-align:center;line-height:1.1;font-weight:900;border:1px solid #dfd0ff}
@@ -92,6 +114,13 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:14px 2
       <div class="status" id="eventsFreshness"></div>
       <div class="status" id="eventsHint">Tip: use full city + state for best results.</div>
     </div>
+    <div class="geo-banner" id="geoBanner" aria-live="polite">
+      <div class="geo-banner-text" id="geoBannerText"></div>
+      <div class="geo-banner-actions">
+        <button class="geo-banner-change" onclick="changeGeoDetectedCity()">Change</button>
+        <button class="geo-banner-close" aria-label="Dismiss" onclick="dismissGeoBanner()">×</button>
+      </div>
+    </div>
   </section>
 
   <section class="grid" id="eventsList"></section>
@@ -118,6 +147,7 @@ function normalizeCityInput(raw){
 }
 function cityBase(label){return String(label||'').split(',')[0].trim()}
 function cityLikePattern(label){const base=cityBase(label);return base?`${base}%`:(String(label||'').trim()+'%')}
+function normalizeCityLabel(v){return String(v||'').toLowerCase().replace(/[^a-z0-9\\s]/g,'').replace(/\\s+/g,' ').trim()}
 function normalizeEventUrl(u){
   const raw=String(u||'').trim();if(!raw) return '';
   try{
@@ -271,10 +301,54 @@ async function loadEventsForCity(rawCity){
 
 function runEventsSearch(){const city=(document.getElementById('cityInput').value||'').trim();if(!city){alert('Enter a city first.');return;}loadEventsForCity(city)}
 function quickCity(label){document.getElementById('cityInput').value=label;loadEventsForCity(label)}
+function showGeoBanner(cityLabel){
+  const banner=document.getElementById('geoBanner');
+  const text=document.getElementById('geoBannerText');
+  if(!banner||!text) return;
+  if(localStorage.getItem('kb_geo_banner_dismissed')==='1') return;
+  text.textContent=`Showing events for ${cityLabel} based on your location.`;
+  banner.classList.add('visible');
+}
+function dismissGeoBanner(){const banner=document.getElementById('geoBanner');if(banner) banner.classList.remove('visible');localStorage.setItem('kb_geo_banner_dismissed','1')}
+function changeGeoDetectedCity(){
+  const banner=document.getElementById('geoBanner');
+  if(banner) banner.classList.remove('visible');
+  const input=document.getElementById('cityInput');
+  if(input){input.focus();input.select();}
+  track('geo_city_banner_change_click');
+}
+async function autoDetectEventsCity(){
+  try{
+    const input=document.getElementById('cityInput');
+    if(!input) return '';
+    const existing=normalizeCityInput(qsCity()||localStorage.getItem('kb_last_city')||input.value||'');
+    if(existing) return existing;
+    const res=await fetch('/api/geo-city');
+    const data=await res.json();
+    if(!res.ok||!data||!data.ok) return '';
+    if(String(data.country_code||'').toUpperCase()!=='US') return '';
+    const city=toTitleCase(data.city||'');
+    const stateCode=String(data.state_code||'').toUpperCase().replace(/[^A-Z]/g,'').slice(0,2);
+    if(!city||!stateCode) return '';
+    const label=normalizeCityInput(`${city}, ${stateCode}`);
+    if(!label) return '';
+    try{localStorage.setItem('kb_last_city',label);}catch(_){}
+    showGeoBanner(label);
+    track('geo_city_autoselect',stateCode,normalizeCityLabel(city));
+    return label;
+  }catch(_){return '';}
+}
 
 document.addEventListener('DOMContentLoaded', function(){
-  const city = normalizeCityInput(qsCity() || localStorage.getItem('kb_last_city') || '');
-  if(city){document.getElementById('cityInput').value=city;loadEventsForCity(city);} else {document.getElementById('eventsList').innerHTML='<div class="empty">Enter a city above to load events.</div>';}
+  const initial = normalizeCityInput(qsCity() || localStorage.getItem('kb_last_city') || '');
+  if(initial){document.getElementById('cityInput').value=initial;loadEventsForCity(initial);}
+  else {
+    document.getElementById('eventsList').innerHTML='<div class="empty">Detecting your city...</div>';
+    autoDetectEventsCity().then(city=>{
+      if(city){document.getElementById('cityInput').value=city;loadEventsForCity(city);}
+      else {document.getElementById('eventsList').innerHTML='<div class="empty">Enter a city above to load events.</div>';}
+    });
+  }
   document.getElementById('cityInput').addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); runEventsSearch(); }});
 });
 </script>
