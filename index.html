@@ -2695,6 +2695,65 @@ function buildEventFallbackUrl(name, city) {
   return 'https://www.google.com/search?q=' + encodeURIComponent(q);
 }
 
+function extractJsonArrayCandidate(text) {
+  const raw = String(text || '');
+  if (!raw) return null;
+  const cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
+  // Try all bracketed candidates and return the first valid parsed array.
+  for (let i = 0; i < cleaned.length; i++) {
+    if (cleaned[i] !== '[') continue;
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    for (let j = i; j < cleaned.length; j++) {
+      const ch = cleaned[j];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (ch === '\\') esc = true;
+        else if (ch === '"') inStr = false;
+        continue;
+      }
+      if (ch === '"') { inStr = true; continue; }
+      if (ch === '[') depth++;
+      else if (ch === ']') {
+        depth--;
+        if (depth === 0) {
+          const candidate = cleaned.slice(i, j + 1).trim();
+          try {
+            const parsed = JSON.parse(candidate);
+            if (Array.isArray(parsed)) return parsed;
+          } catch (_) {}
+          break;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function parseEventsFromSearchResponse(data, cityLabel) {
+  const textBlocks = (data && data.content ? data.content : []).filter(b => b && b.type === 'text');
+  const joined = textBlocks.map(b => String(b.text || '')).join('\n');
+  const parsed = extractJsonArrayCandidate(joined);
+  if (!parsed) throw new Error('No JSON array in response');
+  return parsed.map(e => normalizeEventRow(e, cityLabel)).filter(e => !isPastEventRow(e));
+}
+
+async function fetchEventsForCity(cityLabel, attempt) {
+  const res = await fetch('/api/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ city: cityLabel, type: 'events', retry_attempt: attempt || 1 })
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new Error((data && data.error) ? data.error : ('Search failed (' + res.status + ')'));
+  }
+  const events = parseEventsFromSearchResponse(data, cityLabel);
+  if (!events.length) throw new Error('Empty events payload');
+  return events;
+}
+
 async function shareEvent(name, detail, url) {
   const city = document.getElementById('eventsCity') ? document.getElementById('eventsCity').textContent : null;
   const cleanUrl = normalizeEventUrl(url) || normalizeEventUrl(extractFirstUrl(detail)) || buildEventFallbackUrl(name, city);
@@ -2777,21 +2836,20 @@ async function loadEventsForCity(cityLabel) {
   freshnessEl.textContent = 'Searching for events…';
 
   try {
-    const res = await fetch('/api/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ city: cityLabel, type: 'events' })
-    });
-
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-
-    const textBlocks = (data.content || []).filter(b => b.type === 'text');
-    const raw = textBlocks[textBlocks.length - 1]?.text || '';
-    const clean = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '');
-    const match = clean.match(/\[[\s\S]*\]/);
-    if (!match) throw new Error('No JSON array in response');
-    const events = JSON.parse(match[0]).map(e => normalizeEventRow(e, cityLabel)).filter(e => !isPastEventRow(e));
+    let events = null;
+    let lastErr = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        events = await fetchEventsForCity(cityLabel, attempt);
+        break;
+      } catch (e) {
+        lastErr = e;
+        if (attempt < 2) {
+          console.warn('[KiddBusy] Events attempt failed, retrying:', e && e.message ? e.message : e);
+        }
+      }
+    }
+    if (!events) throw lastErr || new Error('Unable to fetch events');
 
     // Upsert to Supabase — delete old events for this city first, then insert fresh ones
     await sb.from('events').delete().ilike('city', cityLabel);
