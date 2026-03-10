@@ -2748,6 +2748,51 @@ function onFindClicked() {
   onCitySelected(`${city}, ${abbr}`);
 }
 
+function normalizeCityLabel(v) {
+  return String(v || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function autoDetectAndApplyCity() {
+  try {
+    const stateEl = document.getElementById('stateSelect');
+    const cityEl = document.getElementById('citySelect');
+    const findBtn = document.getElementById('findBtn');
+    if (!stateEl || !cityEl || !findBtn) return;
+    if (stateEl.value || cityEl.value) return;
+
+    const res = await fetch('/api/geo-city');
+    const data = await res.json();
+    if (!res.ok || !data || !data.ok) return;
+    if (String(data.country_code || '').toUpperCase() !== 'US') return;
+
+    const detectedState = String(data.state || '').trim();
+    const detectedCityNorm = normalizeCityLabel(data.city);
+    if (!detectedState || !detectedCityNorm) return;
+    if (!CITIES_BY_STATE[detectedState]) return;
+
+    const matchedCity = (CITIES_BY_STATE[detectedState] || []).find(function(c) {
+      return normalizeCityLabel(c) === detectedCityNorm;
+    });
+    if (!matchedCity) return;
+
+    stateEl.value = detectedState;
+    onStateSelected(detectedState);
+    cityEl.value = matchedCity;
+    findBtn.disabled = false;
+    findBtn.classList.add('active');
+
+    // Auto-run only when we have an exact match in our supported city list.
+    onFindClicked();
+    track('geo_city_autoselect', detectedState, matchedCity);
+  } catch (e) {
+    // Best-effort only.
+  }
+}
+
 // ── INIT ──
 document.addEventListener('DOMContentLoaded', function() {
   // Populate state dropdown
@@ -2791,6 +2836,9 @@ document.addEventListener('DOMContentLoaded', function() {
       // Silent fail — prefetch is best-effort
     }
   })();
+
+  // Attempt to auto-select city from IP when it exactly matches our supported list.
+  autoDetectAndApplyCity();
 });
 </script>
 </body>

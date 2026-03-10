@@ -32,6 +32,9 @@
 [functions.blog-posts]
   timeout = 30
 
+[functions.geo-city]
+  timeout = 10
+
 # Daily cache warm — runs at 3am ET (8am UTC)
 [functions.daily-cache-warm]
   schedule = "0 8 * * *"
@@ -99,6 +102,11 @@
 [[redirects]]
   from = "/api/blog-posts"
   to = "/.netlify/functions/blog-posts"
+  status = 200
+
+[[redirects]]
+  from = "/api/geo-city"
+  to = "/.netlify/functions/geo-city"
   status = 200
 
 [[redirects]]
