@@ -305,6 +305,18 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
     </div>
   </div>
 
+  <div class="panels full">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">API Usage & Limits</div>
+        <div class="panel-badge" id="badge-api-usage">loading</div>
+      </div>
+      <div class="panel-body" id="body-api-usage">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+
   <!-- TOP CITIES + REVIEW FUNNEL -->
   <div class="panels">
     <div class="panel">
@@ -1227,6 +1239,7 @@ async function loadAll() {
 
   await Promise.all([
     loadStats(),
+    loadApiUsage(),
     loadTopCities(),
     loadReviewFunnel(),
     loadFilterUsage(),
@@ -1325,6 +1338,68 @@ async function loadStats() {
   var pctAll = totalAll > 0 ? Math.round((allHits / totalAll) * 100) : null;
   document.getElementById('stat-cache').textContent = pct == null ? '--' : (pct + '%');
   document.getElementById('stat-cache-sub').textContent = 'all time: ' + (pctAll == null ? '--' : (pctAll + '%'));
+}
+
+// ===== API USAGE & LIMITS =====
+function fmtNumCompact(n) {
+  var x = Number(n || 0);
+  if (!Number.isFinite(x)) return '--';
+  if (x >= 1000000000) return (x / 1000000000).toFixed(2) + 'B';
+  if (x >= 1000000) return (x / 1000000).toFixed(2) + 'M';
+  if (x >= 1000) return (x / 1000).toFixed(1) + 'k';
+  return String(Math.round(x));
+}
+
+function apiProviderStatusLine(p) {
+  if (!p) return '<span style=\"color:var(--muted)\">unavailable</span>';
+  if (p.available) return '<span style=\"color:var(--green)\">available</span>';
+  if (p.reason === 'missing_key') return '<span style=\"color:var(--yellow)\">missing key</span>';
+  if (p.reason === 'auth_or_scope_error') return '<span style=\"color:var(--yellow)\">needs admin scope</span>';
+  if (p.reason === 'endpoint_unavailable') return '<span style=\"color:var(--yellow)\">endpoint unavailable</span>';
+  return '<span style=\"color:var(--accent)\">request failed</span>';
+}
+
+async function loadApiUsage() {
+  var badge = document.getElementById('badge-api-usage');
+  var body = document.getElementById('body-api-usage');
+  if (!badge || !body) return;
+  try {
+    var res = await fetch('/api/api-usage', { headers: { 'X-Requested-From': 'kiddbusy-hq' } });
+    var out = await res.json();
+    if (!res.ok) throw new Error(out.error || 'Failed to load API usage');
+
+    var providers = out.providers || {};
+    var anthropic = providers.anthropic || {};
+    var openai = providers.openai || {};
+    var local = out.local_fallback || {};
+    var sent30d = Number(local.email_sent_30d || 0);
+    var cap30d = Number(local.email_monthly_cap || 0);
+    var capPct = local.email_cap_used_pct == null ? '--' : (Number(local.email_cap_used_pct).toFixed(1) + '%');
+    var asOf = out.as_of ? new Date(out.as_of).toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '--';
+
+    var anthTokens = anthropic.available ? fmtNumCompact(anthropic.tokens_30d) : '--';
+    var anthCost = (anthropic.available && anthropic.usd_30d != null) ? ('$' + Number(anthropic.usd_30d).toFixed(2)) : '--';
+    var openTokens = openai.available ? fmtNumCompact(openai.tokens_30d) : '--';
+    var openCost = (openai.available && openai.usd_30d != null) ? ('$' + Number(openai.usd_30d).toFixed(2)) : '--';
+
+    badge.textContent = 'as of ' + asOf;
+    body.innerHTML =
+      '<div class=\"stats-row\" style=\"grid-template-columns:repeat(4,minmax(150px,1fr));margin-bottom:12px\">' +
+        '<div class=\"stat-card blue\" style=\"padding:10px 12px;min-height:auto\"><div class=\"stat-label\">Anthropic Tokens (30d)</div><div class=\"stat-value\" style=\"font-size:1.35rem\">' + anthTokens + '</div><div class=\"stat-sub\">cost: ' + anthCost + '</div></div>' +
+        '<div class=\"stat-card purple\" style=\"padding:10px 12px;min-height:auto\"><div class=\"stat-label\">OpenAI Tokens (30d)</div><div class=\"stat-value\" style=\"font-size:1.35rem\">' + openTokens + '</div><div class=\"stat-sub\">cost: ' + openCost + '</div></div>' +
+        '<div class=\"stat-card green\" style=\"padding:10px 12px;min-height:auto\"><div class=\"stat-label\">Emails Sent (30d)</div><div class=\"stat-value\" style=\"font-size:1.35rem\">' + sent30d + '</div><div class=\"stat-sub\">cap: ' + (cap30d || '--') + '</div></div>' +
+        '<div class=\"stat-card yellow\" style=\"padding:10px 12px;min-height:auto\"><div class=\"stat-label\">Email Cap Used</div><div class=\"stat-value\" style=\"font-size:1.35rem\">' + capPct + '</div><div class=\"stat-sub\">daily cap: ' + (local.email_daily_cap || '--') + '</div></div>' +
+      '</div>' +
+      '<table class=\"data-table\"><thead><tr><th>Provider</th><th>Status</th><th>30d Tokens</th><th>30d Cost</th><th>Notes</th></tr></thead><tbody>' +
+        '<tr><td>Anthropic</td><td>' + apiProviderStatusLine(anthropic) + '</td><td>' + anthTokens + '</td><td>' + anthCost + '</td><td style=\"color:var(--muted)\">Admin usage API' + (anthropic.admin_key ? ' (admin key)' : '') + '</td></tr>' +
+        '<tr><td>OpenAI</td><td>' + apiProviderStatusLine(openai) + '</td><td>' + openTokens + '</td><td>' + openCost + '</td><td style=\"color:var(--muted)\">Org usage API (requires admin scope)</td></tr>' +
+        '<tr><td>OpenAI Images (local)</td><td><span style=\"color:var(--green)\">tracked</span></td><td>' + fmtNumCompact(local.openai_images_generated_30d || 0) + ' calls</td><td>$' + Number(local.estimated_photo_cost_usd_30d || 0).toFixed(2) + '</td><td style=\"color:var(--muted)\">from DB job estimates</td></tr>' +
+        '<tr><td>Resend (local)</td><td><span style=\"color:var(--green)\">tracked</span></td><td>--</td><td>--</td><td style=\"color:var(--muted)\">email_send_log + configured send caps</td></tr>' +
+      '</tbody></table>';
+  } catch (e) {
+    badge.textContent = 'unavailable';
+    body.innerHTML = '<div class=\"empty\" style=\"color:var(--accent)\">API usage unavailable: ' + e.message + '</div>';
+  }
 }
 
 // ===== TOP CITIES =====
