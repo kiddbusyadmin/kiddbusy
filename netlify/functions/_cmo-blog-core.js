@@ -128,7 +128,16 @@ function buildCityContextBlock(city, rows) {
   lines.push('Known local listings for ' + city + ' (use only if relevant and accurate):');
   for (var i = 0; i < rows.length; i += 1) {
     var r = rows[i] || {};
-    lines.push('- ' + String(r.name || 'Unknown Place') + ' | ' + String(r.category || 'activity') + ' | ' + String(r.address || 'no address'));
+    lines.push(
+      '- ' +
+      String(r.name || 'Unknown Place') +
+      ' | ' +
+      String(r.category || 'activity') +
+      ' | ' +
+      String(r.address || 'no address') +
+      ' | website: ' +
+      String(r.website || 'none')
+    );
   }
   return lines.join('\n');
 }
@@ -145,6 +154,51 @@ function countNameMentions(text, names) {
   return hits;
 }
 
+function stripTags(html) {
+  return String(html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function wordCount(text) {
+  var clean = String(text || '').trim();
+  if (!clean) return 0;
+  return clean.split(/\s+/).length;
+}
+
+function countAnchorTags(html) {
+  var matches = String(html || '').match(/<a\s+[^>]*href=/gi);
+  return matches ? matches.length : 0;
+}
+
+function hasCurrentTimeAnchor(text) {
+  var hay = String(text || '').toLowerCase();
+  if (!hay) return false;
+  var anchors = [
+    'this weekend',
+    'this month',
+    'this week',
+    'today',
+    'tomorrow',
+    'march',
+    'april',
+    'may',
+    'june',
+    'july',
+    'august',
+    'september',
+    'october',
+    'november',
+    'december',
+    'january',
+    'february'
+  ];
+  for (var i = 0; i < anchors.length; i += 1) {
+    if (hay.indexOf(anchors[i]) >= 0) return true;
+  }
+  if (/\b\d{1,2}\/\d{1,2}\b/.test(hay)) return true;
+  if (/\b\d{1,2}-\d{1,2}\b/.test(hay)) return true;
+  return false;
+}
+
 function hasStrongLocalSignals(post, targetCity, localListingNames) {
   var city = String(targetCity || '').trim().toLowerCase();
   var body = String((post && post.body_html) || '').toLowerCase();
@@ -153,9 +207,16 @@ function hasStrongLocalSignals(post, targetCity, localListingNames) {
   var combined = title + ' ' + excerpt + ' ' + body;
 
   if (!city || combined.indexOf(city) < 0) return false;
+  if (wordCount(stripTags(body)) < 220) return false;
+  if (!hasCurrentTimeAnchor(combined)) return false;
 
   var mentions = countNameMentions(combined, localListingNames || []);
-  if (localListingNames && localListingNames.length) return mentions >= 2;
+  if (localListingNames && localListingNames.length) {
+    var minimumMentions = localListingNames.length >= 5 ? 3 : 2;
+    if (mentions < minimumMentions) return false;
+    if (countAnchorTags(body) < 1) return false;
+    return true;
+  }
 
   // Fallback heuristic when no local listing names are available.
   var anchors = ['museum', 'park', 'library', 'zoo', 'children', 'downtown', 'neighborhood'];
@@ -258,12 +319,15 @@ async function generateBatch(cities, existingTitles, batchSize, preferredCity) {
     cityContext,
     'Hard rules:',
     '- 220-380 words per post in body_html.',
-    '- body_html may only use <p>, <h2>, <ul>, <li>, <strong>.',
+    '- body_html may only use <p>, <h2>, <ul>, <li>, <strong>, <a>.',
     '- Title under 70 chars; excerpt 120-180 chars; seo_description 120-155 chars.',
     '- tags must be 4-6 items.',
     '- read_minutes integer 3-10.',
     '- city must be exactly "' + targetCity + '" (not null).',
-    '- Include at least 3 specific local places by name in each post.',
+    '- Include at least 3 specific local places by exact name from the Known local listings block.',
+    '- Include a <h2>Local Picks</h2> section with a <ul> and at least 3 <li> entries.',
+    '- In Local Picks, include an <a href="...">official site</a> for any place that has a website in context.',
+    '- Use full names as provided in context. Do not invent place names.',
     '- Include at least 1 very current time anchor in each post (this weekend, this month, or date range).',
     '- All posts must be materially different.',
     '- Avoid these existing titles: ' + avoidTitles
@@ -368,6 +432,53 @@ async function publishFromQueue(ratePerDay) {
   return out;
 }
 
+async function publishByIds(ids) {
+  var clean = Array.isArray(ids) ? ids.filter(Boolean) : [];
+  if (!clean.length) return [];
+  var out = [];
+  for (var i = 0; i < clean.length; i += 1) {
+    var id = clean[i];
+    var patch = await sbFetch('blog_posts?id=eq.' + encodeURIComponent(String(id)), {
+      method: 'PATCH',
+      prefer: 'return=representation',
+      body: {
+        status: 'published',
+        published_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+    });
+    if (patch.response.ok && Array.isArray(patch.data) && patch.data[0]) out.push(patch.data[0]);
+  }
+  return out;
+}
+
+async function getPublishedSeedPosts(limit) {
+  var capped = clampNumber(limit, 1, 200, 40);
+  var q = 'blog_posts?select=id,city,slug,title&source=eq.cmo_seed&status=eq.published&order=created_at.asc&limit=' + String(capped);
+  var result = await sbFetch(q);
+  if (!result.response.ok || !Array.isArray(result.data)) return [];
+  return result.data;
+}
+
+async function archivePostsByIds(ids) {
+  var clean = Array.isArray(ids) ? ids.filter(Boolean) : [];
+  if (!clean.length) return 0;
+  var archived = 0;
+  for (var i = 0; i < clean.length; i += 1) {
+    var id = clean[i];
+    var patch = await sbFetch('blog_posts?id=eq.' + encodeURIComponent(String(id)), {
+      method: 'PATCH',
+      prefer: 'return=representation',
+      body: {
+        status: 'archived',
+        updated_at: new Date().toISOString()
+      }
+    });
+    if (patch.response.ok) archived += 1;
+  }
+  return archived;
+}
+
 async function runCmoBlog(event) {
   try {
     if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !ANTHROPIC_API_KEY) {
@@ -402,6 +513,10 @@ async function runCmoBlog(event) {
     var distributionEnabled = Object.prototype.hasOwnProperty.call(body, 'distribution_enabled')
       ? !!body.distribution_enabled
       : !!settings.blog_distribution_enabled;
+    var repairSeeded = !!body.repair_seeded;
+    var forcePublishGenerated = Object.prototype.hasOwnProperty.call(body, 'force_publish_generated')
+      ? !!body.force_publish_generated
+      : !!repairSeeded;
     var publishRate = clampNumber(
       Object.prototype.hasOwnProperty.call(body, 'publish_rate') ? body.publish_rate : settings.blog_publish_rate_per_day,
       1,
@@ -418,20 +533,49 @@ async function runCmoBlog(event) {
 
     var cities = await getCities();
     var identity = await getIdentitySets();
+    var plannedCityRotation = [];
+    var archivedSeedCount = 0;
+
+    if (repairSeeded) {
+      var seeded = await getPublishedSeedPosts(100);
+      if (seeded.length) {
+        archivedSeedCount = await archivePostsByIds(
+          seeded.map(function (row) { return row.id; })
+        );
+        var seenSeedCities = {};
+        for (var s = 0; s < seeded.length; s += 1) {
+          var seedCity = String((seeded[s] && seeded[s].city) || '').trim();
+          if (!seedCity) continue;
+          var key = seedCity.toLowerCase();
+          if (seenSeedCities[key]) continue;
+          seenSeedCities[key] = true;
+          plannedCityRotation.push(seedCity);
+        }
+        if (plannedCityRotation.length === 0 && cities.length) plannedCityRotation = cities.slice(0, 10);
+      }
+    }
 
     var already = await countDraftsToday();
     var remaining = queueTarget - already;
     if (remaining < 0) remaining = 0;
     if (remaining > 200) remaining = 200;
     if (remaining > maxGeneratePerRun) remaining = maxGeneratePerRun;
+    if (repairSeeded && archivedSeedCount > 0 && remaining < archivedSeedCount) remaining = archivedSeedCount;
+    if (remaining > 80) remaining = 80;
 
     var generated = [];
     var generationErrors = [];
+    var cityCursor = 0;
     while (remaining > 0) {
-      var batchSize = remaining > 5 ? 5 : remaining;
+      var preferredCity = targetCity;
+      if (plannedCityRotation.length) {
+        preferredCity = plannedCityRotation[cityCursor % plannedCityRotation.length];
+        cityCursor += 1;
+      }
+      var batchSize = plannedCityRotation.length ? 1 : (remaining > 5 ? 5 : remaining);
       var batch = [];
       try {
-        batch = await generateBatch(cities, identity.titles, batchSize, targetCity);
+        batch = await generateBatch(cities, identity.titles, batchSize, preferredCity);
       } catch (e) {
         generationErrors.push('generate: ' + String(e.message || e));
         break;
@@ -460,7 +604,11 @@ async function runCmoBlog(event) {
     }
 
     var published = [];
-    if (distributionEnabled) published = await publishFromQueue(publishRate);
+    if (forcePublishGenerated && generated.length) {
+      published = await publishByIds(generated.map(function (row) { return row.id; }));
+    } else if (distributionEnabled) {
+      published = await publishFromQueue(publishRate);
+    }
 
     var depth = await queueDepth();
     await logAgentActivity({
@@ -474,6 +622,9 @@ async function runCmoBlog(event) {
         publish_rate_per_day: publishRate,
         max_generate_per_run: maxGeneratePerRun,
         target_city: targetCity || null,
+        repair_seeded: repairSeeded,
+        archived_seed_count: archivedSeedCount,
+        force_publish_generated: forcePublishGenerated,
         generated_count: generated.length,
         published_count: published.length,
         queue_depth: depth,
@@ -488,6 +639,9 @@ async function runCmoBlog(event) {
       publish_rate_per_day: publishRate,
       max_generate_per_run: maxGeneratePerRun,
       target_city: targetCity || null,
+      repair_seeded: repairSeeded,
+      archived_seed_count: archivedSeedCount,
+      force_publish_generated: forcePublishGenerated,
       generated_count: generated.length,
       published_count: published.length,
       queue_depth: depth,
