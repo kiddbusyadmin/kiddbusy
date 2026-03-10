@@ -41,6 +41,9 @@
 [functions.image-generate]
   timeout = 60
 
+[functions.brand-image-kit]
+  timeout = 120
+
 [functions.accountant-agent]
   timeout = 30
 
@@ -170,6 +173,11 @@
 [[redirects]]
   from = "/api/image-generate"
   to = "/.netlify/functions/image-generate"
+  status = 200
+
+[[redirects]]
+  from = "/api/brand-image-kit"
+  to = "/.netlify/functions/brand-image-kit"
   status = 200
 
 [[redirects]]
