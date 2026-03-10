@@ -2,6 +2,7 @@
 // Uses fetch only — no npm dependencies required
 const { sendCompliantEmail } = require('./_email-compliance');
 const { logAgentActivity } = require('./_agent-activity');
+const { triggerSponsorshipPaymentRequestEmail } = require('./_sponsorship-payment-email');
 
 const SUPABASE_URL = process.env.KB_DB_URL || 'https://wgwexzyqaiwosgraaczi.supabase.co';
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY;
@@ -154,8 +155,26 @@ async function executeTool(name, input, log) {
         return { success: true, id: input.id, new_status: input.status };
       }
       case 'update_sponsorship_status': {
+        const beforeRows = await dbQuery('sponsorships', { eq: { id: input.id } });
+        const before = Array.isArray(beforeRows) && beforeRows.length ? beforeRows[0] : null;
         await dbUpdate('sponsorships', input.id, { status: input.status });
-        return { success: true, id: input.id, new_status: input.status };
+        let paymentEmail = null;
+        if (String(input.status || '').toLowerCase() === 'active') {
+          const prev = String((before && before.status) || '').toLowerCase();
+          if (prev !== 'active') {
+            try {
+              paymentEmail = await triggerSponsorshipPaymentRequestEmail({
+                sponsorship: Object.assign({}, before || {}, { id: input.id, status: 'active' }),
+                activationSource: 'scheduled_agent'
+              });
+            } catch (emailErr) {
+              paymentEmail = { sent: false, error: emailErr.message || 'Payment email failed' };
+            }
+          } else {
+            paymentEmail = { sent: false, skipped: true, reason: 'already_active' };
+          }
+        }
+        return { success: true, id: input.id, new_status: input.status, payment_email: paymentEmail };
       }
       case 'get_directives': {
         try {

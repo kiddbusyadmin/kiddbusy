@@ -8,6 +8,7 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_ALLOWED_CHAT_ID = process.env.TELEGRAM_CHAT_ID; // your personal chat ID
 const { sendCompliantEmail } = require('./_email-compliance');
+const { triggerSponsorshipPaymentRequestEmail } = require('./_sponsorship-payment-email');
 
 // ---- TELEGRAM ----
 async function sendTelegram(chatId, text) {
@@ -289,8 +290,26 @@ async function executeTool(name, input) {
       }
       return { success: true, id: input.id, new_status: input.status };
     case 'update_sponsorship_status':
+      var beforeRows = await dbQuery('sponsorships', { eq: { id: input.id }, limit: 1 });
+      var before = Array.isArray(beforeRows) && beforeRows.length ? beforeRows[0] : null;
       await dbUpdate('sponsorships', input.id, { status: input.status });
-      return { success: true, id: input.id, new_status: input.status };
+      var paymentEmail = null;
+      if (String(input.status || '').toLowerCase() === 'active') {
+        var prev = String((before && before.status) || '').toLowerCase();
+        if (prev !== 'active') {
+          try {
+            paymentEmail = await triggerSponsorshipPaymentRequestEmail({
+              sponsorship: Object.assign({}, before || {}, { id: input.id, status: 'active' }),
+              activationSource: 'telegram_agent'
+            });
+          } catch (emailErr) {
+            paymentEmail = { sent: false, error: emailErr.message || 'Payment email failed' };
+          }
+        } else {
+          paymentEmail = { sent: false, skipped: true, reason: 'already_active' };
+        }
+      }
+      return { success: true, id: input.id, new_status: input.status, payment_email: paymentEmail };
     case 'send_email':
       await sendEmail(input.to, input.subject, input.body, input.from_name || 'KiddBusy');
       return { success: true, to: input.to };

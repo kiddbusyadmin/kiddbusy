@@ -3,6 +3,7 @@
 
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+const { triggerSponsorshipPaymentRequestEmail } = require('./_sponsorship-payment-email');
 
 const ALLOWED_TABLES = {
   submissions: new Set(['pending', 'approved', 'rejected']),
@@ -274,6 +275,14 @@ exports.handler = async (event) => {
   const url = `${SUPABASE_URL}/rest/v1/${table}?${filterQuery}`;
 
   try {
+    let sponsorshipBefore = null;
+    if (table === 'sponsorships' && id) {
+      const before = await sbRequest(`sponsorships?id=eq.${encodeURIComponent(String(id))}&select=*&limit=1`);
+      if (before.response.ok && Array.isArray(before.data) && before.data.length) {
+        sponsorshipBefore = before.data[0];
+      }
+    }
+
     // For submissions without id, require exactly one match.
     if (!id && table === 'submissions') {
       const preflight = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=business_name,submitter_email,city,status&${filterQuery}&limit=2`, {
@@ -326,11 +335,30 @@ exports.handler = async (event) => {
     }
 
     let cleanup = null;
+    let paymentEmail = null;
     if (table === 'reviews' && nextStatus === 'approved') {
       cleanup = await purgePlaceholderReviewsOnFirstOrganicApprove(id);
     }
+    if (table === 'sponsorships' && nextStatus === 'active') {
+      const prev = String((sponsorshipBefore && sponsorshipBefore.status) || '').toLowerCase();
+      const becameActive = prev !== 'active';
+      if (becameActive) {
+        const updated = Array.isArray(data) && data.length ? data[0] : null;
+        const sponsorshipRow = updated || sponsorshipBefore || { id, status: nextStatus };
+        try {
+          paymentEmail = await triggerSponsorshipPaymentRequestEmail({
+            sponsorship: sponsorshipRow,
+            activationSource: 'manual'
+          });
+        } catch (emailErr) {
+          paymentEmail = { sent: false, error: emailErr.message || 'Payment email failed' };
+        }
+      } else {
+        paymentEmail = { sent: false, skipped: true, reason: 'already_active' };
+      }
+    }
 
-    return json(200, { success: true, table, id, updates: { status: nextStatus }, data, cleanup });
+    return json(200, { success: true, table, id, updates: { status: nextStatus }, data, cleanup, payment_email: paymentEmail });
   } catch (err) {
     return json(500, { error: err.message || 'Unexpected error' });
   }
