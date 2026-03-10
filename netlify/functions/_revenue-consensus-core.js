@@ -170,6 +170,8 @@ async function generateConsensusReport(input) {
     '- Keep legal/compliance safe.',
     '- Assume email cap and contact cap must be respected.',
     '- Favor highest ROI actions first.',
+    '- Critical traffic gate: if sessions_30d is below monthly_unique_visit_target, recommendations must be traffic-first.',
+    '- When below traffic target, do not prioritize monetization asks (owner-claim outreach or sponsorship sales) as primary actions.',
     'Input JSON:',
     JSON.stringify(input)
   ].join('\n');
@@ -208,6 +210,99 @@ async function generateConsensusReport(input) {
     recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations.slice(0, 5) : [],
     watchouts: Array.isArray(parsed.watchouts) ? parsed.watchouts.slice(0, 8) : [],
     confidence: Math.max(0, Math.min(1, safeNum(parsed.confidence)))
+  };
+}
+
+function isMonetizationAction(rec) {
+  const text = String((rec && rec.action) || '').toLowerCase();
+  const metric = String((rec && rec.metric) || '').toLowerCase();
+  return (
+    text.indexOf('sponsor') >= 0 ||
+    text.indexOf('sponsorship') >= 0 ||
+    text.indexOf('owner claim') >= 0 ||
+    text.indexOf('claim outreach') >= 0 ||
+    metric.indexOf('sponsor') >= 0 ||
+    metric.indexOf('owner_claim') >= 0
+  );
+}
+
+function trafficFirstTemplates(targetSessions) {
+  const target = Number(targetSessions) > 0 ? Number(targetSessions) : 1000;
+  return [
+    {
+      action: 'Improve city search entry-point visibility and reduce first-click friction on homepage',
+      owner: 'CMO',
+      expected_impact: 'Increase top-of-funnel sessions from organic and direct visitors',
+      metric: 'sessions_30d',
+      target_30d: target
+    },
+    {
+      action: 'Publish high-intent local weekend/event content with strong internal links from blog to city pages',
+      owner: 'CMO',
+      expected_impact: 'Lift search-driven traffic and return visits',
+      metric: 'sessions_30d',
+      target_30d: target
+    },
+    {
+      action: 'Expand event source coverage and freshness in top cities to improve repeat usage',
+      owner: 'CMO',
+      expected_impact: 'Higher weekly active sessions and lower bounce',
+      metric: 'sessions_7d',
+      target_30d: Math.round(target / 4)
+    },
+    {
+      action: 'Optimize newsletter capture CTA placement and messaging on high-traffic surfaces',
+      owner: 'CMO',
+      expected_impact: 'Build retained audience for recurring traffic',
+      metric: 'signup_conversion',
+      target_30d: '>=10%'
+    },
+    {
+      action: 'Delay aggressive monetization asks until traffic baseline is met; monitor runway weekly',
+      owner: 'Accountant',
+      expected_impact: 'Preserve credibility while traffic compounds',
+      metric: 'sessions_30d',
+      target_30d: target
+    }
+  ];
+}
+
+function enforceTrafficGate(report, input) {
+  const metrics = (input && input.metrics) || {};
+  const settings = (input && input.cmo_settings) || {};
+  const sessions30d = Number(metrics.sessions_30d || 0);
+  const trafficTarget = Number(settings.monthly_unique_visit_target || 1000);
+  const belowTarget = Number.isFinite(trafficTarget) ? sessions30d < trafficTarget : sessions30d < 1000;
+  if (!belowTarget) return report;
+
+  const kept = (report.recommendations || []).filter((r) => !isMonetizationAction(r));
+  const templates = trafficFirstTemplates(trafficTarget);
+  const merged = kept.slice(0, 5);
+  for (let i = 0; i < templates.length && merged.length < 5; i += 1) {
+    merged.push(templates[i]);
+  }
+
+  const watchouts = Array.isArray(report.watchouts) ? report.watchouts.slice(0, 8) : [];
+  const gateNote = `Traffic gate active: sessions_30d (${sessions30d}) is below target (${trafficTarget}); prioritize traffic before monetization asks.`;
+  if (watchouts.indexOf(gateNote) < 0) watchouts.unshift(gateNote);
+
+  const summaryPrefix = `Traffic gate active: current sessions (${sessions30d}) are below target (${trafficTarget}), so monetization asks are deprioritized.`;
+  const summaryText = String(report.summary_text || '');
+  const patchedSummary = summaryText.indexOf('Traffic gate active:') === 0
+    ? summaryText
+    : `${summaryPrefix} ${summaryText}`;
+
+  const summaryHtml = String(report.summary_html || '<p>No summary generated.</p>');
+  const gateHtml = `<p><strong>Traffic gate active:</strong> sessions_30d (${sessions30d}) is below target (${trafficTarget}), so traffic growth actions are prioritized before monetization asks.</p>`;
+  const patchedHtml = summaryHtml.indexOf('Traffic gate active') >= 0 ? summaryHtml : gateHtml + summaryHtml;
+
+  return {
+    subject: report.subject,
+    summary_text: patchedSummary,
+    summary_html: patchedHtml,
+    recommendations: merged,
+    watchouts,
+    confidence: report.confidence
   };
 }
 
@@ -268,7 +363,7 @@ async function sendConsensusEmail(report) {
 
 async function runRevenueConsensus() {
   const input = await buildConsensusInput();
-  const report = await generateConsensusReport(input);
+  const report = enforceTrafficGate(await generateConsensusReport(input), input);
   await persistConsensusReport(report, input);
   const emailResult = await sendConsensusEmail(report);
 
