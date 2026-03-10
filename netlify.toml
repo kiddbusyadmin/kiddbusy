@@ -41,6 +41,9 @@
 [functions.accountant-agent]
   timeout = 30
 
+[functions.revenue-consensus]
+  timeout = 60
+
 # Daily cache warm — runs at 3am ET (8am UTC)
 [functions.daily-cache-warm]
   schedule = "0 8 * * *"
@@ -64,6 +67,11 @@
 [functions.accountant-scheduled]
   schedule = "0 6 * * *"
   timeout = 30
+
+# Daily CMO + Accountant consensus brief — runs at 9:30am ET (14:30 UTC)
+[functions.revenue-consensus-scheduled]
+  schedule = "30 14 * * *"
+  timeout = 60
 
 [[redirects]]
   from = "/api/cmo-config"
@@ -128,6 +136,11 @@
 [[redirects]]
   from = "/api/accountant-agent"
   to = "/.netlify/functions/accountant-agent"
+  status = 200
+
+[[redirects]]
+  from = "/api/revenue-consensus"
+  to = "/.netlify/functions/revenue-consensus"
   status = 200
 
 [[redirects]]
