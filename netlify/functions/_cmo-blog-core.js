@@ -297,7 +297,7 @@ function normalizePost(rawPost, cities) {
 
 async function generateBatch(cities, existingTitles, batchSize, preferredCity) {
   var targetCity = pickTargetCity(cities, preferredCity);
-  var localRows = await getCityListingContext(targetCity, 12);
+  var localRows = await getCityListingContext(targetCity, 8);
   var localNames = localRows.map(function (r) { return String((r && r.name) || '').trim(); }).filter(Boolean);
   var cityContext = buildCityContextBlock(targetCity, localRows);
 
@@ -311,7 +311,7 @@ async function generateBatch(cities, existingTitles, batchSize, preferredCity) {
     'Content must be locally grounded with real place names and specifics.'
   ].join(' ');
 
-  var avoidTitles = Array.from(existingTitles).slice(-300).join(' | ') || 'none';
+  var avoidTitles = Array.from(existingTitles).slice(-80).join(' | ') || 'none';
   var prompt = [
     'Generate exactly ' + String(batchSize) + ' unique blog posts for KiddBusy as a JSON array.',
     'Primary city for all posts in this batch: ' + targetCity + '.',
@@ -342,9 +342,8 @@ async function generateBatch(cities, existingTitles, batchSize, preferredCity) {
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 2600,
+      max_tokens: 1400,
       temperature: 0.7,
-      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
       system: system,
       messages: [{ role: 'user', content: prompt }]
     })
@@ -392,7 +391,7 @@ async function insertDraft(post) {
     if (retry.response.ok) return Array.isArray(retry.data) ? retry.data[0] : retry.data;
   }
 
-  throw new Error('Failed to insert draft post');
+  throw new Error('Failed to insert draft post: ' + JSON.stringify(first.data || {}));
 }
 
 async function countDraftsToday() {
@@ -460,6 +459,14 @@ async function getPublishedSeedPosts(limit) {
   return result.data;
 }
 
+async function getArchivedSeedPosts(limit) {
+  var capped = clampNumber(limit, 1, 200, 40);
+  var q = 'blog_posts?select=id,city,slug,title&source=eq.cmo_seed&status=eq.archived&order=updated_at.desc&limit=' + String(capped);
+  var result = await sbFetch(q);
+  if (!result.response.ok || !Array.isArray(result.data)) return [];
+  return result.data;
+}
+
 async function archivePostsByIds(ids) {
   var clean = Array.isArray(ids) ? ids.filter(Boolean) : [];
   if (!clean.length) return 0;
@@ -511,6 +518,7 @@ async function runCmoBlog(event) {
       50
     );
     var repairSeeded = !!body.repair_seeded;
+    var restoreSeeded = !!body.restore_seeded;
     var distributionEnabled = Object.prototype.hasOwnProperty.call(body, 'distribution_enabled')
       ? !!body.distribution_enabled
       : !!settings.blog_distribution_enabled;
@@ -537,16 +545,30 @@ async function runCmoBlog(event) {
     var identity = await getIdentitySets();
     var plannedCityRotation = [];
     var archivedSeedCount = 0;
+    var restoredSeedCount = 0;
     var seedBacklogCount = 0;
+    var repairWindow = [];
+
+    if (restoreSeeded) {
+      var archivedRows = await getArchivedSeedPosts(100);
+      if (archivedRows.length) {
+        var restoreLimit = clampNumber(
+          Object.prototype.hasOwnProperty.call(body, 'restore_limit') ? body.restore_limit : 10,
+          1,
+          100,
+          10
+        );
+        var restoreIds = archivedRows.slice(0, restoreLimit).map(function (row) { return row.id; });
+        var restored = await publishByIds(restoreIds);
+        restoredSeedCount = restored.length;
+      }
+    }
 
     if (repairSeeded) {
       var seeded = await getPublishedSeedPosts(100);
       seedBacklogCount = seeded.length;
       if (seeded.length) {
-        var repairWindow = seeded.slice(0, maxGeneratePerRun);
-        archivedSeedCount = await archivePostsByIds(
-          repairWindow.map(function (row) { return row.id; })
-        );
+        repairWindow = seeded.slice(0, maxGeneratePerRun);
         var seenSeedCities = {};
         for (var s = 0; s < repairWindow.length; s += 1) {
           var seedCity = String((repairWindow[s] && repairWindow[s].city) || '').trim();
@@ -565,7 +587,7 @@ async function runCmoBlog(event) {
     if (remaining < 0) remaining = 0;
     if (remaining > 200) remaining = 200;
     if (remaining > maxGeneratePerRun) remaining = maxGeneratePerRun;
-    if (repairSeeded && archivedSeedCount > 0 && remaining < archivedSeedCount) remaining = archivedSeedCount;
+    if (repairSeeded && repairWindow.length > 0 && remaining < repairWindow.length) remaining = repairWindow.length;
     if (remaining > 80) remaining = 80;
 
     var generated = [];
@@ -614,6 +636,13 @@ async function runCmoBlog(event) {
     } else if (distributionEnabled) {
       published = await publishFromQueue(publishRate);
     }
+    if (repairSeeded && repairWindow.length && generated.length) {
+      var archiveCount = generated.length;
+      if (archiveCount > repairWindow.length) archiveCount = repairWindow.length;
+      archivedSeedCount = await archivePostsByIds(
+        repairWindow.slice(0, archiveCount).map(function (row) { return row.id; })
+      );
+    }
 
     var depth = await queueDepth();
     await logAgentActivity({
@@ -629,6 +658,7 @@ async function runCmoBlog(event) {
         target_city: targetCity || null,
         repair_seeded: repairSeeded,
         archived_seed_count: archivedSeedCount,
+        restored_seed_count: restoredSeedCount,
         seed_backlog_count: seedBacklogCount,
         force_publish_generated: forcePublishGenerated,
         generated_count: generated.length,
@@ -647,6 +677,7 @@ async function runCmoBlog(event) {
       target_city: targetCity || null,
       repair_seeded: repairSeeded,
       archived_seed_count: archivedSeedCount,
+      restored_seed_count: restoredSeedCount,
       seed_backlog_count: seedBacklogCount,
       force_publish_generated: forcePublishGenerated,
       generated_count: generated.length,
