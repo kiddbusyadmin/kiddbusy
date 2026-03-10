@@ -1542,8 +1542,41 @@ const SESSION_ID = (() => {
 })();
 let _sessionCities = [];
 
+function isInternalTraffic() {
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.get('kb_internal') === '1') {
+      localStorage.setItem('kb_internal', '1');
+      return true;
+    }
+    if (localStorage.getItem('kb_internal') === '1') return true;
+    if (navigator.webdriver) return true;
+    const host = String(window.location.hostname || '').toLowerCase();
+    if (host.endsWith('.netlify.app') || host === 'localhost' || host === '127.0.0.1') return true;
+  } catch (_) {}
+  return false;
+}
+
+function analyticsSource() {
+  return isInternalTraffic() ? 'internal' : 'public';
+}
+
 function track(event, city = null, value = null) {
-  sb.from('analytics').insert({ event, city, value, session_id: SESSION_ID }).then(() => {});
+  const payload = {
+    event,
+    city,
+    value,
+    session_id: SESSION_ID,
+    is_internal: isInternalTraffic(),
+    source: analyticsSource(),
+    user_agent: navigator.userAgent || null,
+    path: window.location.pathname || null
+  };
+  sb.from('analytics').insert(payload).then(({ error }) => {
+    if (!error) return;
+    // Backward compatibility if new columns are not present.
+    sb.from('analytics').insert({ event, city, value, session_id: SESSION_ID }).then(() => {});
+  });
 }
 
 // ── SHARE ──
@@ -2666,10 +2699,12 @@ async function shareEvent(name, detail, url) {
   const city = document.getElementById('eventsCity') ? document.getElementById('eventsCity').textContent : null;
   const cleanUrl = normalizeEventUrl(url) || normalizeEventUrl(extractFirstUrl(detail)) || buildEventFallbackUrl(name, city);
   const text = cleanUrl ? `${name}\n${detail}\n${cleanUrl}` : `${name}\n${detail}`;
+  let method = 'copy_clipboard';
   try {
     if (navigator.share) {
+      method = 'native_share';
       await navigator.share({ title: name, text: detail, url: cleanUrl || undefined });
-      track('event_share_click', city, cleanUrl ? `${name}|${cleanUrl}` : name);
+      track('event_share_click', city, JSON.stringify({ method, event_name: name, shared_url: cleanUrl || null }));
       return;
     }
   } catch (_) {
@@ -2677,7 +2712,7 @@ async function shareEvent(name, detail, url) {
   }
   try {
     await navigator.clipboard.writeText(text);
-    track('event_share_click', city, cleanUrl ? `${name}|${cleanUrl}` : name);
+    track('event_share_click', city, JSON.stringify({ method, event_name: name, shared_url: cleanUrl || null }));
     alert('Event details copied to clipboard');
   } catch (_) {
     alert('Unable to share this event right now.');

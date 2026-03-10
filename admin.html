@@ -245,6 +245,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 <div class="dash-inner">
 
   <div class="date-banner" id="date-banner"></div>
+  <div style="display:flex;justify-content:flex-end;margin:-2px 0 12px">
+    <label style="display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:.72rem;color:var(--muted);cursor:pointer">
+      <input type="checkbox" id="toggle-internal-traffic" onchange="onInternalTrafficToggle()">
+      Include Internal/Test Traffic
+    </label>
+  </div>
 
   <!-- STAT CARDS - all 8 from original -->
   <div class="stats-row">
@@ -890,6 +896,7 @@ var _allSubmissionPhotos = [];
 var searchesRange = '24h';
 var LOGIN_STATE_KEY = 'kiddbusy_hq_unlocked';
 var _cmoConfig = null;
+var includeInternalTraffic = false;
 
 var EVENT_COLORS = {
   city_search:'#4d9fff', multi_city_session:'#7c5cbf',
@@ -928,6 +935,8 @@ function doLogin() {
 
 function unlockDashboard() {
   document.getElementById('login-screen').style.display = 'none';
+  var internalToggle = document.getElementById('toggle-internal-traffic');
+  if (internalToggle) internalToggle.checked = includeInternalTraffic;
   if (!sb) sb = supabase.createClient(SUPABASE_URL, ANON_KEY);
   loadAll();
   if (!refreshTimer) refreshTimer = setInterval(loadAll, 60000);
@@ -1013,6 +1022,18 @@ function emptyHTML(msg) {
   return '<div class="empty">' + (msg || 'No data yet') + '</div>';
 }
 
+function filterAnalyticsRows(rows) {
+  var list = rows || [];
+  if (includeInternalTraffic) return list;
+  return list.filter(function(r) { return !r || !r.is_internal; });
+}
+
+function onInternalTrafficToggle() {
+  var toggle = document.getElementById('toggle-internal-traffic');
+  includeInternalTraffic = !!(toggle && toggle.checked);
+  loadAll();
+}
+
 // ===== WRITE OPS via db-proxy =====
 async function dbWrite(table, id, updates, match) {
   var res = await fetch('/.netlify/functions/db-proxy', {
@@ -1090,11 +1111,9 @@ async function loadAll() {
 // ===== STATS (8 cards) =====
 async function loadStats() {
   var results = await Promise.all([
-    sb.from('analytics').select('event, city, created_at').order('created_at', { ascending: false }),
+    sb.from('analytics').select('*').order('created_at', { ascending: false }),
     sb.from('reviews').select('status, created_at'),
-    sb.from('email_leads').select('created_at'),
-    sb.from('analytics').select('created_at').eq('event', 'cache_hit'),
-    sb.from('analytics').select('created_at').eq('event', 'cache_miss')
+    sb.from('email_leads').select('created_at')
   ]);
   var submissionRows = [];
   try {
@@ -1103,7 +1122,7 @@ async function loadStats() {
     submissionRows = [];
   }
 
-  var events = results[0].data || [];
+  var events = filterAnalyticsRows(results[0].data || []);
   var windowEvents = events.filter(function(e) { return isWithinRange(e.created_at, searchesRange); });
   var allSearches = events.filter(function(e) { return e.event === 'city_search'; });
   var scopedSearches = windowEvents.filter(function(e) { return e.event === 'city_search'; });
@@ -1145,8 +1164,8 @@ async function loadStats() {
   document.getElementById('stat-adv').textContent = advClicks.length;
   document.getElementById('stat-adv-sub').textContent = 'all time: ' + advClicksAll.length;
 
-  var hitsAllRows = results[3].data || [];
-  var missAllRows = results[4].data || [];
+  var hitsAllRows = events.filter(function(e) { return e.event === 'cache_hit'; });
+  var missAllRows = events.filter(function(e) { return e.event === 'cache_miss'; });
   var hits = hitsAllRows.filter(function(r) { return isWithinRange(r.created_at, searchesRange); }).length;
   var misses = missAllRows.filter(function(r) { return isWithinRange(r.created_at, searchesRange); }).length;
   var allHits = hitsAllRows.length;
@@ -1161,9 +1180,9 @@ async function loadStats() {
 
 // ===== TOP CITIES =====
 async function loadTopCities() {
-  var res = await sb.from('analytics').select('city').eq('event', 'city_search');
+  var res = await sb.from('analytics').select('*').eq('event', 'city_search');
   var counts = {};
-  (res.data || []).forEach(function(e) {
+  filterAnalyticsRows(res.data || []).forEach(function(e) {
     if (e.city) counts[e.city] = (counts[e.city] || 0) + 1;
   });
   var sorted = Object.entries(counts).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 10);
@@ -1188,9 +1207,9 @@ async function loadTopCities() {
 
 // ===== REVIEW FUNNEL (with abandon rate) =====
 async function loadReviewFunnel() {
-  var res = await sb.from('analytics').select('event').in('event', ['review_start','review_abandon','review_submit']);
+  var res = await sb.from('analytics').select('*').in('event', ['review_start','review_abandon','review_submit']);
   var counts = { review_start: 0, review_abandon: 0, review_submit: 0 };
-  (res.data || []).forEach(function(e) { counts[e.event]++; });
+  filterAnalyticsRows(res.data || []).forEach(function(e) { counts[e.event]++; });
 
   var starts = counts.review_start;
   var abandons = counts.review_abandon;
@@ -1221,9 +1240,9 @@ async function loadReviewFunnel() {
 
 // ===== FILTER USAGE =====
 async function loadFilterUsage() {
-  var res = await sb.from('analytics').select('value').eq('event', 'filter_used');
+  var res = await sb.from('analytics').select('*').eq('event', 'filter_used');
   var counts = {};
-  (res.data || []).forEach(function(e) {
+  filterAnalyticsRows(res.data || []).forEach(function(e) {
     if (e.value) counts[e.value] = (counts[e.value] || 0) + 1;
   });
   var sorted = Object.entries(counts).sort(function(a, b) { return b[1] - a[1]; });
@@ -1243,22 +1262,23 @@ async function loadFilterUsage() {
 
 // ===== SHARE CITY INSIGHTS =====
 function parseShareValue(value) {
-  if (!value) return { method: 'unknown', listing_name: null };
+  if (!value) return { method: 'unknown', listing_name: null, event_name: null };
   try {
     var obj = JSON.parse(value);
     return {
       method: obj && obj.method ? String(obj.method) : 'unknown',
-      listing_name: obj && obj.listing_name ? String(obj.listing_name) : null
+      listing_name: obj && obj.listing_name ? String(obj.listing_name) : null,
+      event_name: obj && obj.event_name ? String(obj.event_name) : null
     };
   } catch (_) {
     // Older events stored listing name directly in value.
-    return { method: 'legacy_unknown', listing_name: String(value) };
+    return { method: 'legacy_unknown', listing_name: String(value), event_name: null };
   }
 }
 
 async function loadShareCities() {
-  var res = await sb.from('analytics').select('city,value').eq('event', 'share_click');
-  var rows = res.data || [];
+  var res = await sb.from('analytics').select('*').in('event', ['share_click', 'event_share_click']);
+  var rows = filterAnalyticsRows(res.data || []);
   if (!rows.length) {
     document.getElementById('badge-share-cities').textContent = '0 events';
     document.getElementById('body-share-cities').innerHTML = emptyHTML('No share clicks yet');
@@ -1267,11 +1287,14 @@ async function loadShareCities() {
 
   var cityCounts = {};
   var methods = {};
+  var eventTypeCounts = { listing: 0, event: 0 };
   rows.forEach(function(r) {
     var city = (r.city && String(r.city).trim()) ? String(r.city).trim() : 'Unknown';
     cityCounts[city] = (cityCounts[city] || 0) + 1;
     var parsed = parseShareValue(r.value);
     methods[parsed.method] = (methods[parsed.method] || 0) + 1;
+    if (r.event === 'event_share_click') eventTypeCounts.event++;
+    else eventTypeCounts.listing++;
   });
 
   var sorted = Object.entries(cityCounts).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 10);
@@ -1283,6 +1306,7 @@ async function loadShareCities() {
   document.getElementById('badge-share-cities').textContent = rows.length + ' share clicks';
   document.getElementById('body-share-cities').innerHTML =
     '<div style=\"font-size:.74rem;color:var(--muted);font-family:var(--mono);margin-bottom:12px\">Methods: ' + (methodSummary || '--') + '</div>' +
+    '<div style=\"font-size:.74rem;color:var(--muted);font-family:var(--mono);margin-bottom:12px\">Listing shares: ' + eventTypeCounts.listing + ' | Event shares: ' + eventTypeCounts.event + '</div>' +
     sorted.map(function(entry) {
       var city = entry[0], count = entry[1];
       var pct = Math.round((count / max) * 100);
@@ -1334,7 +1358,7 @@ async function loadCacheHealth() {
 // ===== LIVE ACTIVITY FEED =====
 async function loadActivityFeed() {
   var res = await sb.from('analytics').select('*').order('created_at', { ascending: false }).limit(1500);
-  var rows = res.data || [];
+  var rows = filterAnalyticsRows(res.data || []);
   if (!rows.length) {
     document.getElementById('activitykpi-events').textContent = '0';
     document.getElementById('activitykpi-events-sub').textContent = 'all time: 0';
@@ -1472,7 +1496,7 @@ async function loadDataIntegrity() {
 async function loadOwnerKpis() {
   try {
     var eventsRes = await sb.from('analytics').select('*').order('created_at', { ascending: false }).limit(1500);
-    var allEvents = eventsRes.data || [];
+    var allEvents = filterAnalyticsRows(eventsRes.data || []);
     var ownerEvents = allEvents.filter(function(e) { return String(e.event || '').indexOf('owner_') === 0; });
     var counts = {};
     ownerEvents.forEach(function(e) { counts[e.event] = (counts[e.event] || 0) + 1; });
@@ -1573,13 +1597,13 @@ async function fetchCmoConfig() {
 }
 
 async function loadCmoKpis() {
-  var eventsRes = await sb.from('analytics').select('event,created_at,session_id,value').order('created_at', { ascending: false }).limit(5000);
+  var eventsRes = await sb.from('analytics').select('*').order('created_at', { ascending: false }).limit(5000);
   var leadsRes = await sb.from('email_leads').select('created_at').order('created_at', { ascending: false }).limit(3000);
   var claimsRes = await sb.from('owner_claims').select('status,created_at').order('created_at', { ascending: false }).limit(3000);
   var sponsorRes = await sb.from('sponsorships').select('status,created_at,plan').order('created_at', { ascending: false }).limit(3000);
   var unsubRes = await sb.from('email_preferences').select('email,unsubscribed').eq('unsubscribed', true).limit(3000);
 
-  var events = eventsRes.data || [];
+  var events = filterAnalyticsRows(eventsRes.data || []);
   var leads = leadsRes.data || [];
   var claims = claimsRes.data || [];
   var sponsors = sponsorRes.data || [];
@@ -2361,7 +2385,8 @@ async function execTool(name, input) {
         var q6 = sb.from('analytics').select('*').order('created_at', { ascending: false }).limit(input.limit || 500);
         if (input.event) q6 = q6.eq('event', input.event);
         var r6 = await q6;
-        return { count: (r6.data||[]).length, events: r6.data };
+        var eventRows = filterAnalyticsRows(r6.data || []);
+        return { count: eventRows.length, events: eventRows };
       }
       case 'update_submission_status': {
         await dbWrite('submissions', input.id, { status: input.status });
