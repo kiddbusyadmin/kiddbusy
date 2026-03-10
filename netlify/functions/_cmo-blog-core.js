@@ -4,6 +4,7 @@ const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const CMO_RUN_TOKEN = process.env.CMO_RUN_TOKEN || process.env.ADMIN_PASSWORD || '';
+const CMO_BLOG_MODELS = String(process.env.CMO_BLOG_MODELS || '').trim();
 
 function json(statusCode, payload) {
   return {
@@ -35,6 +36,17 @@ function slugify(value) {
 function startOfUtcDayIso() {
   var d = new Date();
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0)).toISOString();
+}
+
+function getPreferredModels() {
+  if (CMO_BLOG_MODELS) {
+    return CMO_BLOG_MODELS
+      .split(',')
+      .map(function (m) { return String(m || '').trim(); })
+      .filter(Boolean);
+  }
+  // Default to highest quality writing model first, then reliable fallback.
+  return ['claude-opus-4-1-20250805', 'claude-opus-4-20250514', 'claude-sonnet-4-20250514'];
 }
 
 async function sbFetch(path, options) {
@@ -425,24 +437,33 @@ async function generateBatch(cities, existingTitles, batchSize, preferredCity) {
     '- Avoid these existing titles: ' + avoidTitles
   ].join('\n');
 
-  var res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1400,
-      temperature: 0.7,
-      system: system,
-      messages: [{ role: 'user', content: prompt }]
-    })
-  });
-
-  var raw = await res.text();
-  if (!res.ok) throw new Error('Anthropic error (' + String(res.status) + '): ' + raw);
+  var models = getPreferredModels();
+  var raw = '';
+  var lastError = '';
+  for (var m = 0; m < models.length; m += 1) {
+    var modelName = models[m];
+    var res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: modelName,
+        max_tokens: 1400,
+        temperature: 0.7,
+        system: system,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    raw = await res.text();
+    if (res.ok) break;
+    lastError = 'model=' + modelName + ' status=' + String(res.status) + ' body=' + raw;
+    if (res.status === 429) break;
+  }
+  if (!raw) throw new Error('Anthropic error: empty response');
+  if (lastError && raw.indexOf('"type":"error"') >= 0) throw new Error('Anthropic error: ' + lastError);
   var arr = parseAnthropicArray(raw);
 
   var out = [];
