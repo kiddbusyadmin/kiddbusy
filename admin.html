@@ -350,22 +350,22 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
       <div class="panel-body" id="body-share-cities">
         <div class="stats-row" style="grid-template-columns:repeat(4,minmax(120px,1fr));margin-bottom:12px">
           <div class="stat-card blue" style="padding:10px 12px;min-height:auto">
-            <div class="stat-label">Event Shares</div>
+            <div class="stat-label">Share Opens</div>
             <div class="stat-value" id="sharekpi-event-scoped">--</div>
             <div class="stat-sub" id="sharekpi-event-scoped-sub">range</div>
           </div>
           <div class="stat-card purple" style="padding:10px 12px;min-height:auto">
-            <div class="stat-label">Event Shares (All)</div>
+            <div class="stat-label">Native Sent</div>
             <div class="stat-value" id="sharekpi-event-all">--</div>
-            <div class="stat-sub">all time</div>
+            <div class="stat-sub" id="sharekpi-event-all-sub">range</div>
           </div>
           <div class="stat-card green" style="padding:10px 12px;min-height:auto">
-            <div class="stat-label">Native Share</div>
+            <div class="stat-label">Abandons</div>
             <div class="stat-value" id="sharekpi-event-native">--</div>
             <div class="stat-sub" id="sharekpi-event-native-sub">events</div>
           </div>
           <div class="stat-card yellow" style="padding:10px 12px;min-height:auto">
-            <div class="stat-label">Copy Share</div>
+            <div class="stat-label">Fallback Hand-off</div>
             <div class="stat-value" id="sharekpi-event-copy">--</div>
             <div class="stat-sub" id="sharekpi-event-copy-sub">events</div>
           </div>
@@ -1411,61 +1411,78 @@ async function loadFilterUsage() {
 
 // ===== SHARE CITY INSIGHTS =====
 function parseShareValue(value) {
-  if (!value) return { method: 'unknown', listing_name: null, event_name: null };
+  if (!value) return { method: 'unknown', surface: 'unknown', listing_name: null, event_name: null };
   try {
     var obj = JSON.parse(value);
     return {
       method: obj && obj.method ? String(obj.method) : 'unknown',
+      surface: obj && obj.surface ? String(obj.surface) : 'unknown',
       listing_name: obj && obj.listing_name ? String(obj.listing_name) : null,
       event_name: obj && obj.event_name ? String(obj.event_name) : null
     };
   } catch (_) {
     // Older events stored listing name directly in value.
-    return { method: 'legacy_unknown', listing_name: String(value), event_name: null };
+    return { method: 'legacy_unknown', surface: 'listing', listing_name: String(value), event_name: null };
   }
 }
 
 async function loadShareCities() {
-  var res = await sb.from('analytics').select('*').in('event', ['share_click', 'event_share_click']);
+  var res = await sb.from('analytics').select('*').in('event', [
+    'share_open',
+    'share_native_sent',
+    'share_abandon',
+    'share_copy_ready',
+    'share_link_opened',
+    // legacy
+    'share_click',
+    'event_share_click'
+  ]);
   var rows = filterAnalyticsRows(res.data || []);
   var scopedRows = rows.filter(function(r) { return isWithinRange(r.created_at, searchesRange); });
-  var eventScopedRows = scopedRows.filter(function(r) { return r.event === 'event_share_click'; });
-  var eventAllRows = rows.filter(function(r) { return r.event === 'event_share_click'; });
-  var eventScopedMethods = { native_share: 0, copy_clipboard: 0, other: 0 };
-  eventScopedRows.forEach(function(r) {
-    var parsed = parseShareValue(r.value);
-    if (parsed.method === 'native_share') eventScopedMethods.native_share++;
-    else if (parsed.method === 'copy_clipboard') eventScopedMethods.copy_clipboard++;
-    else eventScopedMethods.other++;
-  });
-  var eventScopedTotal = eventScopedRows.length;
-  var eventNativePct = eventScopedTotal > 0 ? Math.round((eventScopedMethods.native_share / eventScopedTotal) * 100) : 0;
-  var eventCopyPct = eventScopedTotal > 0 ? Math.round((eventScopedMethods.copy_clipboard / eventScopedTotal) * 100) : 0;
+  var scopedAttempts = scopedRows.filter(function(r) { return r.event === 'share_open' || r.event === 'share_click' || r.event === 'event_share_click'; });
+  var scopedNativeSent = scopedRows.filter(function(r) { return r.event === 'share_native_sent'; });
+  var scopedAbandon = scopedRows.filter(function(r) { return r.event === 'share_abandon'; });
+  var scopedFallback = scopedRows.filter(function(r) { return r.event === 'share_copy_ready' || r.event === 'share_link_opened'; });
+  var nativeRate = scopedAttempts.length > 0 ? Math.round((scopedNativeSent.length / scopedAttempts.length) * 100) : 0;
+  var abandonRate = scopedAttempts.length > 0 ? Math.round((scopedAbandon.length / scopedAttempts.length) * 100) : 0;
 
-  document.getElementById('sharekpi-event-scoped').textContent = eventScopedTotal;
+  document.getElementById('sharekpi-event-scoped').textContent = scopedAttempts.length;
   document.getElementById('sharekpi-event-scoped-sub').textContent = rangeBadgeLabel(searchesRange);
-  document.getElementById('sharekpi-event-all').textContent = eventAllRows.length;
-  document.getElementById('sharekpi-event-native').textContent = eventScopedMethods.native_share;
-  document.getElementById('sharekpi-event-native-sub').textContent = eventScopedTotal > 0 ? (eventNativePct + '% of event shares') : 'events';
-  document.getElementById('sharekpi-event-copy').textContent = eventScopedMethods.copy_clipboard;
-  document.getElementById('sharekpi-event-copy-sub').textContent = eventScopedTotal > 0 ? (eventCopyPct + '% of event shares') : 'events';
+  document.getElementById('sharekpi-event-all').textContent = scopedNativeSent.length;
+  document.getElementById('sharekpi-event-all-sub').textContent = scopedAttempts.length > 0 ? (nativeRate + '% of opens') : rangeBadgeLabel(searchesRange);
+  document.getElementById('sharekpi-event-native').textContent = scopedAbandon.length;
+  document.getElementById('sharekpi-event-native-sub').textContent = scopedAttempts.length > 0 ? (abandonRate + '% abandon') : 'events';
+  document.getElementById('sharekpi-event-copy').textContent = scopedFallback.length;
+  document.getElementById('sharekpi-event-copy-sub').textContent = scopedAttempts.length > 0 ? (Math.round((scopedFallback.length / scopedAttempts.length) * 100) + '% of opens') : 'events';
 
   if (!rows.length) {
     document.getElementById('badge-share-cities').textContent = '0 events';
-    document.getElementById('body-share-cities-content').innerHTML = emptyHTML('No share clicks yet');
+    document.getElementById('body-share-cities-content').innerHTML = emptyHTML('No share activity yet');
     return;
   }
 
   var cityCounts = {};
   var methods = {};
-  var eventTypeCounts = { listing: 0, event: 0 };
+  var eventTypeCounts = { listing: 0, event: 0, unknown: 0 };
+  var outcomeCounts = { open: 0, native_sent: 0, abandon: 0, fallback: 0, legacy_click: 0 };
   rows.forEach(function(r) {
+    var isOpenEvent = (r.event === 'share_open' || r.event === 'share_click' || r.event === 'event_share_click');
+    if (!isOpenEvent) return;
     var city = (r.city && String(r.city).trim()) ? String(r.city).trim() : 'Unknown';
     cityCounts[city] = (cityCounts[city] || 0) + 1;
+  });
+  rows.forEach(function(r) {
     var parsed = parseShareValue(r.value);
     methods[parsed.method] = (methods[parsed.method] || 0) + 1;
-    if (r.event === 'event_share_click') eventTypeCounts.event++;
-    else eventTypeCounts.listing++;
+    if (parsed.surface === 'event') eventTypeCounts.event++;
+    else if (parsed.surface === 'listing') eventTypeCounts.listing++;
+    else eventTypeCounts.unknown++;
+
+    if (r.event === 'share_open') outcomeCounts.open++;
+    else if (r.event === 'share_native_sent') outcomeCounts.native_sent++;
+    else if (r.event === 'share_abandon') outcomeCounts.abandon++;
+    else if (r.event === 'share_copy_ready' || r.event === 'share_link_opened') outcomeCounts.fallback++;
+    else if (r.event === 'share_click' || r.event === 'event_share_click') outcomeCounts.legacy_click++;
   });
 
   var sorted = Object.entries(cityCounts).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 10);
@@ -1474,15 +1491,16 @@ async function loadShareCities() {
     return entry[0] + ': ' + entry[1];
   }).join(' | ');
 
-  document.getElementById('badge-share-cities').textContent = rows.length + ' share clicks';
+  document.getElementById('badge-share-cities').textContent = scopedAttempts.length + ' opens (' + rangeBadgeLabel(searchesRange) + ')';
   document.getElementById('body-share-cities-content').innerHTML =
     '<div style=\"font-size:.74rem;color:var(--muted);font-family:var(--mono);margin-bottom:12px\">Methods: ' + (methodSummary || '--') + '</div>' +
-    '<div style=\"font-size:.74rem;color:var(--muted);font-family:var(--mono);margin-bottom:12px\">Listing shares: ' + eventTypeCounts.listing + ' | Event shares: ' + eventTypeCounts.event + '</div>' +
+    '<div style=\"font-size:.74rem;color:var(--muted);font-family:var(--mono);margin-bottom:12px\">Surfaces: listing=' + eventTypeCounts.listing + ' | event=' + eventTypeCounts.event + ' | unknown=' + eventTypeCounts.unknown + '</div>' +
+    '<div style=\"font-size:.74rem;color:var(--muted);font-family:var(--mono);margin-bottom:12px\">Outcomes: open=' + outcomeCounts.open + ' | native_sent=' + outcomeCounts.native_sent + ' | abandon=' + outcomeCounts.abandon + ' | fallback=' + outcomeCounts.fallback + ' | legacy_click=' + outcomeCounts.legacy_click + '</div>' +
     sorted.map(function(entry) {
       var city = entry[0], count = entry[1];
       var pct = Math.round((count / max) * 100);
       return '<div class=\"city-bar-wrap\">' +
-        '<div class=\"city-bar-label\">' + city + '<span>' + count + ' share click' + (count !== 1 ? 's' : '') + '</span></div>' +
+        '<div class=\"city-bar-label\">' + city + '<span>' + count + ' share open' + (count !== 1 ? 's' : '') + '</span></div>' +
         '<div class=\"city-bar-bg\"><div class=\"city-bar-fill\" style=\"width:' + pct + '%\"></div></div>' +
         '</div>';
     }).join('');

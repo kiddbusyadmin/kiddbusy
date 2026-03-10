@@ -1574,7 +1574,7 @@ function track(event, city = null, value = null) {
 }
 
 // ── SHARE ──
-function sharePlace(btn, name, address, desc, businessUrl) {
+async function sharePlace(btn, name, address, desc, businessUrl) {
   const officialUrl = normalizeWebsiteUrl(businessUrl) || '';
   const shareUrl = officialUrl || window.location.href;
   const urlLine = officialUrl ? `🌐 ${officialUrl}\n` : '';
@@ -1582,19 +1582,45 @@ function sharePlace(btn, name, address, desc, businessUrl) {
   const city = (document.getElementById('citySelect') && document.getElementById('citySelect').value)
     ? document.getElementById('citySelect').value
     : null;
-  let method = 'copy_clipboard';
+  track('share_open', city, JSON.stringify({ surface: 'listing', method: navigator.share ? 'native_share' : 'copy_clipboard', listing_name: name, shared_url: shareUrl, has_business_url: !!officialUrl }));
+
   if (navigator.share) {
-    method = 'native_share';
-    navigator.share({ title: name, text, url: shareUrl })
-      .catch(() => {});
-  } else {
-    navigator.clipboard.writeText(text).then(() => {
+    try {
+      await navigator.share({ title: name, text, url: shareUrl });
+      track('share_native_sent', city, JSON.stringify({ surface: 'listing', method: 'native_share', listing_name: name, shared_url: shareUrl, has_business_url: !!officialUrl }));
+      if (btn) {
+        btn.textContent = 'Shared';
+        setTimeout(function() { btn.textContent = '📤 Share'; }, 1400);
+      }
+      return;
+    } catch (err) {
+      if (err && err.name === 'AbortError') {
+        track('share_abandon', city, JSON.stringify({ surface: 'listing', method: 'native_share', reason: 'native_cancelled', listing_name: name, shared_url: shareUrl, has_business_url: !!officialUrl }));
+        return;
+      }
+    }
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    track('share_copy_ready', city, JSON.stringify({ surface: 'listing', method: 'copy_clipboard', listing_name: name, shared_url: shareUrl, has_business_url: !!officialUrl }));
+    if (btn) {
       btn.innerHTML = '✅ Copied!';
       btn.classList.add('copied');
-      setTimeout(() => { btn.innerHTML = '📤 Share'; btn.classList.remove('copied'); }, 2000);
-    });
+      setTimeout(function() { btn.innerHTML = '📤 Share'; btn.classList.remove('copied'); }, 2000);
+    }
+  } catch (_) {
+    if (shareUrl) {
+      window.open(shareUrl, '_blank', 'noopener');
+      track('share_link_opened', city, JSON.stringify({ surface: 'listing', method: 'open_link_fallback', listing_name: name, shared_url: shareUrl, has_business_url: !!officialUrl }));
+      if (btn) {
+        btn.textContent = 'Opened';
+        setTimeout(function() { btn.textContent = '📤 Share'; }, 1400);
+      }
+      return;
+    }
+    track('share_abandon', city, JSON.stringify({ surface: 'listing', method: 'fallback_failed', reason: 'no_supported_method', listing_name: name, shared_url: shareUrl, has_business_url: !!officialUrl }));
   }
-  track('share_click', city, JSON.stringify({ method, listing_name: name, shared_url: shareUrl, has_business_url: !!officialUrl }));
 }
 
 // ── UPSERT LISTING & GET STABLE ID ──
@@ -2767,26 +2793,31 @@ async function shareEvent(name, detail, url) {
   const city = document.getElementById('eventsCity') ? document.getElementById('eventsCity').textContent : null;
   const cleanUrl = normalizeEventUrl(url) || normalizeEventUrl(extractFirstUrl(detail)) || '';
   const text = cleanUrl ? `${name}\n${detail}\n${cleanUrl}` : `${name}\n${detail}`;
+  track('share_open', city, JSON.stringify({ surface: 'event', method: navigator.share ? 'native_share' : 'copy_clipboard', event_name: name, shared_url: cleanUrl || null }));
   if (navigator.share) {
     try {
       await navigator.share({ title: name, text: detail, url: cleanUrl || undefined });
-      track('event_share_click', city, JSON.stringify({ method: 'native_share', event_name: name, shared_url: cleanUrl || null }));
+      track('share_native_sent', city, JSON.stringify({ surface: 'event', method: 'native_share', event_name: name, shared_url: cleanUrl || null }));
       return { ok: true, method: 'native_share' };
     } catch (err) {
-      if (err && err.name === 'AbortError') return { ok: false, method: 'cancelled' };
+      if (err && err.name === 'AbortError') {
+        track('share_abandon', city, JSON.stringify({ surface: 'event', method: 'native_share', reason: 'native_cancelled', event_name: name, shared_url: cleanUrl || null }));
+        return { ok: false, method: 'cancelled' };
+      }
       // Continue to fallback on real errors.
     }
   }
   try {
     await navigator.clipboard.writeText(text);
-    track('event_share_click', city, JSON.stringify({ method: 'copy_clipboard', event_name: name, shared_url: cleanUrl || null }));
+    track('share_copy_ready', city, JSON.stringify({ surface: 'event', method: 'copy_clipboard', event_name: name, shared_url: cleanUrl || null }));
     return { ok: true, method: 'copy_clipboard' };
   } catch (_) {
     if (cleanUrl) {
       window.open(cleanUrl, '_blank', 'noopener');
-      track('event_share_click', city, JSON.stringify({ method: 'open_link_fallback', event_name: name, shared_url: cleanUrl }));
+      track('share_link_opened', city, JSON.stringify({ surface: 'event', method: 'open_link_fallback', event_name: name, shared_url: cleanUrl }));
       return { ok: true, method: 'open_link_fallback' };
     }
+    track('share_abandon', city, JSON.stringify({ surface: 'event', method: 'fallback_failed', reason: 'no_supported_method', event_name: name, shared_url: cleanUrl || null }));
     return { ok: false, method: 'failed' };
   }
 }
