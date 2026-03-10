@@ -164,11 +164,6 @@ function wordCount(text) {
   return clean.split(/\s+/).length;
 }
 
-function countAnchorTags(html) {
-  var matches = String(html || '').match(/<a\s+[^>]*href=/gi);
-  return matches ? matches.length : 0;
-}
-
 function hasCurrentTimeAnchor(text) {
   var hay = String(text || '').toLowerCase();
   if (!hay) return false;
@@ -214,7 +209,6 @@ function hasStrongLocalSignals(post, targetCity, localListingNames) {
   if (localListingNames && localListingNames.length) {
     var minimumMentions = localListingNames.length >= 5 ? 3 : 2;
     if (mentions < minimumMentions) return false;
-    if (countAnchorTags(body) < 1) return false;
     return true;
   }
 
@@ -326,7 +320,7 @@ async function generateBatch(cities, existingTitles, batchSize, preferredCity) {
     '- city must be exactly "' + targetCity + '" (not null).',
     '- Include at least 3 specific local places by exact name from the Known local listings block.',
     '- Include a <h2>Local Picks</h2> section with a <ul> and at least 3 <li> entries.',
-    '- In Local Picks, include an <a href="...">official site</a> for any place that has a website in context.',
+    '- Include official site links when available in context.',
     '- Use full names as provided in context. Do not invent place names.',
     '- Include at least 1 very current time anchor in each post (this weekend, this month, or date range).',
     '- All posts must be materially different.',
