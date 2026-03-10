@@ -167,10 +167,15 @@ exports.handler = async (event) => {
   const prompts = isHeroMode ? heroBackgroundPrompts(brandName) : profilePrompts(brandName);
   const requestedSize = safeText(body.size, 20);
   const requestedQuality = safeText(body.quality, 20);
+  const promptTweak = safeText(body.prompt_tweak, 700);
   const stamp = Date.now();
   const generateOne = async (idx) => {
     const optionIndex = Math.max(1, Math.min(prompts.length, Number(idx) || 1));
-    const item = prompts[optionIndex - 1];
+    const baseItem = prompts[optionIndex - 1];
+    const item = {
+      label: baseItem.label,
+      prompt: promptTweak ? (baseItem.prompt + '\n' + promptTweak) : baseItem.prompt
+    };
     const img = await callOpenAiImage(item.prompt, {
       size: requestedSize || '1024x1024',
       quality: requestedQuality || (isHeroMode ? 'medium' : 'high'),
