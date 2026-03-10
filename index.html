@@ -68,6 +68,18 @@
     font-size: 0.95rem; cursor: pointer; transition: background .2s, transform .1s;
   }
   .nav-cta:hover { background: #5730A8; transform: translateY(-1px); }
+  .nav-events-btn {
+    display: none;
+    background: var(--sun);
+    color: #4f3a00;
+    border: 2px solid #f0bd1b;
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 900;
+    font-size: .85rem;
+    text-decoration: none;
+  }
 
   /* ── HERO ── */
   .hero {
@@ -847,6 +859,7 @@
     nav { padding: 14px 20px; }
     .nav-links { display: none; }
     .nav-cta { display: none; }
+    .nav-events-btn { display: inline-flex; align-items: center; }
     .hero { padding: 50px 20px 70px; }
     .filters-bar { padding: 16px 20px; overflow-x: auto; }
     .main-content { padding: 28px 16px; }
@@ -886,10 +899,12 @@
 <nav>
   <div class="logo">Kidd<span>Busy</span></div>
   <ul class="nav-links">
+    <li><a href="/events.html" style="color:var(--plum);font-weight:800">Events</a></li>
     <li><a href="#submit" onclick="document.getElementById('submit').scrollIntoView({behavior:'smooth'});return false;">Submit a Place</a></li>
     <li><a href="/blog/">Blog</a></li>
     <li><a href="#" onclick="showAdvertisePage(); return false;" style="color:var(--sun);font-weight:800">📣 Advertise</a></li>
   </ul>
+  <a class="nav-events-btn" href="/events.html">Events</a>
   <button class="nav-cta" onclick="document.getElementById('email-section').scrollIntoView({behavior:'smooth'})">Get Updates</button>
 </nav>
 
@@ -3122,7 +3137,7 @@ function openEventsPage() {
   var city = cityEl && cityEl.value ? cityEl.value : '';
   var state = stateEl && stateEl.value ? stateEl.value : '';
   if (!city || !state) {
-    alert('Pick a city first, then open Events.');
+    window.location.href = '/events.html';
     return;
   }
   var abbr = STATE_ABBR[state] || state;
