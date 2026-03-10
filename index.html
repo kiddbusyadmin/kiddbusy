@@ -413,6 +413,7 @@
   .event-detail { font-size: 0.85rem; color: var(--muted); font-weight: 600; }
   .event-free { background: var(--grass); color: #fff; border-radius: 50px; padding: 4px 12px; font-size: 0.78rem; font-weight: 800; }
   .event-paid { background: var(--sky); color: #fff; border-radius: 50px; padding: 4px 12px; font-size: 0.78rem; font-weight: 800; }
+  .event-ongoing { background: var(--plum); color: #fff; border-radius: 50px; padding: 4px 12px; font-size: 0.72rem; font-weight: 800; letter-spacing: .3px; }
 
   /* ── LOADING ── */
   .loader {
@@ -2479,6 +2480,71 @@ function renderCachedListings(rows) {
 // ── EVENTS ──
 const EVENTS_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+function startOfTodayLocal() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function parseIsoDateLocal(v) {
+  const s = String(v || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(s + 'T00:00:00');
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function monthToNumber(monthAbbrev) {
+  const m = String(monthAbbrev || '').trim().slice(0, 3).toUpperCase();
+  const map = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
+  return Object.prototype.hasOwnProperty.call(map, m) ? map[m] : null;
+}
+
+function inferDateFromMonthDay(monthAbbrev, dayValue) {
+  const m = monthToNumber(monthAbbrev);
+  const day = Number(dayValue);
+  if (m == null || !Number.isFinite(day) || day < 1 || day > 31) return null;
+  const now = new Date();
+  const today = startOfTodayLocal();
+  const candidate = new Date(now.getFullYear(), m, day, 0, 0, 0, 0);
+  // Year-wrap handling (e.g., Dec -> Jan upcoming).
+  if (candidate < today && (today - candidate) > (120 * 24 * 60 * 60 * 1000)) {
+    candidate.setFullYear(candidate.getFullYear() + 1);
+  }
+  return candidate;
+}
+
+function isPastEventRow(eventRow) {
+  const today = startOfTodayLocal();
+  const ongoing = !!eventRow.ongoing;
+  if (ongoing) {
+    if (eventRow.end_date) return eventRow.end_date < today;
+    return false;
+  }
+  const end = eventRow.end_date || eventRow.start_date;
+  if (!end) return false;
+  return end < today;
+}
+
+function normalizeEventRow(raw, cityLabel) {
+  const sourceUrl = normalizeEventUrl(raw.source_url || raw.url || raw.link || extractFirstUrl(raw.detail)) || buildEventFallbackUrl(raw.name, cityLabel);
+  const startDate = parseIsoDateLocal(raw.start_date) || inferDateFromMonthDay(raw.month || raw.event_month, raw.day || raw.event_day);
+  const endDate = parseIsoDateLocal(raw.end_date);
+  const detail = String(raw.detail || '');
+  const ongoingHint = /ongoing|runs through|daily|every weekend|through \w+ \d{1,2}/i.test(detail);
+  const ongoing = !!raw.ongoing || ongoingHint;
+  return {
+    month: raw.month || raw.event_month || '',
+    day: raw.day || raw.event_day || '',
+    name: raw.name || '',
+    detail,
+    free: !!(raw.free || raw.is_free),
+    source_url: sourceUrl,
+    ongoing,
+    start_date: startDate,
+    end_date: endDate
+  };
+}
+
 function renderEvents(events) {
   function esc(s) {
     return String(s || '')
@@ -2515,7 +2581,10 @@ function renderEvents(events) {
           <button class="share-btn" style="padding:6px 10px;font-size:.75rem;border-radius:8px" onclick="shareEvent('${esc(e.name)}','${esc(e.detail || '')}','${esc(normUrl(e.source_url || e.url || e.link) || buildEventFallbackUrl(e.name, document.getElementById('eventsCity') ? document.getElementById('eventsCity').textContent : ''))}')">📤 Share</button>
         </div>
       </div>
-      <span class="${(e.free || e.is_free) ? 'event-free' : 'event-paid'}">${(e.free || e.is_free) ? 'FREE' : 'Paid'}</span>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+        <span class="${(e.free || e.is_free) ? 'event-free' : 'event-paid'}">${(e.free || e.is_free) ? 'FREE' : 'Paid'}</span>
+        ${(e.ongoing ? '<span class="event-ongoing">ONGOING</span>' : '')}
+      </div>
     </div>`).join('');
 }
 
@@ -2601,9 +2670,10 @@ async function loadEventsForCity(cityLabel) {
     .ilike('city', cityLabel)
     .order('id', { ascending: true });
 
-  const hasCached = cachedEvents && cachedEvents.length >= 2;
+  const normalizedCachedEvents = (cachedEvents || []).map(e => normalizeEventRow(e, cityLabel)).filter(e => !isPastEventRow(e));
+  const hasCached = normalizedCachedEvents && normalizedCachedEvents.length >= 2;
   if (hasCached) {
-    renderEvents(cachedEvents);
+    renderEvents(normalizedCachedEvents);
     if (isFresh) {
       freshnessEl.textContent = age < 1 ? 'Just updated' : `Updated ${age}h ago`;
     } else {
@@ -2635,17 +2705,7 @@ async function loadEventsForCity(cityLabel) {
     const clean = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '');
     const match = clean.match(/\[[\s\S]*\]/);
     if (!match) throw new Error('No JSON array in response');
-    const events = JSON.parse(match[0]).map(e => {
-      const sourceUrl = normalizeEventUrl(e.source_url || e.url || e.link || extractFirstUrl(e.detail)) || buildEventFallbackUrl(e.name, cityLabel);
-      return {
-        month: e.month,
-        day: e.day,
-        name: e.name,
-        detail: e.detail,
-        free: e.free,
-        source_url: sourceUrl
-      };
-    });
+    const events = JSON.parse(match[0]).map(e => normalizeEventRow(e, cityLabel)).filter(e => !isPastEventRow(e));
 
     // Upsert to Supabase — delete old events for this city first, then insert fresh ones
     await sb.from('events').delete().ilike('city', cityLabel);
@@ -2657,6 +2717,9 @@ async function loadEventsForCity(cityLabel) {
       detail: e.detail,
       is_free: e.free,
       source_url: e.source_url,
+      ongoing: e.ongoing,
+      start_date: e.start_date ? e.start_date.toISOString().slice(0, 10) : null,
+      end_date: e.end_date ? e.end_date.toISOString().slice(0, 10) : null,
       last_refreshed: new Date().toISOString()
     }));
     let insertOk = false;
@@ -2675,9 +2738,14 @@ async function loadEventsForCity(cityLabel) {
         is_free: r.is_free,
         last_refreshed: r.last_refreshed
       }));
-      await sb.from('events').insert(fallbackRows);
-    }
+        await sb.from('events').insert(fallbackRows);
+      }
 
+    if (!events.length && hasCached) {
+      renderEvents(normalizedCachedEvents);
+      freshnessEl.textContent = age == null ? 'Showing cached events' : `Showing cached events (${age}h old)`;
+      return;
+    }
     renderEvents(events);
     freshnessEl.textContent = 'Just updated';
     console.log(`[KiddBusy] Events saved to cache (${events.length} events)`);
