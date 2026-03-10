@@ -510,10 +510,10 @@ async function runCmoBlog(event) {
       200,
       50
     );
+    var repairSeeded = !!body.repair_seeded;
     var distributionEnabled = Object.prototype.hasOwnProperty.call(body, 'distribution_enabled')
       ? !!body.distribution_enabled
       : !!settings.blog_distribution_enabled;
-    var repairSeeded = !!body.repair_seeded;
     var forcePublishGenerated = Object.prototype.hasOwnProperty.call(body, 'force_publish_generated')
       ? !!body.force_publish_generated
       : !!repairSeeded;
@@ -524,10 +524,12 @@ async function runCmoBlog(event) {
       1
     );
     var maxGeneratePerRun = clampNumber(
-      Object.prototype.hasOwnProperty.call(body, 'max_generate_per_run') ? body.max_generate_per_run : 1,
+      Object.prototype.hasOwnProperty.call(body, 'max_generate_per_run')
+        ? body.max_generate_per_run
+        : (repairSeeded ? 3 : 1),
       0,
       5,
-      1
+      (repairSeeded ? 3 : 1)
     );
     var targetCity = Object.prototype.hasOwnProperty.call(body, 'target_city') ? String(body.target_city || '').trim() : '';
 
@@ -535,16 +537,19 @@ async function runCmoBlog(event) {
     var identity = await getIdentitySets();
     var plannedCityRotation = [];
     var archivedSeedCount = 0;
+    var seedBacklogCount = 0;
 
     if (repairSeeded) {
       var seeded = await getPublishedSeedPosts(100);
+      seedBacklogCount = seeded.length;
       if (seeded.length) {
+        var repairWindow = seeded.slice(0, maxGeneratePerRun);
         archivedSeedCount = await archivePostsByIds(
-          seeded.map(function (row) { return row.id; })
+          repairWindow.map(function (row) { return row.id; })
         );
         var seenSeedCities = {};
-        for (var s = 0; s < seeded.length; s += 1) {
-          var seedCity = String((seeded[s] && seeded[s].city) || '').trim();
+        for (var s = 0; s < repairWindow.length; s += 1) {
+          var seedCity = String((repairWindow[s] && repairWindow[s].city) || '').trim();
           if (!seedCity) continue;
           var key = seedCity.toLowerCase();
           if (seenSeedCities[key]) continue;
@@ -624,6 +629,7 @@ async function runCmoBlog(event) {
         target_city: targetCity || null,
         repair_seeded: repairSeeded,
         archived_seed_count: archivedSeedCount,
+        seed_backlog_count: seedBacklogCount,
         force_publish_generated: forcePublishGenerated,
         generated_count: generated.length,
         published_count: published.length,
@@ -641,6 +647,7 @@ async function runCmoBlog(event) {
       target_city: targetCity || null,
       repair_seeded: repairSeeded,
       archived_seed_count: archivedSeedCount,
+      seed_backlog_count: seedBacklogCount,
       force_publish_generated: forcePublishGenerated,
       generated_count: generated.length,
       published_count: published.length,
