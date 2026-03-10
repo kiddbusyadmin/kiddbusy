@@ -694,10 +694,38 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
             Daily Queue Build Target
             <input id="cmo-blog-target" type="number" min="1" max="200" step="1" value="50" style="width:88px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-family:var(--mono);font-size:.72rem">
           </label>
+          <label style="font-family:var(--mono);font-size:.72rem;color:var(--muted);display:flex;align-items:center;gap:8px">
+            Instagram Handle
+            <input id="cmo-ig-handle" type="text" placeholder="kiddbusyhq" style="width:140px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-family:var(--mono);font-size:.72rem">
+          </label>
+          <label style="font-family:var(--mono);font-size:.72rem;color:var(--muted);display:flex;align-items:center;gap:8px">
+            IG Mode
+            <select id="cmo-ig-mode" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-family:var(--mono);font-size:.72rem">
+              <option value="creator">Creator</option>
+              <option value="business">Business</option>
+            </select>
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:10px;font-family:var(--mono);font-size:.74rem;color:var(--text)">
+            <input id="cmo-ig-profile-ready" type="checkbox" style="accent-color:var(--accent);transform:scale(1.15)">
+            IG Profile Ready
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:10px;font-family:var(--mono);font-size:.74rem;color:var(--text)">
+            <input id="cmo-ig-notifs-ready" type="checkbox" style="accent-color:var(--accent);transform:scale(1.15)">
+            IG Notifications On
+          </label>
+          <label style="font-family:var(--mono);font-size:.72rem;color:var(--muted);display:flex;align-items:center;gap:8px">
+            IG Kickoff Posts
+            <input id="cmo-ig-kickoff-target" type="number" min="1" max="20" step="1" value="3" style="width:70px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-family:var(--mono);font-size:.72rem">
+          </label>
+          <label style="font-family:var(--mono);font-size:.72rem;color:var(--muted);display:flex;align-items:center;gap:8px">
+            IG Daily Posts
+            <input id="cmo-ig-daily-target" type="number" min="1" max="10" step="1" value="1" style="width:70px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-family:var(--mono);font-size:.72rem">
+          </label>
         </div>
         <div style="margin-top:14px;display:flex;gap:8px">
           <button class="topbar-btn primary" onclick="saveCmoConfig()">Save CMO Settings</button>
           <button class="topbar-btn" onclick="runCmoBlogNow()">Run Blog Queue Now</button>
+          <button class="topbar-btn" onclick="runCmoInstagramOpsNow()">Run IG Ops Now</button>
           <button class="topbar-btn" onclick="loadCmoDashboard()">Reload</button>
         </div>
       </div>
@@ -738,6 +766,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
       <div class="panel-body" id="cmo-blog-funnel">
         <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
       </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:20px">
+    <div class="panel-header">
+      <div class="panel-title">Instagram Ops Queue</div>
+      <div class="panel-badge" id="cmo-ig-queue-badge">--</div>
+    </div>
+    <div class="panel-body" id="cmo-ig-queue-body">
+      <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
     </div>
   </div>
 
@@ -1980,6 +2018,73 @@ async function fetchCmoConfig() {
   return _cmoConfig;
 }
 
+async function cmoSocialApi(method, payload) {
+  var opts = {
+    method: method || 'GET',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' }
+  };
+  if (opts.method !== 'GET') opts.body = JSON.stringify(payload || {});
+  var res = await fetch('/api/cmo-social', opts);
+  var out = await res.json();
+  if (!res.ok) throw new Error(out.error || 'CMO social request failed');
+  return out;
+}
+
+async function loadCmoInstagramQueue() {
+  var body = document.getElementById('cmo-ig-queue-body');
+  var badge = document.getElementById('cmo-ig-queue-badge');
+  if (!body || !badge) return;
+  body.innerHTML = loadingHTML();
+  try {
+    var out = await cmoSocialApi('GET');
+    var tasks = out.tasks || [];
+    var open = tasks.filter(function(t) { return String(t.status || '') === 'open'; });
+    badge.textContent = open.length + ' open / ' + tasks.length + ' total';
+    if (!tasks.length) {
+      body.innerHTML = emptyHTML('No Instagram tasks yet. Run IG Ops Now.');
+      return;
+    }
+    body.innerHTML =
+      '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+      '<th>Status</th><th>Type</th><th>Title</th><th>Due</th><th>Action</th>' +
+      '</tr></thead><tbody>' +
+      tasks.slice(0, 120).map(function(t) {
+        var isOpen = String(t.status || '') === 'open';
+        var action = isOpen
+          ? '<button class="act-btn approve" onclick="completeCmoSocialTask(' + t.task_id + ')">Done</button> <button class="act-btn reject" onclick="blockCmoSocialTask(' + t.task_id + ')">Blocked</button>'
+          : '--';
+        return '<tr>' +
+          '<td>' + photoStatusBadge(isOpen ? 'pending' : (t.status === 'completed' ? 'approved' : 'rejected')) + '</td>' +
+          '<td style="font-family:var(--mono);font-size:.72rem;color:var(--muted)">' + (t.task_type || '--') + '</td>' +
+          '<td style="white-space:normal;line-height:1.4"><div style="font-weight:600">' + (t.title || '--') + '</div><div style="font-size:.74rem;color:var(--muted)">' + (t.instructions || '') + '</div></td>' +
+          '<td style="font-family:var(--mono);font-size:.72rem;color:var(--muted)">' + (t.due_at ? timeAgo(t.due_at) : '--') + '</td>' +
+          '<td>' + action + '</td>' +
+          '</tr>';
+      }).join('') + '</tbody></table></div>';
+  } catch (e) {
+    badge.textContent = 'unavailable';
+    body.innerHTML = '<div class="empty" style="padding:24px;color:var(--accent)">Instagram queue unavailable: ' + e.message + '</div>';
+  }
+}
+
+async function completeCmoSocialTask(taskId) {
+  try {
+    await cmoSocialApi('POST', { action: 'complete_task', task_id: taskId, status: 'completed' });
+    await loadCmoInstagramQueue();
+  } catch (e) {
+    alert('Task update failed: ' + e.message);
+  }
+}
+
+async function blockCmoSocialTask(taskId) {
+  try {
+    await cmoSocialApi('POST', { action: 'complete_task', task_id: taskId, status: 'blocked' });
+    await loadCmoInstagramQueue();
+  } catch (e) {
+    alert('Task update failed: ' + e.message);
+  }
+}
+
 async function loadCmoKpis() {
   var eventsRes = await sb.from('analytics').select('*').order('created_at', { ascending: false }).limit(5000);
   var leadsRes = await sb.from('email_leads').select('created_at').order('created_at', { ascending: false }).limit(3000);
@@ -2145,7 +2250,20 @@ async function loadCmoDashboard() {
     if (blogRate) blogRate.value = String((_cmoConfig && _cmoConfig.blog_publish_rate_per_day) || 1);
     var blogTarget = document.getElementById('cmo-blog-target');
     if (blogTarget) blogTarget.value = String((_cmoConfig && _cmoConfig.blog_queue_target_per_day) || 50);
+    var igHandle = document.getElementById('cmo-ig-handle');
+    if (igHandle) igHandle.value = String((_cmoConfig && _cmoConfig.instagram_handle) || '');
+    var igMode = document.getElementById('cmo-ig-mode');
+    if (igMode) igMode.value = String((_cmoConfig && _cmoConfig.instagram_mode) || 'creator');
+    var igProfileReady = document.getElementById('cmo-ig-profile-ready');
+    if (igProfileReady) igProfileReady.checked = !!(_cmoConfig && _cmoConfig.instagram_profile_ready);
+    var igNotifsReady = document.getElementById('cmo-ig-notifs-ready');
+    if (igNotifsReady) igNotifsReady.checked = !!(_cmoConfig && _cmoConfig.instagram_notifications_ready);
+    var igKickoff = document.getElementById('cmo-ig-kickoff-target');
+    if (igKickoff) igKickoff.value = String((_cmoConfig && _cmoConfig.instagram_kickoff_posts_target) || 3);
+    var igDaily = document.getElementById('cmo-ig-daily-target');
+    if (igDaily) igDaily.value = String((_cmoConfig && _cmoConfig.instagram_daily_posts_target) || 1);
     document.getElementById('cmo-mode-badge').textContent = mode === 'auto_send_enabled' ? 'auto send enabled' : 'drafts for approval';
+    await loadCmoInstagramQueue();
   } catch (e) {
     document.getElementById('cmo-mode-badge').textContent = 'config unavailable';
   }
@@ -2156,15 +2274,32 @@ async function saveCmoConfig() {
   var blogDistEnabled = !!(document.getElementById('cmo-blog-dist-enabled') && document.getElementById('cmo-blog-dist-enabled').checked);
   var blogRate = Number((document.getElementById('cmo-blog-rate') && document.getElementById('cmo-blog-rate').value) || 1);
   var blogTarget = Number((document.getElementById('cmo-blog-target') && document.getElementById('cmo-blog-target').value) || 50);
+  var igHandle = String((document.getElementById('cmo-ig-handle') && document.getElementById('cmo-ig-handle').value) || '').trim().replace(/^@+/, '');
+  var igMode = String((document.getElementById('cmo-ig-mode') && document.getElementById('cmo-ig-mode').value) || 'creator').toLowerCase();
+  var igProfileReady = !!(document.getElementById('cmo-ig-profile-ready') && document.getElementById('cmo-ig-profile-ready').checked);
+  var igNotifsReady = !!(document.getElementById('cmo-ig-notifs-ready') && document.getElementById('cmo-ig-notifs-ready').checked);
+  var igKickoff = Number((document.getElementById('cmo-ig-kickoff-target') && document.getElementById('cmo-ig-kickoff-target').value) || 3);
+  var igDaily = Number((document.getElementById('cmo-ig-daily-target') && document.getElementById('cmo-ig-daily-target').value) || 1);
   if (!Number.isFinite(blogRate) || blogRate < 1) blogRate = 1;
   if (!Number.isFinite(blogTarget) || blogTarget < 1) blogTarget = 50;
   if (blogTarget > 200) blogTarget = 200;
+  if (!['creator', 'business'].includes(igMode)) igMode = 'creator';
+  if (!Number.isFinite(igKickoff) || igKickoff < 1) igKickoff = 3;
+  if (igKickoff > 20) igKickoff = 20;
+  if (!Number.isFinite(igDaily) || igDaily < 1) igDaily = 1;
+  if (igDaily > 10) igDaily = 10;
   var payload = {
     auto_send_enabled: autoSend,
     execution_mode: autoSend ? 'auto_send_enabled' : 'drafts_for_approval',
     blog_distribution_enabled: blogDistEnabled,
     blog_publish_rate_per_day: blogRate,
-    blog_queue_target_per_day: blogTarget
+    blog_queue_target_per_day: blogTarget,
+    instagram_handle: igHandle,
+    instagram_mode: igMode,
+    instagram_profile_ready: igProfileReady,
+    instagram_notifications_ready: igNotifsReady,
+    instagram_kickoff_posts_target: igKickoff,
+    instagram_daily_posts_target: igDaily
   };
   var btns = Array.from(document.querySelectorAll('#view-cmo .topbar-btn'));
   btns.forEach(function(b) { b.disabled = true; });
@@ -2180,6 +2315,20 @@ async function saveCmoConfig() {
     document.getElementById('cmo-mode-badge').textContent = autoSend ? 'auto send enabled' : 'drafts for approval';
   } catch (e) {
     alert('CMO settings save failed: ' + e.message);
+  } finally {
+    btns.forEach(function(b) { b.disabled = false; });
+  }
+}
+
+async function runCmoInstagramOpsNow() {
+  var btns = Array.from(document.querySelectorAll('#view-cmo .topbar-btn'));
+  btns.forEach(function(b) { b.disabled = true; });
+  try {
+    var out = await cmoSocialApi('POST', { action: 'run' });
+    alert('CMO IG ops run complete. Created ' + (out.created_count || 0) + ' tasks. Open queue: ' + (out.open_count || 0) + '.');
+    await loadCmoInstagramQueue();
+  } catch (e) {
+    alert('CMO IG ops run failed: ' + e.message);
   } finally {
     btns.forEach(function(b) { b.disabled = false; });
   }
@@ -3000,6 +3149,11 @@ var AGENT_TOOLS = [
     input_schema: { type: 'object', properties: {}, required: [] }
   },
   {
+    name: 'query_cmo_social_tasks',
+    description: 'Get CMO Instagram ops task queue.',
+    input_schema: { type: 'object', properties: { status: { type: 'string' }, limit: { type: 'number' } }, required: [] }
+  },
+  {
     name: 'query_analytics',
     description: 'Query analytics events. Events: city_search, multi_city_session, review_start, review_abandon, review_submit, email_capture, filter_used, advertise_click, cache_hit, cache_miss. Each has city, value, session_id fields. Use to answer questions about traffic, funnel, filter usage, revenue intent clicks.',
     input_schema: { type: 'object', properties: { event: { type: 'string' }, limit: { type: 'number' } }, required: [] }
@@ -3038,10 +3192,20 @@ var AGENT_TOOLS = [
     name: 'reject_sponsor_banner',
     description: 'Reject a sponsor banner creative by banner_id.',
     input_schema: { type: 'object', properties: { banner_id: { type: 'number' }, reason: { type: 'string' } }, required: ['banner_id'] }
+  },
+  {
+    name: 'run_cmo_social_ops',
+    description: 'Run CMO Instagram ops planner to create/refresh the action queue.',
+    input_schema: { type: 'object', properties: {}, required: [] }
+  },
+  {
+    name: 'complete_cmo_social_task',
+    description: 'Mark a CMO social task as completed/blocked/skipped.',
+    input_schema: { type: 'object', properties: { task_id: { type: 'number' }, status: { type: 'string' } }, required: ['task_id'] }
   }
 ];
 
-var AGENT_SYSTEM = 'You are the KiddBusy admin agent. You have direct database access via tools. Be concise and action-oriented. Use plain text, no markdown headers.\n\nTables: submissions (business listings awaiting approval), reviews (user reviews of listings), submission_photos (image moderation queue), sponsor_banners (paid banner ad creative queue), owner_claims (owner verification requests), owner_change_requests (owner edits), sponsorships (plans: $49/mo listing, $199/mo banner, $219/mo bundle), listings (active businesses with city, source, is_sponsored, last_refreshed, avg_rating, review_count), email_leads (newsletter signups with email, city, source), analytics (event log with event type, city, value, session_id).\n\nAnalytics events include core site events plus owner events: owner_claim_open, owner_claim_start, owner_claim_code_sent, owner_claim_verify_attempt, owner_claim_verified, owner_claim_abandon, owner_dashboard_open, owner_update_submit, owner_update_saved.\n\nWhen asked about city traffic, use query_analytics with event=city_search. When asked about owner funnel, use query_owner_kpis and/or query_analytics to calculate conversion and abandon rates.';
+var AGENT_SYSTEM = 'You are the KiddBusy admin agent. You have direct database access via tools. Be concise and action-oriented. Use plain text, no markdown headers.\n\nTables: submissions (business listings awaiting approval), reviews (user reviews of listings), submission_photos (image moderation queue), sponsor_banners (paid banner ad creative queue), cmo_social_tasks (Instagram ops action queue), owner_claims (owner verification requests), owner_change_requests (owner edits), sponsorships (plans: $49/mo listing, $199/mo banner, $219/mo bundle), listings (active businesses with city, source, is_sponsored, last_refreshed, avg_rating, review_count), email_leads (newsletter signups with email, city, source), analytics (event log with event type, city, value, session_id).\n\nAnalytics events include core site events plus owner events: owner_claim_open, owner_claim_start, owner_claim_code_sent, owner_claim_verify_attempt, owner_claim_verified, owner_claim_abandon, owner_dashboard_open, owner_update_submit, owner_update_saved.\n\nWhen asked about city traffic, use query_analytics with event=city_search. When asked about owner funnel, use query_owner_kpis and/or query_analytics to calculate conversion and abandon rates.';
 
 // ===== AGENT TOOL EXECUTOR =====
 async function execTool(name, input) {
@@ -3084,6 +3248,13 @@ async function execTool(name, input) {
         var r5 = await sb.from('email_leads').select('*').order('created_at', { ascending: false });
         return { count: (r5.data||[]).length, leads: r5.data };
       }
+      case 'query_cmo_social_tasks': {
+        var r5b = await cmoSocialApi('GET');
+        var tasks = r5b.tasks || [];
+        if (input.status) tasks = tasks.filter(function(t) { return String(t.status || '') === String(input.status); });
+        if (input.limit) tasks = tasks.slice(0, Number(input.limit) || 200);
+        return { count: tasks.length, cmo_social_tasks: tasks };
+      }
       case 'query_analytics': {
         var q6 = sb.from('analytics').select('*').order('created_at', { ascending: false }).limit(input.limit || 500);
         if (input.event) q6 = q6.eq('event', input.event);
@@ -3124,6 +3295,16 @@ async function execTool(name, input) {
         var r10 = await sponsorBannerAdmin('reject_banner', { banner_id: input.banner_id, reason: input.reason || 'Rejected by agent' });
         loadSponsorBanners();
         return { success: true, result: r10 };
+      }
+      case 'run_cmo_social_ops': {
+        var r11 = await cmoSocialApi('POST', { action: 'run' });
+        loadCmoInstagramQueue();
+        return { success: true, result: r11 };
+      }
+      case 'complete_cmo_social_task': {
+        var r12 = await cmoSocialApi('POST', { action: 'complete_task', task_id: input.task_id, status: input.status || 'completed' });
+        loadCmoInstagramQueue();
+        return { success: true, result: r12 };
       }
       default:
         return { error: 'Unknown tool: ' + name };

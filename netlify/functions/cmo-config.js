@@ -68,6 +68,12 @@ exports.handler = async (event) => {
     'blog_queue_target_per_day',
     'blog_distribution_enabled',
     'blog_publish_rate_per_day',
+    'instagram_handle',
+    'instagram_mode',
+    'instagram_profile_ready',
+    'instagram_notifications_ready',
+    'instagram_kickoff_posts_target',
+    'instagram_daily_posts_target',
     'updated_at'
   ];
   const patch = {};
@@ -96,7 +102,13 @@ exports.handler = async (event) => {
       contact_cap: row ? row.contact_cap : null,
       blog_queue_target_per_day: row ? row.blog_queue_target_per_day : null,
       blog_distribution_enabled: row ? !!row.blog_distribution_enabled : null,
-      blog_publish_rate_per_day: row ? row.blog_publish_rate_per_day : null
+      blog_publish_rate_per_day: row ? row.blog_publish_rate_per_day : null,
+      instagram_handle: row ? row.instagram_handle : null,
+      instagram_mode: row ? row.instagram_mode : null,
+      instagram_profile_ready: row ? !!row.instagram_profile_ready : null,
+      instagram_notifications_ready: row ? !!row.instagram_notifications_ready : null,
+      instagram_kickoff_posts_target: row ? row.instagram_kickoff_posts_target : null,
+      instagram_daily_posts_target: row ? row.instagram_daily_posts_target : null
     }
   });
   return json(200, { success: true, config: row });

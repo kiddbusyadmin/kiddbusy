@@ -26,6 +26,9 @@
 [functions.cmo-config]
   timeout = 30
 
+[functions.cmo-social]
+  timeout = 30
+
 [functions.unsubscribe]
   timeout = 30
 
@@ -82,6 +85,11 @@
 [[redirects]]
   from = "/api/cmo-config"
   to = "/.netlify/functions/cmo-config"
+  status = 200
+
+[[redirects]]
+  from = "/api/cmo-social"
+  to = "/.netlify/functions/cmo-social"
   status = 200
 
 [[redirects]]
