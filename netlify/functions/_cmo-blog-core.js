@@ -378,7 +378,8 @@ async function insertDraft(post) {
     status: 'draft',
     source: 'cmo_agent',
     author: 'CMO Agent',
-    published_at: null,
+    // `published_at` is NOT NULL in schema, even for draft rows.
+    published_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
 
