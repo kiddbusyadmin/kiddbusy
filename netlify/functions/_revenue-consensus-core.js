@@ -166,7 +166,8 @@ async function generateConsensusReport(input) {
     '- watchouts (array of 2-5 strings)',
     '- confidence (number 0..1)',
     'Constraints:',
-    '- No paid ads.',
+    '- Paid ads are allowed only if there is a quantified business case and execution plan.',
+    '- Any paid ads recommendation must include: channel, budget cap, CAC assumption, conversion assumption, expected payback period, and stop-loss threshold.',
     '- Keep legal/compliance safe.',
     '- Assume email cap and contact cap must be respected.',
     '- Favor highest ROI actions first.',
@@ -224,6 +225,33 @@ function isMonetizationAction(rec) {
     metric.indexOf('sponsor') >= 0 ||
     metric.indexOf('owner_claim') >= 0
   );
+}
+
+function isPaidAdsAction(rec) {
+  const text = String((rec && rec.action) || '').toLowerCase();
+  const metric = String((rec && rec.metric) || '').toLowerCase();
+  return (
+    text.indexOf('paid ad') >= 0 ||
+    text.indexOf('paid social') >= 0 ||
+    text.indexOf('google ads') >= 0 ||
+    text.indexOf('meta ads') >= 0 ||
+    text.indexOf('ad spend') >= 0 ||
+    metric.indexOf('paid') >= 0
+  );
+}
+
+function hasRockSolidAdsCase(rec) {
+  const impact = String((rec && rec.expected_impact) || '').toLowerCase();
+  const target = String((rec && rec.target_30d) || '').toLowerCase();
+  const text = String((rec && rec.action) || '').toLowerCase() + ' ' + impact + ' ' + target;
+  const requiredSignals = [
+    'budget',
+    'cac',
+    'conversion',
+    'payback',
+    'stop-loss'
+  ];
+  return requiredSignals.every((k) => text.indexOf(k) >= 0);
 }
 
 function trafficFirstTemplates(targetSessions) {
@@ -306,6 +334,31 @@ function enforceTrafficGate(report, input) {
   };
 }
 
+function enforcePaidAdsBusinessCase(report) {
+  const recs = Array.isArray(report.recommendations) ? report.recommendations : [];
+  if (!recs.length) return report;
+
+  const filtered = recs.filter((r) => {
+    if (!isPaidAdsAction(r)) return true;
+    return hasRockSolidAdsCase(r);
+  });
+
+  if (filtered.length === recs.length) return report;
+
+  const watchouts = Array.isArray(report.watchouts) ? report.watchouts.slice(0, 8) : [];
+  const note = 'Paid ads recommendations are allowed only with quantified business case details (budget, CAC, conversion, payback, stop-loss).';
+  if (watchouts.indexOf(note) < 0) watchouts.unshift(note);
+
+  return {
+    subject: report.subject,
+    summary_text: report.summary_text,
+    summary_html: report.summary_html,
+    recommendations: filtered.slice(0, 5),
+    watchouts,
+    confidence: report.confidence
+  };
+}
+
 async function persistConsensusReport(report, input) {
   const row = {
     agentKey: 'revenue_consensus_agent',
@@ -363,7 +416,9 @@ async function sendConsensusEmail(report) {
 
 async function runRevenueConsensus() {
   const input = await buildConsensusInput();
-  const report = enforceTrafficGate(await generateConsensusReport(input), input);
+  const baseReport = await generateConsensusReport(input);
+  const gatedReport = enforceTrafficGate(baseReport, input);
+  const report = enforcePaidAdsBusinessCase(gatedReport);
   await persistConsensusReport(report, input);
   const emailResult = await sendConsensusEmail(report);
 
