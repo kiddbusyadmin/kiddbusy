@@ -2610,7 +2610,7 @@ function isPastEventRow(eventRow) {
 }
 
 function normalizeEventRow(raw, cityLabel) {
-  const sourceUrl = normalizeEventUrl(raw.source_url || raw.url || raw.link || extractFirstUrl(raw.detail)) || buildEventFallbackUrl(raw.name, cityLabel);
+  const sourceUrl = normalizeEventUrl(raw.source_url || raw.url || raw.link || extractFirstUrl(raw.detail)) || '';
   const startDate = parseIsoDateLocal(raw.start_date) || inferDateFromMonthDay(raw.month || raw.event_month, raw.day || raw.event_day);
   const endDate = parseIsoDateLocal(raw.end_date);
   const detail = String(raw.detail || '');
@@ -2651,7 +2651,14 @@ function renderEvents(events) {
     }
   }
 
-  document.getElementById('eventsList').innerHTML = events.map(e => `
+  document.getElementById('eventsList').innerHTML = events.map(e => {
+    const cityText = document.getElementById('eventsCity') ? document.getElementById('eventsCity').textContent : '';
+    const finalUrl = normUrl(e.source_url || e.url || e.link) || '';
+    const hasUrl = !!finalUrl;
+    const linkHtml = hasUrl
+      ? `<a href="${esc(finalUrl)}" target="_blank" rel="noopener noreferrer" onclick="track('event_source_click', document.getElementById('eventsCity').textContent, '${esc(e.name)}')" style="display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--ink);font-weight:700;font-size:.75rem;text-decoration:none">Event Link</a>`
+      : `<span style="display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border:1px dashed var(--border);border-radius:8px;background:#faf7ff;color:var(--muted);font-weight:700;font-size:.75rem">Source unavailable</span>`;
+    return `
     <div class="event-card">
       <div class="event-date-box">
         <div class="event-month">${e.month || e.event_month || ''}</div>
@@ -2661,15 +2668,24 @@ function renderEvents(events) {
         <div class="event-name">${esc(e.name)}</div>
         <div class="event-detail">📌 ${esc(e.detail || '')}</div>
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-          <a href="${esc(normUrl(e.source_url || e.url || e.link) || buildEventFallbackUrl(e.name, document.getElementById('eventsCity') ? document.getElementById('eventsCity').textContent : ''))}" target="_blank" rel="noopener noreferrer" onclick="track('event_source_click', document.getElementById('eventsCity').textContent, '${esc(e.name)}')" style="display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--ink);font-weight:700;font-size:.75rem;text-decoration:none">🔗 Event Link</a>
-          <button class="share-btn" style="padding:6px 10px;font-size:.75rem;border-radius:8px" onclick="shareEvent('${esc(e.name)}','${esc(e.detail || '')}','${esc(normUrl(e.source_url || e.url || e.link) || buildEventFallbackUrl(e.name, document.getElementById('eventsCity') ? document.getElementById('eventsCity').textContent : ''))}')">📤 Share</button>
+          ${linkHtml}
+          <button
+            class="share-btn"
+            style="padding:6px 10px;font-size:.75rem;border-radius:8px"
+            data-event-name="${esc(e.name)}"
+            data-event-detail="${esc(e.detail || '')}"
+            data-event-url="${esc(finalUrl)}"
+            data-event-city="${esc(cityText)}"
+            onclick="shareEventFromButton(this)"
+          >Share</button>
         </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
         <span class="${(e.free || e.is_free) ? 'event-free' : 'event-paid'}">${(e.free || e.is_free) ? 'FREE' : 'Paid'}</span>
         ${(e.ongoing ? '<span class="event-ongoing">ONGOING</span>' : '')}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function extractFirstUrl(text) {
@@ -2756,26 +2772,50 @@ async function fetchEventsForCity(cityLabel, attempt) {
 
 async function shareEvent(name, detail, url) {
   const city = document.getElementById('eventsCity') ? document.getElementById('eventsCity').textContent : null;
-  const cleanUrl = normalizeEventUrl(url) || normalizeEventUrl(extractFirstUrl(detail)) || buildEventFallbackUrl(name, city);
+  const cleanUrl = normalizeEventUrl(url) || normalizeEventUrl(extractFirstUrl(detail)) || '';
   const text = cleanUrl ? `${name}\n${detail}\n${cleanUrl}` : `${name}\n${detail}`;
-  let method = 'copy_clipboard';
-  try {
-    if (navigator.share) {
-      method = 'native_share';
+  if (navigator.share) {
+    try {
       await navigator.share({ title: name, text: detail, url: cleanUrl || undefined });
-      track('event_share_click', city, JSON.stringify({ method, event_name: name, shared_url: cleanUrl || null }));
-      return;
+      track('event_share_click', city, JSON.stringify({ method: 'native_share', event_name: name, shared_url: cleanUrl || null }));
+      return { ok: true, method: 'native_share' };
+    } catch (err) {
+      if (err && err.name === 'AbortError') return { ok: false, method: 'cancelled' };
+      // Continue to fallback on real errors.
     }
-  } catch (_) {
-    // User cancelled or share failed; continue to clipboard fallback.
   }
   try {
     await navigator.clipboard.writeText(text);
-    track('event_share_click', city, JSON.stringify({ method, event_name: name, shared_url: cleanUrl || null }));
-    alert('Event details copied to clipboard');
+    track('event_share_click', city, JSON.stringify({ method: 'copy_clipboard', event_name: name, shared_url: cleanUrl || null }));
+    return { ok: true, method: 'copy_clipboard' };
   } catch (_) {
-    alert('Unable to share this event right now.');
+    if (cleanUrl) {
+      window.open(cleanUrl, '_blank', 'noopener');
+      track('event_share_click', city, JSON.stringify({ method: 'open_link_fallback', event_name: name, shared_url: cleanUrl }));
+      return { ok: true, method: 'open_link_fallback' };
+    }
+    return { ok: false, method: 'failed' };
   }
+}
+
+function setShareButtonState(btn, label) {
+  if (!btn) return;
+  const original = btn.getAttribute('data-original-label') || btn.textContent || 'Share';
+  if (!btn.getAttribute('data-original-label')) btn.setAttribute('data-original-label', original);
+  btn.textContent = label;
+  setTimeout(function() { btn.textContent = original; }, 1400);
+}
+
+async function shareEventFromButton(btn) {
+  if (!btn) return;
+  const name = btn.getAttribute('data-event-name') || '';
+  const detail = btn.getAttribute('data-event-detail') || '';
+  const url = btn.getAttribute('data-event-url') || '';
+  const result = await shareEvent(name, detail, url);
+  if (!result || !result.ok) return;
+  if (result.method === 'native_share') setShareButtonState(btn, 'Shared');
+  else if (result.method === 'copy_clipboard') setShareButtonState(btn, 'Copied');
+  else if (result.method === 'open_link_fallback') setShareButtonState(btn, 'Opened');
 }
 
 function showEventsSkeletons() {
