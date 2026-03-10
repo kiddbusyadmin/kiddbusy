@@ -165,13 +165,15 @@ exports.handler = async (event) => {
   const brandName = safeText(body.brand_name, 80) || 'KiddBusy';
   const isHeroMode = action === 'generate_search_background_options' || action === 'generate_search_background_option';
   const prompts = isHeroMode ? heroBackgroundPrompts(brandName) : profilePrompts(brandName);
+  const requestedSize = safeText(body.size, 20);
+  const requestedQuality = safeText(body.quality, 20);
   const stamp = Date.now();
   const generateOne = async (idx) => {
     const optionIndex = Math.max(1, Math.min(prompts.length, Number(idx) || 1));
     const item = prompts[optionIndex - 1];
     const img = await callOpenAiImage(item.prompt, {
-      size: isHeroMode ? '1536x1024' : '1024x1024',
-      quality: 'high',
+      size: requestedSize || '1024x1024',
+      quality: requestedQuality || (isHeroMode ? 'medium' : 'high'),
       model: OPENAI_IMAGE_MODEL
     });
     const folder = isHeroMode ? 'search-backgrounds' : 'instagram';
