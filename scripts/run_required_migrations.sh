@@ -17,6 +17,7 @@ MIGRATIONS=(
   "supabase/migrations/20260310_events_source_url.sql"
   "supabase/migrations/20260310_events_dates_and_ongoing.sql"
   "supabase/migrations/20260310_analytics_internal_flags.sql"
+  "supabase/migrations/20260310_accountant_agent.sql"
 )
 
 for m in "${MIGRATIONS[@]}"; do

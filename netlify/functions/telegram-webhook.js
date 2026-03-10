@@ -9,6 +9,7 @@ const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_ALLOWED_CHAT_ID = process.env.TELEGRAM_CHAT_ID; // your personal chat ID
 const { sendCompliantEmail } = require('./_email-compliance');
 const { triggerSponsorshipPaymentRequestEmail } = require('./_sponsorship-payment-email');
+const { buildFinanceSnapshot, upsertFinanceSnapshot, addManualEntry } = require('./_accounting-core');
 
 // ---- TELEGRAM ----
 async function sendTelegram(chatId, text) {
@@ -279,6 +280,27 @@ async function executeTool(name, input) {
     }
     case 'query_dashboard_stats':
       return queryDashboardStats(input.range || '24h');
+    case 'query_finance_snapshot': {
+      const preview = await buildFinanceSnapshot();
+      return { snapshot: preview };
+    }
+    case 'run_accountant_snapshot': {
+      const snapshot = await upsertFinanceSnapshot(await buildFinanceSnapshot());
+      return { success: true, snapshot };
+    }
+    case 'add_finance_manual_entry': {
+      const entry = await addManualEntry({
+        kind: input.kind,
+        amount: input.amount,
+        category: input.category,
+        vendor: input.vendor,
+        notes: input.notes,
+        entry_date: input.entry_date,
+        source: 'telegram_agent'
+      });
+      const snapshot = await upsertFinanceSnapshot(await buildFinanceSnapshot());
+      return { success: true, entry, snapshot };
+    }
     case 'update_submission_status':
       await dbUpdate('submissions', input.id, { status: input.status });
       return { success: true, id: input.id, new_status: input.status };
@@ -309,7 +331,14 @@ async function executeTool(name, input) {
           paymentEmail = { sent: false, skipped: true, reason: 'already_active' };
         }
       }
-      return { success: true, id: input.id, new_status: input.status, payment_email: paymentEmail };
+      var financeSnapshot = null;
+      try {
+        financeSnapshot = await upsertFinanceSnapshot(await buildFinanceSnapshot());
+      } catch (snapErr) {
+        financeSnapshot = { error: snapErr.message || 'finance snapshot refresh failed' };
+      }
+      return { success: true, id: input.id, new_status: input.status, payment_email: paymentEmail, finance_snapshot: financeSnapshot };
+    }
     case 'send_email':
       await sendEmail(input.to, input.subject, input.body, input.from_name || 'KiddBusy');
       return { success: true, to: input.to };
@@ -338,6 +367,9 @@ async function runAgent(userMessage) {
     { name: 'query_agent_activity', description: 'Get agent execution summary feed.', input_schema: { type: 'object', properties: { agent_key: { type: 'string' }, status: { type: 'string' }, limit: { type: 'number' } }, required: [] } },
     { name: 'query_email_compliance', description: 'Get unsubscribe/send-log compliance metrics.', input_schema: { type: 'object', properties: { limit: { type: 'number' } }, required: [] } },
     { name: 'query_dashboard_stats', description: 'Get top dashboard stat-card datapoints for a range.', input_schema: { type: 'object', properties: { range: { type: 'string', enum: ['24h', '7d', '30d', 'all'] } }, required: [] } },
+    { name: 'query_finance_snapshot', description: 'Get current accountant snapshot including MRR, projected revenue, expenses, net, paid vs cancelled sponsors.', input_schema: { type: 'object', properties: {}, required: [] } },
+    { name: 'run_accountant_snapshot', description: 'Persist a fresh accountant snapshot.', input_schema: { type: 'object', properties: {}, required: [] } },
+    { name: 'add_finance_manual_entry', description: 'Add a manual revenue/expense input from owner.', input_schema: { type: 'object', properties: { kind: { type: 'string', enum: ['revenue', 'expense'] }, amount: { type: 'number' }, category: { type: 'string' }, vendor: { type: 'string' }, notes: { type: 'string' }, entry_date: { type: 'string' } }, required: ['kind', 'amount'] } },
     { name: 'update_submission_status', description: 'Approve or reject a submission.', input_schema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string', enum: ['approved', 'rejected'] } }, required: ['id', 'status'] } },
     { name: 'update_review_status', description: 'Approve or reject a review.', input_schema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string', enum: ['approved', 'rejected'] } }, required: ['id', 'status'] } },
     { name: 'update_sponsorship_status', description: 'Update sponsorship status.', input_schema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string' } }, required: ['id', 'status'] } },

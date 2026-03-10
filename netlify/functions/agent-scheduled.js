@@ -3,6 +3,7 @@
 const { sendCompliantEmail } = require('./_email-compliance');
 const { logAgentActivity } = require('./_agent-activity');
 const { triggerSponsorshipPaymentRequestEmail } = require('./_sponsorship-payment-email');
+const { buildFinanceSnapshot, upsertFinanceSnapshot } = require('./_accounting-core');
 
 const SUPABASE_URL = process.env.KB_DB_URL || 'https://wgwexzyqaiwosgraaczi.supabase.co';
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY;
@@ -174,7 +175,13 @@ async function executeTool(name, input, log) {
             paymentEmail = { sent: false, skipped: true, reason: 'already_active' };
           }
         }
-        return { success: true, id: input.id, new_status: input.status, payment_email: paymentEmail };
+        let financeSnapshot = null;
+        try {
+          financeSnapshot = await upsertFinanceSnapshot(await buildFinanceSnapshot());
+        } catch (snapErr) {
+          financeSnapshot = { error: snapErr.message || 'finance snapshot refresh failed' };
+        }
+        return { success: true, id: input.id, new_status: input.status, payment_email: paymentEmail, finance_snapshot: financeSnapshot };
       }
       case 'get_directives': {
         try {

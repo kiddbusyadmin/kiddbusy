@@ -35,6 +35,9 @@
 [functions.geo-city]
   timeout = 10
 
+[functions.accountant-agent]
+  timeout = 30
+
 # Daily cache warm — runs at 3am ET (8am UTC)
 [functions.daily-cache-warm]
   schedule = "0 8 * * *"
@@ -52,6 +55,11 @@
 # CMO blog writer — scheduled queue builder/distributor
 [functions.cmo-blog-scheduled]
   schedule = "*/20 * * * *"
+  timeout = 30
+
+# Accountant agent snapshot — runs nightly at 1am ET (6am UTC)
+[functions.accountant-scheduled]
+  schedule = "0 6 * * *"
   timeout = 30
 
 [[redirects]]
@@ -112,6 +120,11 @@
 [[redirects]]
   from = "/api/cmo-blog-run"
   to = "/.netlify/functions/cmo-blog-run"
+  status = 200
+
+[[redirects]]
+  from = "/api/accountant-agent"
+  to = "/.netlify/functions/accountant-agent"
   status = 200
 
 [[redirects]]

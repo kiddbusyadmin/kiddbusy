@@ -226,6 +226,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
     <div class="tab" onclick="switchTab('photos',this)" id="tab-photos">Photos</div>
     <div class="tab" onclick="switchTab('ownerkpi',this)" id="tab-ownerkpi">Owner KPI</div>
     <div class="tab" onclick="switchTab('cmo',this)" id="tab-cmo">CMO</div>
+    <div class="tab" onclick="switchTab('finance',this)" id="tab-finance">Finance</div>
     <div class="tab" onclick="switchTab('agentsummary',this)" id="tab-agentsummary">Agent Summary</div>
     <div class="tab" onclick="switchTab('cache',this)" id="tab-cache">Cache</div>
     <div class="tab" onclick="switchTab('activity',this)" id="tab-activity">Activity</div>
@@ -720,6 +721,110 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 </div>
 </div><!-- /view-cmo -->
 
+<!-- FINANCE VIEW -->
+<div class="view" id="view-finance">
+<div class="locations-inner">
+  <div class="date-banner">// ACCOUNTANT AGENT</div>
+  <div class="stats-row" style="margin-bottom:16px">
+    <div class="stat-card green">
+      <div class="stat-label">Active MRR</div>
+      <div class="stat-value" id="finance-mrr">--</div>
+      <div class="stat-sub">monthly recurring revenue</div>
+    </div>
+    <div class="stat-card blue">
+      <div class="stat-label">Projected Revenue (30d)</div>
+      <div class="stat-value" id="finance-proj-rev">--</div>
+      <div class="stat-sub">after churn/growth assumptions</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-label">Projected Net (30d)</div>
+      <div class="stat-value" id="finance-net">--</div>
+      <div class="stat-sub">revenue minus costs</div>
+    </div>
+    <div class="stat-card yellow">
+      <div class="stat-label">Paid / No Longer Paid</div>
+      <div class="stat-value" id="finance-paid-mix">--</div>
+      <div class="stat-sub">active vs cancelled</div>
+    </div>
+  </div>
+
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Cost Inputs</div>
+        <div class="panel-badge">monthly assumptions</div>
+      </div>
+      <div class="panel-body">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 14px">
+          <label style="font-family:var(--mono);font-size:.72rem;color:var(--muted);display:flex;align-items:center;gap:8px">
+            API Cost / Month $
+            <input id="finance-api-cost" type="number" min="0" step="0.01" style="width:110px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-family:var(--mono);font-size:.72rem">
+          </label>
+          <label style="font-family:var(--mono);font-size:.72rem;color:var(--muted);display:flex;align-items:center;gap:8px">
+            Subscriptions / Month $
+            <input id="finance-sub-cost" type="number" min="0" step="0.01" style="width:110px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-family:var(--mono);font-size:.72rem">
+          </label>
+          <label style="font-family:var(--mono);font-size:.72rem;color:var(--muted);display:flex;align-items:center;gap:8px">
+            Churn Rate (monthly)
+            <input id="finance-churn" type="number" min="0" max="1" step="0.001" style="width:110px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-family:var(--mono);font-size:.72rem">
+          </label>
+          <label style="font-family:var(--mono);font-size:.72rem;color:var(--muted);display:flex;align-items:center;gap:8px">
+            Growth Rate (monthly)
+            <input id="finance-growth" type="number" min="0" max="1" step="0.001" style="width:110px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-family:var(--mono);font-size:.72rem">
+          </label>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="topbar-btn primary" onclick="saveFinanceSettings()">Save Assumptions</button>
+          <button class="topbar-btn" onclick="runAccountantSnapshot()">Run Snapshot</button>
+          <button class="topbar-btn" onclick="loadFinanceDashboard()">Reload</button>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Manual Input</div>
+        <div class="panel-badge">owner-entered</div>
+      </div>
+      <div class="panel-body">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 14px">
+          <select id="finance-entry-kind" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-family:var(--mono);font-size:.72rem">
+            <option value="expense">Expense</option>
+            <option value="revenue">Revenue</option>
+          </select>
+          <input id="finance-entry-amount" type="number" min="0" step="0.01" placeholder="Amount" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-family:var(--mono);font-size:.72rem">
+          <input id="finance-entry-category" type="text" placeholder="Category (api, tooling, misc...)" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-family:var(--mono);font-size:.72rem">
+          <input id="finance-entry-notes" type="text" placeholder="Notes" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-family:var(--mono);font-size:.72rem">
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px">
+          <button class="topbar-btn primary" onclick="addFinanceManualEntry()">Add Entry</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panels" style="margin-top:20px">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Paid Listings</div>
+        <div class="panel-badge" id="finance-paid-badge">--</div>
+      </div>
+      <div class="panel-body" id="finance-paid-body">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">No Longer Paid</div>
+        <div class="panel-badge" id="finance-cancelled-badge">--</div>
+      </div>
+      <div class="panel-body" id="finance-cancelled-body">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div><!-- /view-finance -->
+
 <!-- AGENT SUMMARY VIEW -->
 <div class="view" id="view-agentsummary">
 <div class="locations-inner">
@@ -997,6 +1102,9 @@ function switchTab(name, el) {
   if (name === 'cmo') {
     loadCmoDashboard();
   }
+  if (name === 'finance') {
+    loadFinanceDashboard();
+  }
   if (name === 'agentsummary') {
     loadAgentSummary();
   }
@@ -1137,6 +1245,9 @@ async function loadAll() {
   }
   if (document.getElementById('view-cmo').classList.contains('active')) {
     loadCmoDashboard();
+  }
+  if (document.getElementById('view-finance').classList.contains('active')) {
+    loadFinanceDashboard();
   }
   if (document.getElementById('view-agentsummary').classList.contains('active')) {
     loadAgentSummary();
@@ -1953,6 +2064,135 @@ async function runCmoBlogNow() {
   }
 }
 
+// ===== FINANCE / ACCOUNTANT =====
+function moneyFmt(n) {
+  var num = Number(n || 0);
+  return '$' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+async function accountantApi(method, payload) {
+  var opts = {
+    method: method || 'GET',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' }
+  };
+  if (opts.method !== 'GET') opts.body = JSON.stringify(payload || {});
+  var res = await fetch('/api/accountant-agent', opts);
+  var out = await res.json();
+  if (!res.ok) throw new Error(out.error || 'Accountant request failed');
+  return out;
+}
+
+function renderFinanceSponsorList(rows, emptyMsg) {
+  var list = rows || [];
+  if (!list.length) return emptyHTML(emptyMsg || 'No records');
+  return '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+    '<th>Business</th><th>City</th><th>Plan</th><th>Email</th><th>Status</th>' +
+    '</tr></thead><tbody>' +
+    list.map(function(r) {
+      return '<tr>' +
+        '<td style="font-weight:600">' + (r.business_name || '--') + '</td>' +
+        '<td style="color:var(--muted)">' + (r.city || '--') + '</td>' +
+        '<td style="font-family:var(--mono);font-size:.72rem;color:var(--muted)">' + (r.plan || '--') + '</td>' +
+        '<td style="font-size:.74rem;color:var(--muted)">' + (r.email || '--') + '</td>' +
+        '<td><span class="status-badge ' + (r.status || 'pending') + '">' + (r.status || '--') + '</span></td>' +
+        '</tr>';
+    }).join('') +
+    '</tbody></table></div>';
+}
+
+async function loadFinanceDashboard() {
+  var paidBody = document.getElementById('finance-paid-body');
+  var cancelledBody = document.getElementById('finance-cancelled-body');
+  if (!paidBody || !cancelledBody) return;
+  paidBody.innerHTML = loadingHTML();
+  cancelledBody.innerHTML = loadingHTML();
+  try {
+    var out = await accountantApi('GET');
+    var settings = out.settings || {};
+    var snap = out.snapshot_preview || {};
+    var details = snap.details || {};
+    var paid = details.paid_listings || [];
+    var cancelled = details.no_longer_paid || [];
+
+    document.getElementById('finance-mrr').textContent = moneyFmt(snap.mrr_active);
+    document.getElementById('finance-proj-rev').textContent = moneyFmt(snap.projected_revenue_30d);
+    document.getElementById('finance-net').textContent = moneyFmt(snap.net_projection_30d);
+    document.getElementById('finance-paid-mix').textContent = String(snap.active_sponsors || 0) + ' / ' + String(snap.cancelled_sponsors || 0);
+
+    document.getElementById('finance-api-cost').value = Number(settings.default_monthly_api_cost || 0).toFixed(2);
+    document.getElementById('finance-sub-cost').value = Number(settings.default_monthly_subscription_cost || 0).toFixed(2);
+    document.getElementById('finance-churn').value = Number(settings.churn_rate_monthly || 0).toFixed(3);
+    document.getElementById('finance-growth').value = Number(settings.growth_rate_monthly || 0).toFixed(3);
+
+    document.getElementById('finance-paid-badge').textContent = paid.length + ' shown';
+    document.getElementById('finance-cancelled-badge').textContent = cancelled.length + ' shown';
+    paidBody.innerHTML = renderFinanceSponsorList(paid, 'No paid listings right now');
+    cancelledBody.innerHTML = renderFinanceSponsorList(cancelled, 'No cancelled sponsors yet');
+  } catch (e) {
+    paidBody.innerHTML = '<div class="empty" style="padding:24px;color:var(--accent)">Finance unavailable: ' + e.message + '</div>';
+    cancelledBody.innerHTML = '<div class="empty" style="padding:24px;color:var(--accent)">Finance unavailable: ' + e.message + '</div>';
+  }
+}
+
+async function saveFinanceSettings() {
+  var apiCost = Number((document.getElementById('finance-api-cost') || {}).value || 0);
+  var subCost = Number((document.getElementById('finance-sub-cost') || {}).value || 0);
+  var churn = Number((document.getElementById('finance-churn') || {}).value || 0);
+  var growth = Number((document.getElementById('finance-growth') || {}).value || 0);
+  if (!Number.isFinite(apiCost) || apiCost < 0) return alert('API cost must be 0 or higher');
+  if (!Number.isFinite(subCost) || subCost < 0) return alert('Subscription cost must be 0 or higher');
+  if (!Number.isFinite(churn) || churn < 0 || churn > 1) return alert('Churn must be between 0 and 1');
+  if (!Number.isFinite(growth) || growth < 0 || growth > 1) return alert('Growth must be between 0 and 1');
+  try {
+    var out = await accountantApi('POST', {
+      action: 'update_settings',
+      default_monthly_api_cost: apiCost,
+      default_monthly_subscription_cost: subCost,
+      churn_rate_monthly: churn,
+      growth_rate_monthly: growth
+    });
+    var snap = out.snapshot || {};
+    alert('Finance assumptions saved. New projected net (30d): ' + moneyFmt(snap.net_projection_30d));
+    await loadFinanceDashboard();
+  } catch (e) {
+    alert('Finance settings save failed: ' + e.message);
+  }
+}
+
+async function runAccountantSnapshot() {
+  try {
+    var out = await accountantApi('POST', { action: 'run_snapshot' });
+    var snap = out.snapshot || {};
+    alert('Snapshot saved for ' + (snap.snapshot_date || 'today') + '. Net (30d): ' + moneyFmt(snap.net_projection_30d));
+    await loadFinanceDashboard();
+  } catch (e) {
+    alert('Snapshot run failed: ' + e.message);
+  }
+}
+
+async function addFinanceManualEntry() {
+  var kind = (document.getElementById('finance-entry-kind') || {}).value || 'expense';
+  var amount = Number((document.getElementById('finance-entry-amount') || {}).value || 0);
+  var category = ((document.getElementById('finance-entry-category') || {}).value || 'general').trim();
+  var notes = ((document.getElementById('finance-entry-notes') || {}).value || '').trim();
+  if (!(amount >= 0)) return alert('Amount must be 0 or higher');
+  try {
+    await accountantApi('POST', {
+      action: 'add_manual_entry',
+      kind: kind,
+      amount: amount,
+      category: category || 'general',
+      notes: notes
+    });
+    document.getElementById('finance-entry-amount').value = '';
+    document.getElementById('finance-entry-category').value = '';
+    document.getElementById('finance-entry-notes').value = '';
+    await loadFinanceDashboard();
+  } catch (e) {
+    alert('Manual entry failed: ' + e.message);
+  }
+}
+
 // ===== AGENT SUMMARY =====
 async function fetchAgentActivity(limit) {
   var res = await fetch('/.netlify/functions/db-proxy', {
@@ -1977,6 +2217,7 @@ function humanAgentName(key) {
   if (k === 'admin_scheduled_agent') return 'Admin Agent';
   if (k === 'owner_leads_enrichment_agent') return 'Owner Leads Agent';
   if (k === 'cmo_agent') return 'CMO Agent';
+  if (k === 'accountant_agent') return 'Accountant Agent';
   if (!k) return 'Unknown Agent';
   return k.replace(/_/g, ' ');
 }

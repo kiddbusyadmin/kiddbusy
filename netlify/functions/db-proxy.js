@@ -4,6 +4,7 @@
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const { triggerSponsorshipPaymentRequestEmail } = require('./_sponsorship-payment-email');
+const { buildFinanceSnapshot, upsertFinanceSnapshot } = require('./_accounting-core');
 
 const ALLOWED_TABLES = {
   submissions: new Set(['pending', 'approved', 'rejected']),
@@ -336,6 +337,7 @@ exports.handler = async (event) => {
 
     let cleanup = null;
     let paymentEmail = null;
+    let financeSnapshot = null;
     if (table === 'reviews' && nextStatus === 'approved') {
       cleanup = await purgePlaceholderReviewsOnFirstOrganicApprove(id);
     }
@@ -358,7 +360,24 @@ exports.handler = async (event) => {
       }
     }
 
-    return json(200, { success: true, table, id, updates: { status: nextStatus }, data, cleanup, payment_email: paymentEmail });
+    if (table === 'sponsorships') {
+      try {
+        financeSnapshot = await upsertFinanceSnapshot(await buildFinanceSnapshot());
+      } catch (snapErr) {
+        financeSnapshot = { error: snapErr.message || 'finance snapshot refresh failed' };
+      }
+    }
+
+    return json(200, {
+      success: true,
+      table,
+      id,
+      updates: { status: nextStatus },
+      data,
+      cleanup,
+      payment_email: paymentEmail,
+      finance_snapshot: financeSnapshot
+    });
   } catch (err) {
     return json(500, { error: err.message || 'Unexpected error' });
   }
