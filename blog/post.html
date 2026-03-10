@@ -43,6 +43,7 @@ h1 { font-family: 'Fredoka One', cursive; line-height: 1.2; margin-bottom: 12px;
 .content p { margin-bottom: 12px; }
 .content ul { padding-left: 18px; margin: 6px 0 12px; }
 .content li { margin-bottom: 8px; }
+.content a.location-link { color: var(--plum); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; font-weight: 800; }
 .state { padding: 14px; background: #fff; border: 2px dashed var(--border); border-radius: 12px; color: var(--muted); }
 .cta-line { margin-top: 20px; }
 .cta-site {
@@ -125,6 +126,110 @@ function safeBody(html) {
     .replace(/on\w+\s*=\s*'[^']*'/gi, '');
 }
 
+function escapeRegExp(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeWebsiteUrl(raw) {
+  var value = String(raw || '').trim();
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value)) return value;
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(value)) return 'https://' + value;
+  return '';
+}
+
+function splitCityName(city) {
+  return String(city || '').split(',')[0].trim();
+}
+
+async function fetchCityListingsWithWebsites(city) {
+  var cityName = splitCityName(city);
+  if (!cityName) return [];
+  var res = await sb
+    .from('listings')
+    .select('name,website')
+    .eq('status', 'active')
+    .ilike('city', cityName)
+    .not('website', 'is', null)
+    .limit(300);
+  if (res.error || !Array.isArray(res.data)) return [];
+  var rows = [];
+  for (var i = 0; i < res.data.length; i += 1) {
+    var row = res.data[i] || {};
+    var name = String(row.name || '').trim();
+    var website = normalizeWebsiteUrl(row.website);
+    if (!name || !website) continue;
+    rows.push({ name: name, website: website });
+  }
+  rows.sort(function(a, b) { return b.name.length - a.name.length; });
+  return rows;
+}
+
+function shouldSkipNode(node) {
+  var p = node && node.parentNode ? node.parentNode : null;
+  while (p && p.nodeType === 1) {
+    var tag = String(p.tagName || '').toLowerCase();
+    if (tag === 'a' || tag === 'script' || tag === 'style' || tag === 'code') return true;
+    p = p.parentNode;
+  }
+  return false;
+}
+
+function linkListingMentions(container, listings) {
+  if (!container || !listings || !listings.length) return;
+  var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+  var nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+
+  for (var n = 0; n < nodes.length; n += 1) {
+    var node = nodes[n];
+    if (!node || !node.nodeValue || shouldSkipNode(node)) continue;
+    var text = String(node.nodeValue || '');
+    var replaced = false;
+    var frag = document.createDocumentFragment();
+    var cursor = 0;
+
+    while (cursor < text.length) {
+      var nearest = null;
+      for (var i = 0; i < listings.length; i += 1) {
+        var item = listings[i];
+        var rx = new RegExp('(^|[^A-Za-z0-9])(' + escapeRegExp(item.name) + ')(?=$|[^A-Za-z0-9])', 'i');
+        var slice = text.slice(cursor);
+        var m = slice.match(rx);
+        if (!m || typeof m.index !== 'number') continue;
+        var idx = cursor + m.index;
+        var whole = m[0];
+        var lead = m[1] || '';
+        var matchedName = whole.slice(lead.length);
+        if (!nearest || idx < nearest.idx || (idx === nearest.idx && matchedName.length > nearest.name.length)) {
+          nearest = { idx: idx, lead: lead, name: matchedName, website: item.website, len: whole.length };
+        }
+      }
+
+      if (!nearest) {
+        frag.appendChild(document.createTextNode(text.slice(cursor)));
+        break;
+      }
+
+      if (nearest.idx > cursor) frag.appendChild(document.createTextNode(text.slice(cursor, nearest.idx)));
+      if (nearest.lead) frag.appendChild(document.createTextNode(nearest.lead));
+
+      var a = document.createElement('a');
+      a.className = 'location-link';
+      a.href = nearest.website;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = nearest.name;
+      frag.appendChild(a);
+
+      cursor = nearest.idx + nearest.len;
+      replaced = true;
+    }
+
+    if (replaced) node.parentNode.replaceChild(frag, node);
+  }
+}
+
 function formatDate(value) {
   try {
     return new Date(value).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -157,7 +262,12 @@ async function load() {
     document.getElementById('meta').textContent = formatDate(post.published_at) + (post.city ? (' - ' + post.city) : '') + ' - ' + (Number(post.read_minutes) || 4) + ' min read';
     document.getElementById('title').textContent = post.title || 'KiddBusy Blog';
     document.getElementById('excerpt').textContent = post.excerpt || '';
-    document.getElementById('content').innerHTML = safeBody(post.body_html || '');
+    var contentEl = document.getElementById('content');
+    contentEl.innerHTML = safeBody(post.body_html || '');
+    try {
+      var cityListings = await fetchCityListingsWithWebsites(post.city || '');
+      linkListingMentions(contentEl, cityListings);
+    } catch (_) {}
 
     var canonical = document.createElement('link');
     canonical.rel = 'canonical';
