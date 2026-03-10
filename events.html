@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KiddBusy Events</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --ink:#241f38;--muted:#6f6788;--plum:#7a4cf6;--line:#e7dbff;--bg:#f9f5ff;--card:#fff;--green:#1ea672;--amber:#d18b16;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+nav{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+.logo{font-weight:900;font-size:1.15rem;color:var(--ink);text-decoration:none}
+.logo span{color:var(--plum)}
+.nav-actions{display:flex;gap:10px;align-items:center}
+.btn{border:1px solid var(--line);background:#fff;color:var(--ink);padding:8px 11px;border-radius:10px;font-weight:700;text-decoration:none;cursor:pointer}
+.btn.primary{background:var(--plum);border-color:var(--plum);color:#fff}
+.container{max-width:980px;margin:18px auto;padding:0 14px 40px}
+.header{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px}
+h1{margin:0;font-size:1.35rem}
+.sub{margin:4px 0 0;color:var(--muted);font-size:.95rem}
+.row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.row input{flex:1;min-width:240px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:1rem}
+.status{margin-top:10px;color:var(--muted);font-size:.85rem;font-weight:700}
+.events-list{display:flex;flex-direction:column;gap:12px;margin-top:14px}
+.event-card{display:grid;grid-template-columns:66px 1fr auto;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
+.event-date{background:#f0e6ff;border-radius:10px;padding:8px 6px;text-align:center;line-height:1.1;font-weight:900}
+.event-date .m{font-size:.78rem;color:#6645bf}
+.event-date .d{font-size:1.25rem}
+.event-name{font-weight:800}
+.event-detail{margin-top:4px;color:var(--muted);font-size:.9rem;line-height:1.45}
+.event-meta{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+.pill{font-size:.7rem;padding:4px 8px;border-radius:999px;font-weight:800}
+.pill.free{background:#e5fff3;color:#14734e}
+.pill.paid{background:#fff6e6;color:#8a6112}
+.pill.ongoing{background:#edf6ff;color:#185f9d}
+.actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.actions .btn{font-size:.78rem;padding:7px 10px}
+.empty{padding:28px;text-align:center;color:var(--muted);background:#fff;border:1px dashed var(--line);border-radius:12px}
+@media (max-width:760px){
+  .event-card{grid-template-columns:54px 1fr}
+  .event-meta{grid-column:1/-1;flex-direction:row;justify-content:flex-start}
+}
+</style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/">Kidd<span>Busy</span></a>
+  <div class="nav-actions">
+    <a class="btn" href="/">Top Picks</a>
+    <a class="btn" href="/blog/">Blog</a>
+  </div>
+</nav>
+
+<div class="container">
+  <section class="header">
+    <h1>Upcoming Family Events</h1>
+    <p class="sub">A dedicated events view to keep the main page fast and short.</p>
+    <div class="row">
+      <input id="cityInput" placeholder="Enter city, state (e.g. Charlotte, NC)" />
+      <button class="btn primary" onclick="runEventsSearch()">Load Events</button>
+    </div>
+    <div class="status" id="eventsFreshness"></div>
+  </section>
+
+  <section class="events-list" id="eventsList"></section>
+</div>
+
+<script>
+const SUPABASE_URL='https://wgwexzyqaiwosgraaczi.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indnd2V4enlxYWl3b3NncmFhY3ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODEwNzUsImV4cCI6MjA4ODI1NzA3NX0.IS8u4SL1XeLh9KgD4c2Pl9BiGNg0zkiNauUzu_QtKH8';
+const sb = supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+const EVENTS_TTL_MS = 24 * 60 * 60 * 1000;
+
+function qsCity(){const p=new URLSearchParams(location.search);return p.get('city')||''}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+function normalizeEventUrl(u){const raw=String(u||'').trim();if(!raw) return ''; try{const x=new URL(raw);if(x.protocol!=='http:'&&x.protocol!=='https:') return '';return x.toString();}catch(_){return ''}}
+function extractFirstUrl(text){const m=String(text||'').match(/https?:\/\/[^\s)]+/i);return m?m[0]:''}
+function startOfToday(){const d=new Date();d.setHours(0,0,0,0);return d}
+function parseIsoDateLocal(v){if(!v) return null; const m=String(v).match(/^(\d{4})-(\d{2})-(\d{2})$/); if(!m) return null; return new Date(Number(m[1]),Number(m[2])-1,Number(m[3]),0,0,0,0)}
+function monthToNumber(m){const x=String(m||'').trim().slice(0,3).toUpperCase();const map={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};return Object.prototype.hasOwnProperty.call(map,x)?map[x]:null}
+function inferDate(month,day){const m=monthToNumber(month);const d=Number(day);if(m==null||!Number.isFinite(d)||d<1||d>31) return null;const now=new Date();const t=startOfToday();const c=new Date(now.getFullYear(),m,d,0,0,0,0);if(c<t && (t-c)>(120*24*60*60*1000)) c.setFullYear(c.getFullYear()+1);return c}
+function isPastEvent(e){const today=startOfToday(); if(e.ongoing){ if(e.end_date) return e.end_date<today; return false; } const end=e.end_date||e.start_date; if(!end) return false; return end<today; }
+function normalizeEventRow(raw){
+  const detail=String(raw.detail||'');
+  const sourceUrl=normalizeEventUrl(raw.source_url||raw.url||raw.link||extractFirstUrl(detail))||'';
+  const startDate=parseIsoDateLocal(raw.start_date)||inferDate(raw.month||raw.event_month,raw.day||raw.event_day);
+  const endDate=parseIsoDateLocal(raw.end_date);
+  const ongoingHint=/ongoing|runs through|daily|every weekend|through \w+ \d{1,2}/i.test(detail);
+  return {month:raw.month||raw.event_month||'',day:raw.day||raw.event_day||'',name:raw.name||'',detail,free:!!(raw.free||raw.is_free),source_url:sourceUrl,ongoing:!!raw.ongoing||ongoingHint,start_date:startDate,end_date:endDate};
+}
+
+function renderEvents(rows){
+  const list=document.getElementById('eventsList');
+  if(!rows.length){ list.innerHTML='<div class="empty">No upcoming events found yet for this city.</div>'; return; }
+  list.innerHTML=rows.map(e=>{
+    const finalUrl=normalizeEventUrl(e.source_url||'');
+    const linkHtml = finalUrl
+      ? `<a class="btn" href="${esc(finalUrl)}" target="_blank" rel="noopener noreferrer" onclick="track('event_source_click', document.getElementById('cityInput').value, '${esc(e.name)}')">Event Link</a>`
+      : '<span class="btn" style="opacity:.7;cursor:default">Source unavailable</span>';
+    return `<article class="event-card">
+      <div class="event-date"><div class="m">${esc(e.month)}</div><div class="d">${esc(e.day)}</div></div>
+      <div>
+        <div class="event-name">${esc(e.name)}</div>
+        <div class="event-detail">${esc(e.detail)}</div>
+        <div class="actions">${linkHtml}<button class="btn" data-event-name="${esc(e.name)}" data-event-detail="${esc(e.detail)}" data-event-url="${esc(finalUrl)}" onclick="shareEventFromButton(this)">Share</button></div>
+      </div>
+      <div class="event-meta">
+        <span class="pill ${e.free?'free':'paid'}">${e.free?'FREE':'Paid'}</span>
+        ${e.ongoing?'<span class="pill ongoing">ONGOING</span>':''}
+      </div>
+    </article>`;
+  }).join('');
+}
+
+function extractJsonArrayCandidate(text){const raw=String(text||'');if(!raw) return null;const cleaned=raw.replace(/```json\s*/gi,'').replace(/```\s*/g,'');for(let i=0;i<cleaned.length;i++){if(cleaned[i]!=='[') continue;let depth=0,inStr=false,esc=false;for(let j=i;j<cleaned.length;j++){const ch=cleaned[j];if(inStr){if(esc)esc=false;else if(ch==='\\')esc=true;else if(ch==='\"')inStr=false;continue;}if(ch==='\"'){inStr=true;continue;}if(ch==='[')depth++;else if(ch===']'){depth--;if(depth===0){const candidate=cleaned.slice(i,j+1).trim();try{const parsed=JSON.parse(candidate);if(Array.isArray(parsed)) return parsed;}catch(_){}break;}}}}return null;}
+
+async function fetchEventsForCity(cityLabel, attempt){
+  const res=await fetch('/api/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({city:cityLabel,type:'events',retry_attempt:attempt||1})});
+  const data=await res.json();
+  if(!res.ok||data.error) throw new Error((data&&data.error)?data.error:('Search failed ('+res.status+')'));
+  const textBlocks=(data&&data.content?data.content:[]).filter(b=>b&&b.type==='text');
+  const parsed=extractJsonArrayCandidate(textBlocks.map(b=>String(b.text||'')).join('\n'));
+  if(!parsed) throw new Error('No JSON array in response');
+  const events=parsed.map(normalizeEventRow).filter(e=>!isPastEvent(e));
+  if(!events.length) throw new Error('Empty events payload');
+  return events;
+}
+
+async function shareEvent(name, detail, url){
+  const city=document.getElementById('cityInput').value||null;
+  const cleanUrl=normalizeEventUrl(url)||normalizeEventUrl(extractFirstUrl(detail))||'';
+  const text=cleanUrl?`${name}\n${detail}\n${cleanUrl}`:`${name}\n${detail}`;
+  if(navigator.share){
+    try{await navigator.share({title:name,text:detail,url:cleanUrl||undefined});track('event_share_click',city,JSON.stringify({method:'native_share',event_name:name,shared_url:cleanUrl||null}));return {ok:true,method:'native_share'};}catch(err){if(err&&err.name==='AbortError') return {ok:false,method:'cancelled'};}
+  }
+  try{await navigator.clipboard.writeText(text);track('event_share_click',city,JSON.stringify({method:'copy_clipboard',event_name:name,shared_url:cleanUrl||null}));return {ok:true,method:'copy_clipboard'};}catch(_){if(cleanUrl){window.open(cleanUrl,'_blank','noopener');track('event_share_click',city,JSON.stringify({method:'open_link_fallback',event_name:name,shared_url:cleanUrl}));return {ok:true,method:'open_link_fallback'};}return {ok:false,method:'failed'};}
+}
+function setShareButtonState(btn,label){if(!btn) return;const original=btn.getAttribute('data-original-label')||btn.textContent||'Share';if(!btn.getAttribute('data-original-label')) btn.setAttribute('data-original-label',original);btn.textContent=label;setTimeout(()=>{btn.textContent=original;},1400)}
+async function shareEventFromButton(btn){const name=btn.getAttribute('data-event-name')||'';const detail=btn.getAttribute('data-event-detail')||'';const url=btn.getAttribute('data-event-url')||'';const r=await shareEvent(name,detail,url);if(!r||!r.ok) return;if(r.method==='native_share') setShareButtonState(btn,'Shared');else if(r.method==='copy_clipboard') setShareButtonState(btn,'Copied');else setShareButtonState(btn,'Opened')}
+
+function isInternalTraffic(){try{const params=new URLSearchParams(window.location.search||'');if(params.get('kb_internal')==='1'){localStorage.setItem('kb_internal','1');return true;}if(localStorage.getItem('kb_internal')==='1') return true;if(navigator.webdriver) return true;const host=String(window.location.hostname||'').toLowerCase();if(host.endsWith('.netlify.app')||host==='localhost'||host==='127.0.0.1') return true;}catch(_){ }return false}
+function track(event, city=null, value=null){const payload={event,city,value,session_id:(sessionStorage.getItem('kb_session')||((() => { const id=Math.random().toString(36).slice(2)+Date.now().toString(36); sessionStorage.setItem('kb_session',id); return id; })())),is_internal:isInternalTraffic(),source:isInternalTraffic()?'internal':'public',user_agent:navigator.userAgent||null,path:window.location.pathname||null};sb.from('analytics').insert(payload).then(({error})=>{if(!error) return;sb.from('analytics').insert({event,city,value,session_id:payload.session_id}).then(()=>{});});}
+
+async function loadEventsForCity(cityLabel){
+  const freshEl=document.getElementById('eventsFreshness');
+  try { localStorage.setItem('kb_last_city', cityLabel); } catch (_) {}
+  document.getElementById('cityInput').value=cityLabel;
+  document.getElementById('eventsList').innerHTML='<div class="empty">Loading events…</div>';
+
+  const { data: cachedMeta } = await sb.from('events').select('*').ilike('city', cityLabel).order('last_refreshed',{ascending:false}).limit(1);
+  const lastRefreshed=cachedMeta&&cachedMeta[0]?cachedMeta[0].last_refreshed:null;
+  const isFresh=lastRefreshed && (Date.now()-new Date(lastRefreshed))<EVENTS_TTL_MS;
+  const age=lastRefreshed?Math.round((Date.now()-new Date(lastRefreshed))/3600000):null;
+
+  const { data: cachedEvents } = await sb.from('events').select('*').ilike('city', cityLabel).order('id',{ascending:true});
+  const normalized=(cachedEvents||[]).map(normalizeEventRow).filter(e=>!isPastEvent(e));
+  const hasCached=normalized.length>=2;
+  if(hasCached){renderEvents(normalized);freshEl.textContent=isFresh?(age<1?'Just updated':`Updated ${age}h ago`):(age==null?'Showing cached events':`Showing cached events (${age}h old), refreshing…`);}
+  if(isFresh) return;
+
+  try{
+    freshEl.textContent='Searching for events…';
+    let events=null,lastErr=null;
+    for(let attempt=1;attempt<=2;attempt++){
+      try{events=await fetchEventsForCity(cityLabel,attempt);break;}catch(e){lastErr=e;}
+    }
+    if(!events) throw (lastErr||new Error('Unable to fetch events'));
+
+    await sb.from('events').delete().ilike('city', cityLabel);
+    const rows=events.map(e=>({city:cityLabel,month:e.month,day:e.day,name:e.name,detail:e.detail,is_free:e.free,source_url:e.source_url,ongoing:e.ongoing,start_date:e.start_date?e.start_date.toISOString().slice(0,10):null,end_date:e.end_date?e.end_date.toISOString().slice(0,10):null,last_refreshed:new Date().toISOString()}));
+    let insertOk=false;
+    try{const ins=await sb.from('events').insert(rows);insertOk=!ins.error;}catch(_){ }
+    if(!insertOk){const fallbackRows=rows.map(r=>({city:r.city,month:r.month,day:r.day,name:r.name,detail:r.detail,is_free:r.is_free,last_refreshed:r.last_refreshed}));await sb.from('events').insert(fallbackRows);}    
+
+    renderEvents(events);
+    freshEl.textContent='Just updated';
+  }catch(err){
+    if(!hasCached){document.getElementById('eventsList').innerHTML='<div class="empty">Could not load events right now. Try another city in a moment.</div>';freshEl.textContent='';}
+    else {freshEl.textContent=age==null?'Showing cached events':`Showing cached events (${age}h old)`;}
+  }
+}
+
+function runEventsSearch(){const city=(document.getElementById('cityInput').value||'').trim();if(!city){alert('Enter a city first.');return;}loadEventsForCity(city)}
+
+document.addEventListener('DOMContentLoaded', function(){
+  const city = qsCity() || localStorage.getItem('kb_last_city') || '';
+  if(city){document.getElementById('cityInput').value=city; loadEventsForCity(city);} else {
+    document.getElementById('eventsList').innerHTML='<div class="empty">Enter a city above to load events.</div>';
+  }
+  document.getElementById('cityInput').addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); runEventsSearch(); }});
+});
+</script>
+</body>
+</html>

@@ -973,18 +973,12 @@
   <section id="activities" style="display:none">
     <div class="section-header">
       <h2 class="section-title"><span>Top Picks</span> in <span id="topPicksCity" style="color:var(--plum)">…</span></h2>
-      <a href="#" class="see-all" onclick="event.preventDefault(); showAllActivities()">See all →</a>
+      <div style="display:flex;gap:14px;align-items:center">
+        <a href="#" class="see-all" onclick="event.preventDefault(); openEventsPage()">Events →</a>
+        <a href="#" class="see-all" onclick="event.preventDefault(); showAllActivities()">See all →</a>
+      </div>
     </div>
     <div class="activities-grid" id="activitiesGrid"></div>
-  </section>
-
-  <!-- EVENTS -->
-  <section id="events" style="display:none">
-    <div class="section-header">
-      <h2 class="section-title"><span>Upcoming Events</span> in <span id="eventsCity" style="color:var(--plum)">…</span></h2>
-      <span id="eventsFreshness" style="font-size:.78rem;color:var(--muted);font-weight:700"></span>
-    </div>
-    <div class="events-list" id="eventsList"></div>
   </section>
 
   <!-- EMAIL CAPTURE -->
@@ -2965,8 +2959,6 @@ async function onCitySelected(city) {
     renderCachedListings(_memCache[cityName].rows);
     document.getElementById('activities').style.display = 'block';
     document.getElementById('activities').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    // Ensure events render on repeat searches that use in-memory listing cache.
-    loadEventsForCity(city);
     track('city_search', city);
     _sessionCities.push(city);
     if (_sessionCities.length === 2) track('multi_city_session', city, _sessionCities[0]);
@@ -3011,7 +3003,6 @@ async function onCitySelected(city) {
       document.getElementById('loaderArea').classList.remove('visible');
       document.getElementById('activities').style.display = 'block';
       document.getElementById('activities').scrollIntoView({ behavior: 'smooth', block: 'start' });
-      loadEventsForCity(city);
       track('cache_hit', city);
 
       // ── BACKGROUND REFRESH if stale ──
@@ -3034,7 +3025,6 @@ async function onCitySelected(city) {
     track('cache_miss', city);
     document.getElementById('loaderMsg').textContent = `Finding the best spots in ${city}…`;
     await loadTopPicksForCity(city);
-    loadEventsForCity(city);
 
   } catch(err) {
     console.error('City load failed:', err);
@@ -3096,6 +3086,21 @@ function onFindClicked() {
   if (!state || !city) return;
   const abbr = STATE_ABBR[state] || state;
   onCitySelected(`${city}, ${abbr}`);
+}
+
+function openEventsPage() {
+  var stateEl = document.getElementById('stateSelect');
+  var cityEl = document.getElementById('citySelect');
+  var city = cityEl && cityEl.value ? cityEl.value : '';
+  var state = stateEl && stateEl.value ? stateEl.value : '';
+  if (!city || !state) {
+    alert('Pick a city first, then open Events.');
+    return;
+  }
+  var abbr = STATE_ABBR[state] || state;
+  var label = city + ', ' + abbr;
+  try { localStorage.setItem('kb_last_city', label); } catch (_) {}
+  window.location.href = '/events.html?city=' + encodeURIComponent(label);
 }
 
 function normalizeCityLabel(v) {
