@@ -462,6 +462,38 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
       </div>
     </div>
   </div>
+  <div class="panels full" style="margin-top:14px">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Paid Banner Creative Queue</div>
+        <div class="panel-badge" id="badge-banner-creatives">--</div>
+      </div>
+      <div class="sponsor-search-bar" style="border-bottom:none;padding-bottom:8px">
+        <input id="banner-business-name" type="text" placeholder="Business name">
+        <input id="banner-city" type="text" placeholder="City (example: Charlotte, NC)">
+        <input id="banner-click-url" type="url" placeholder="Click URL (official site)">
+        <input id="banner-sponsorship-id" type="text" placeholder="Sponsorship ID (optional)">
+        <input id="banner-priority" type="number" min="1" max="1000" value="100" placeholder="Priority">
+        <input id="banner-headline" type="text" placeholder="Headline (optional)">
+        <input id="banner-subheadline" type="text" placeholder="Subheadline (optional)">
+        <input id="banner-file" type="file" accept="image/jpeg,image/png,image/webp,image/gif">
+        <button class="topbar-btn primary" onclick="submitSponsorBannerCreative()">Upload Banner</button>
+      </div>
+      <div class="sponsor-search-bar">
+        <input id="banner-q" type="text" placeholder="Search by business, city, or submitter..." oninput="filterSponsorBanners()">
+        <select id="banner-status-filter" onchange="filterSponsorBanners()">
+          <option value="">All statuses</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+          <option value="archived">Archived</option>
+        </select>
+      </div>
+      <div id="body-banner-creatives">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
 </div>
 </div><!-- /view-locations -->
 
@@ -1045,8 +1077,10 @@ var convHistory = [];
 var agentBusy = false;
 var refreshTimer = null;
 var locationsLoaded = false;
+var sponsorBannersLoaded = false;
 var photosLoaded = false;
 var _allSubmissionPhotos = [];
+var _allSponsorBanners = [];
 var searchesRange = '24h';
 var LOGIN_STATE_KEY = 'kiddbusy_hq_unlocked';
 var _cmoConfig = null;
@@ -1102,8 +1136,9 @@ function switchTab(name, el) {
   document.querySelectorAll('.view').forEach(function(v) { v.classList.remove('active'); });
   el.classList.add('active');
   document.getElementById('view-' + name).classList.add('active');
-  if (name === 'locations' && !locationsLoaded && sb) {
-    loadSponsorListings();
+  if (name === 'locations' && sb) {
+    if (!locationsLoaded) loadSponsorListings();
+    if (!sponsorBannersLoaded) loadSponsorBanners();
   }
   if (name === 'photos' && sb) {
     loadPhotoQueue();
@@ -1230,6 +1265,20 @@ async function photoAdmin(action, payload) {
   return out;
 }
 
+async function sponsorBannerAdmin(action, payload) {
+  var body = Object.assign({ action: action }, payload || {});
+  var res = await fetch('/api/sponsor-banners', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
+    body: JSON.stringify(body)
+  });
+  var out = await res.json();
+  if (!res.ok) {
+    throw new Error((out && out.error) ? out.error : 'Sponsor banner request failed');
+  }
+  return out;
+}
+
 // ===== LOAD ALL =====
 async function loadAll() {
   if (!sb) return;
@@ -1255,6 +1304,10 @@ async function loadAll() {
 
   if (document.getElementById('view-photos').classList.contains('active')) {
     loadPhotoQueue();
+  }
+  if (document.getElementById('view-locations').classList.contains('active')) {
+    loadSponsorListings();
+    loadSponsorBanners();
   }
   if (document.getElementById('view-cmo').classList.contains('active')) {
     loadCmoDashboard();
@@ -2576,6 +2629,176 @@ async function setSponsor(listingId, sponsored, name, btn) {
   }
 }
 
+// ===== SPONSOR BANNER CREATIVES =====
+function sponsorBannerStatusBadge(status) {
+  var s = String(status || 'pending');
+  if (s === 'approved') return '<span class="status-badge approved">approved</span>';
+  if (s === 'rejected') return '<span class="status-badge rejected">rejected</span>';
+  if (s === 'archived') return '<span class="status-badge" style="background:rgba(128,128,128,.18);color:#b8bccf">archived</span>';
+  return '<span class="status-badge pending">pending</span>';
+}
+
+async function loadSponsorBanners() {
+  document.getElementById('body-banner-creatives').innerHTML = loadingHTML();
+  try {
+    var payload = await sponsorBannerAdmin('list_banners', { limit: 500 });
+    _allSponsorBanners = payload.banners || [];
+    sponsorBannersLoaded = true;
+    var pending = _allSponsorBanners.filter(function(r) { return r.status === 'pending'; }).length;
+    document.getElementById('badge-banner-creatives').textContent = pending + ' pending / ' + _allSponsorBanners.length + ' total';
+    filterSponsorBanners();
+  } catch (e) {
+    document.getElementById('body-banner-creatives').innerHTML = '<div class="empty" style="padding:24px;color:var(--accent)">Failed to load sponsor banners: ' + e.message + '</div>';
+  }
+}
+
+function filterSponsorBanners() {
+  var q = (document.getElementById('banner-q').value || '').toLowerCase();
+  var status = document.getElementById('banner-status-filter').value;
+  var rows = _allSponsorBanners.slice();
+
+  if (status) rows = rows.filter(function(r) { return r.status === status; });
+  if (q) {
+    rows = rows.filter(function(r) {
+      return (r.business_name || '').toLowerCase().includes(q) ||
+        (r.city || '').toLowerCase().includes(q) ||
+        (r.submitted_by_email || '').toLowerCase().includes(q) ||
+        (r.submitted_by_name || '').toLowerCase().includes(q);
+    });
+  }
+
+  renderSponsorBannerTable(rows);
+}
+
+function renderSponsorBannerTable(rows) {
+  var body = document.getElementById('body-banner-creatives');
+  if (!rows || !rows.length) {
+    body.innerHTML = '<div class="empty" style="padding:24px">No sponsor banner creatives yet</div>';
+    return;
+  }
+
+  body.innerHTML =
+    '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+    '<th>Preview</th><th>Business</th><th>City</th><th>Status</th><th>URL</th><th>Sponsorship</th><th>Submitter</th><th>Date</th><th>Actions</th>' +
+    '</tr></thead><tbody>' +
+    rows.map(function(r) {
+      var preview = r.image_url
+        ? '<a href="' + r.image_url + '" target="_blank" rel="noopener"><img src="' + r.image_url + '" alt="banner" style="width:88px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--border)"></a>'
+        : '--';
+      var submitter = [r.submitted_by_name || '--', r.submitted_by_email || '--'].join('<br>');
+      var clickUrl = r.click_url ? ('<a href="' + r.click_url + '" target="_blank" rel="noopener" style="color:var(--blue)">open</a>') : '--';
+      var actions = '--';
+      if (r.status === 'pending') {
+        actions =
+          '<button class="act-btn approve" onclick="approveSponsorBanner(' + r.banner_id + ')">Approve</button> ' +
+          '<button class="act-btn reject" onclick="rejectSponsorBanner(' + r.banner_id + ')">Reject</button>';
+      }
+      return '<tr>' +
+        '<td>' + preview + '</td>' +
+        '<td style="font-weight:700">' + (r.business_name || '--') + '<div style="font-size:.72rem;color:var(--muted)">' + (r.headline || '') + '</div></td>' +
+        '<td style="color:var(--muted)">' + (r.city || '--') + '</td>' +
+        '<td>' + sponsorBannerStatusBadge(r.status) + '</td>' +
+        '<td>' + clickUrl + '</td>' +
+        '<td style="font-family:var(--mono);font-size:.72rem">' + (r.sponsorship_id || '--') + '</td>' +
+        '<td style="font-size:.74rem;color:var(--muted)">' + submitter + '</td>' +
+        '<td style="font-family:var(--mono);font-size:.72rem;color:var(--muted)">' + (r.created_at ? timeAgo(r.created_at) : '--') + '</td>' +
+        '<td>' + actions + '</td>' +
+        '</tr>';
+    }).join('') +
+    '</tbody></table></div>';
+}
+
+function fileToBase64Admin(file) {
+  return new Promise(function(resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function() {
+      var out = String(reader.result || '');
+      var idx = out.indexOf(',');
+      resolve(idx >= 0 ? out.slice(idx + 1) : out);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function submitSponsorBannerCreative() {
+  var businessName = (document.getElementById('banner-business-name').value || '').trim();
+  var city = (document.getElementById('banner-city').value || '').trim();
+  var clickUrl = (document.getElementById('banner-click-url').value || '').trim();
+  var sponsorshipId = (document.getElementById('banner-sponsorship-id').value || '').trim();
+  var priority = Number(document.getElementById('banner-priority').value || 100);
+  var headline = (document.getElementById('banner-headline').value || '').trim();
+  var subheadline = (document.getElementById('banner-subheadline').value || '').trim();
+  var fileInput = document.getElementById('banner-file');
+  var file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+
+  if (!businessName || !city) {
+    alert('Business name and city are required.');
+    return;
+  }
+  if (!file) {
+    alert('Choose a banner image file.');
+    return;
+  }
+  if (!/^image\/(jpeg|png|webp|gif)$/i.test(file.type || '')) {
+    alert('Use JPG, PNG, WEBP, or GIF.');
+    return;
+  }
+  if (file.size > 6 * 1024 * 1024) {
+    alert('Image too large. Max 6MB.');
+    return;
+  }
+
+  try {
+    var fileBase64 = await fileToBase64Admin(file);
+    await sponsorBannerAdmin('submit_banner', {
+      business_name: businessName,
+      city: city,
+      click_url: clickUrl || null,
+      sponsorship_id: sponsorshipId || null,
+      priority: Number.isFinite(priority) ? priority : 100,
+      headline: headline || null,
+      subheadline: subheadline || null,
+      submitted_by_name: 'admin',
+      submitted_by_email: 'admin@kiddbusy.com',
+      file_name: file.name,
+      mime_type: file.type || 'image/jpeg',
+      file_base64: fileBase64
+    });
+    document.getElementById('banner-business-name').value = '';
+    document.getElementById('banner-city').value = '';
+    document.getElementById('banner-click-url').value = '';
+    document.getElementById('banner-sponsorship-id').value = '';
+    document.getElementById('banner-priority').value = '100';
+    document.getElementById('banner-headline').value = '';
+    document.getElementById('banner-subheadline').value = '';
+    if (fileInput) fileInput.value = '';
+    await loadSponsorBanners();
+    alert('Banner creative uploaded to moderation queue.');
+  } catch (e) {
+    alert('Upload failed: ' + e.message);
+  }
+}
+
+async function approveSponsorBanner(bannerId) {
+  try {
+    await sponsorBannerAdmin('approve_banner', { banner_id: bannerId });
+    await loadSponsorBanners();
+  } catch (e) {
+    alert('Approve failed: ' + e.message);
+  }
+}
+
+async function rejectSponsorBanner(bannerId) {
+  var reason = prompt('Reason for rejection (optional):', 'Image quality or content issue');
+  try {
+    await sponsorBannerAdmin('reject_banner', { banner_id: bannerId, reason: reason || 'Rejected by admin' });
+    await loadSponsorBanners();
+  } catch (e) {
+    alert('Reject failed: ' + e.message);
+  }
+}
+
 // ===== PHOTO QUEUE =====
 async function loadPhotoQueue() {
   document.getElementById('body-photos').innerHTML = loadingHTML();
@@ -2751,6 +2974,11 @@ var AGENT_TOOLS = [
     input_schema: { type: 'object', properties: { status: { type: 'string' } }, required: [] }
   },
   {
+    name: 'query_sponsor_banners',
+    description: 'Get sponsor banner creative moderation queue with statuses: pending, approved, rejected, archived.',
+    input_schema: { type: 'object', properties: { status: { type: 'string' }, city: { type: 'string' }, limit: { type: 'number' } }, required: [] }
+  },
+  {
     name: 'query_listings',
     description: 'Get active listings with city, category, rating, is_sponsored, source fields.',
     input_schema: { type: 'object', properties: {}, required: [] }
@@ -2799,10 +3027,20 @@ var AGENT_TOOLS = [
     name: 'reject_submission_photo',
     description: 'Reject a submission photo by submission_photo_id.',
     input_schema: { type: 'object', properties: { submission_photo_id: { type: 'number' }, reason: { type: 'string' } }, required: ['submission_photo_id'] }
+  },
+  {
+    name: 'approve_sponsor_banner',
+    description: 'Approve a sponsor banner creative by banner_id so it can render on city pages.',
+    input_schema: { type: 'object', properties: { banner_id: { type: 'number' } }, required: ['banner_id'] }
+  },
+  {
+    name: 'reject_sponsor_banner',
+    description: 'Reject a sponsor banner creative by banner_id.',
+    input_schema: { type: 'object', properties: { banner_id: { type: 'number' }, reason: { type: 'string' } }, required: ['banner_id'] }
   }
 ];
 
-var AGENT_SYSTEM = 'You are the KiddBusy admin agent. You have direct database access via tools. Be concise and action-oriented. Use plain text, no markdown headers.\n\nTables: submissions (business listings awaiting approval), reviews (user reviews of listings), submission_photos (image moderation queue), owner_claims (owner verification requests), owner_change_requests (owner edits), sponsorships (plans: $49/mo listing, $199/mo banner, $219/mo bundle), listings (active businesses with city, source, is_sponsored, last_refreshed, avg_rating, review_count), email_leads (newsletter signups with email, city, source), analytics (event log with event type, city, value, session_id).\n\nAnalytics events include core site events plus owner events: owner_claim_open, owner_claim_start, owner_claim_code_sent, owner_claim_verify_attempt, owner_claim_verified, owner_claim_abandon, owner_dashboard_open, owner_update_submit, owner_update_saved.\n\nWhen asked about city traffic, use query_analytics with event=city_search. When asked about owner funnel, use query_owner_kpis and/or query_analytics to calculate conversion and abandon rates.';
+var AGENT_SYSTEM = 'You are the KiddBusy admin agent. You have direct database access via tools. Be concise and action-oriented. Use plain text, no markdown headers.\n\nTables: submissions (business listings awaiting approval), reviews (user reviews of listings), submission_photos (image moderation queue), sponsor_banners (paid banner ad creative queue), owner_claims (owner verification requests), owner_change_requests (owner edits), sponsorships (plans: $49/mo listing, $199/mo banner, $219/mo bundle), listings (active businesses with city, source, is_sponsored, last_refreshed, avg_rating, review_count), email_leads (newsletter signups with email, city, source), analytics (event log with event type, city, value, session_id).\n\nAnalytics events include core site events plus owner events: owner_claim_open, owner_claim_start, owner_claim_code_sent, owner_claim_verify_attempt, owner_claim_verified, owner_claim_abandon, owner_dashboard_open, owner_update_submit, owner_update_saved.\n\nWhen asked about city traffic, use query_analytics with event=city_search. When asked about owner funnel, use query_owner_kpis and/or query_analytics to calculate conversion and abandon rates.';
 
 // ===== AGENT TOOL EXECUTOR =====
 async function execTool(name, input) {
@@ -2824,6 +3062,10 @@ async function execTool(name, input) {
         if (input.status && input.status !== 'all') q3 = q3.eq('status', input.status);
         var r3 = await q3;
         return { count: (r3.data||[]).length, sponsorships: r3.data };
+      }
+      case 'query_sponsor_banners': {
+        var r3b = await sponsorBannerAdmin('list_banners', { status: input.status || '', city: input.city || '', limit: input.limit || 200 });
+        return { count: (r3b.banners || []).length, sponsor_banners: r3b.banners || [] };
       }
       case 'query_listings': {
         var r4 = await sb.from('listings').select('*').eq('status', 'active');
@@ -2871,6 +3113,16 @@ async function execTool(name, input) {
         var r8 = await photoAdmin('reject_submission_photo', { submission_photo_id: input.submission_photo_id, reason: input.reason || 'Rejected by agent' });
         loadPhotoQueue();
         return { success: true, result: r8 };
+      }
+      case 'approve_sponsor_banner': {
+        var r9 = await sponsorBannerAdmin('approve_banner', { banner_id: input.banner_id });
+        loadSponsorBanners();
+        return { success: true, result: r9 };
+      }
+      case 'reject_sponsor_banner': {
+        var r10 = await sponsorBannerAdmin('reject_banner', { banner_id: input.banner_id, reason: input.reason || 'Rejected by agent' });
+        loadSponsorBanners();
+        return { success: true, result: r10 };
       }
       default:
         return { error: 'Unknown tool: ' + name };

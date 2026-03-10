@@ -44,6 +44,9 @@
 [functions.api-usage]
   timeout = 30
 
+[functions.sponsor-banners]
+  timeout = 30
+
 [functions.revenue-consensus]
   timeout = 60
 
@@ -144,6 +147,11 @@
 [[redirects]]
   from = "/api/api-usage"
   to = "/.netlify/functions/api-usage"
+  status = 200
+
+[[redirects]]
+  from = "/api/sponsor-banners"
+  to = "/.netlify/functions/sponsor-banners"
   status = 200
 
 [[redirects]]

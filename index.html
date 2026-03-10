@@ -405,6 +405,72 @@
     letter-spacing: 0.3px; z-index: 2;
     box-shadow: 0 2px 8px rgba(245,158,11,0.4);
   }
+  .city-banner-ad {
+    display: none;
+    margin: 0 0 16px;
+    border-radius: 18px;
+    border: 2px solid var(--border);
+    overflow: hidden;
+    background: linear-gradient(135deg, #fffaf0, #fff);
+    box-shadow: var(--shadow);
+  }
+  .city-banner-ad.visible { display: block; }
+  .city-banner-link {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+  }
+  .city-banner-media {
+    width: 100%;
+    height: clamp(120px, 22vw, 200px);
+    object-fit: cover;
+    display: block;
+    background: #f6f1ff;
+  }
+  .city-banner-copy {
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .city-banner-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: .6px;
+    text-transform: uppercase;
+    color: #fff;
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    border-radius: 999px;
+    padding: 4px 10px;
+  }
+  .city-banner-headline {
+    font-family: 'Fredoka One', cursive;
+    color: var(--ink);
+    font-size: 1.02rem;
+  }
+  .city-banner-subhead {
+    color: var(--muted);
+    font-size: .82rem;
+    font-weight: 700;
+  }
+  .city-banner-cta {
+    border-radius: 999px;
+    border: none;
+    background: var(--plum);
+    color: #fff;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 900;
+    font-size: .78rem;
+    padding: 8px 14px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .city-banner-cta:hover { background: #5730A8; }
   .activity-card { position: relative; }
   .share-btn.copied { border-color: #22c55e; color: #22c55e; }
   .card-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
@@ -993,6 +1059,7 @@
         <a href="#" class="see-all" onclick="event.preventDefault(); showAllActivities()">See all →</a>
       </div>
     </div>
+    <div id="sponsoredCityBanner" class="city-banner-ad" aria-live="polite"></div>
     <div class="activities-grid" id="activitiesGrid"></div>
   </section>
 
@@ -1813,6 +1880,77 @@ function renderCardName(name, website) {
     return `<div class="card-name">${safeName}</div>`;
   }
   return `<div class="card-name"><a class="card-name-link" href="${escapeAttr(href)}" target="_blank" rel="noopener noreferrer">${safeName}</a></div>`;
+}
+
+function normalizeCityKey(city) {
+  return String(city || '').split(',')[0].trim().toLowerCase();
+}
+
+function hideSponsoredCityBanner() {
+  const slot = document.getElementById('sponsoredCityBanner');
+  if (!slot) return;
+  slot.classList.remove('visible');
+  slot.innerHTML = '';
+}
+
+function renderSponsoredCityBanner(banner, cityLabel) {
+  const slot = document.getElementById('sponsoredCityBanner');
+  if (!slot) return;
+  if (!banner || !banner.image_url) {
+    hideSponsoredCityBanner();
+    return;
+  }
+
+  const href = normalizeWebsiteUrl(banner.click_url) || '#';
+  const headline = String(banner.headline || (banner.business_name ? `${banner.business_name} is featured in ${cityLabel}` : `Featured sponsor in ${cityLabel}`));
+  const subhead = String(banner.subheadline || 'Trusted local partner');
+  const clickable = href !== '#';
+  try {
+    track('sponsor_banner_view', cityLabel || null, String(banner.banner_id || ''));
+  } catch (_) {}
+
+  var encodedCity = encodeURIComponent(String(cityLabel || ''));
+  var bannerId = String(banner.banner_id || '');
+  slot.innerHTML =
+    `<a class="city-banner-link" ${clickable ? `href="${escapeAttr(href)}" target="_blank" rel="noopener noreferrer" onclick="onSponsorBannerClick('${encodedCity}','${escapeAttr(bannerId)}')"` : 'href="#" onclick="return false;"'}>` +
+      `<img class="city-banner-media" src="${escapeAttr(banner.image_url)}" alt="${escapeAttr(banner.business_name || 'Sponsored banner')}" loading="lazy" referrerpolicy="no-referrer">` +
+      '<div class="city-banner-copy">' +
+        '<div>' +
+          '<div class="city-banner-tag">Sponsored</div>' +
+          `<div class="city-banner-headline">${headline}</div>` +
+          `<div class="city-banner-subhead">${subhead}</div>` +
+        '</div>' +
+        `<button class="city-banner-cta" type="button">${clickable ? 'Learn More' : 'Featured'}</button>` +
+      '</div>' +
+    '</a>';
+  slot.classList.add('visible');
+}
+
+function onSponsorBannerClick(encodedCity, bannerId) {
+  var city = '';
+  try { city = decodeURIComponent(String(encodedCity || '')); } catch (_) {}
+  try { track('sponsor_banner_click', city || null, String(bannerId || '')); } catch (_) {}
+}
+
+async function loadSponsoredCityBanner(cityLabel) {
+  const city = String(cityLabel || '').trim();
+  if (!city) {
+    hideSponsoredCityBanner();
+    return;
+  }
+  try {
+    const res = await fetch('/api/sponsor-banners?action=get_active_banner&city=' + encodeURIComponent(city), {
+      method: 'GET'
+    });
+    const out = await res.json();
+    if (!res.ok || !out || !out.found || !out.banner) {
+      hideSponsoredCityBanner();
+      return;
+    }
+    renderSponsoredCityBanner(out.banner, city);
+  } catch (_) {
+    hideSponsoredCityBanner();
+  }
 }
 
 function openClaimPortal(listingId, name, city) {
@@ -3002,6 +3140,7 @@ async function onCitySelected(city) {
     document.getElementById('loaderArea').classList.remove('visible');
     document.getElementById('topPicksCity').textContent = city;
     renderCachedListings(_memCache[cityName].rows);
+    loadSponsoredCityBanner(city);
     document.getElementById('activities').style.display = 'block';
     track('city_search', city);
     _sessionCities.push(city);
@@ -3044,6 +3183,7 @@ async function onCitySelected(city) {
       _memCache[cityName] = { rows: sortedCached, ts: Date.now() };
 
       renderCachedListings(sortedCached);
+      loadSponsoredCityBanner(city);
       document.getElementById('loaderArea').classList.remove('visible');
       document.getElementById('activities').style.display = 'block';
       track('cache_hit', city);
@@ -3068,11 +3208,13 @@ async function onCitySelected(city) {
     track('cache_miss', city);
     document.getElementById('loaderMsg').textContent = `Finding the best spots in ${city}…`;
     await loadTopPicksForCity(city);
+    loadSponsoredCityBanner(city);
 
   } catch(err) {
     console.error('City load failed:', err);
     document.getElementById('loaderArea').classList.remove('visible');
     document.getElementById('splashState').style.display = 'block';
+    hideSponsoredCityBanner();
   }
 }
 
@@ -3098,6 +3240,7 @@ function onStateSelected(state) {
     cityRow.style.opacity = '.45';
     cityRow.style.pointerEvents = 'none';
     cityEl.disabled = true;
+    hideSponsoredCityBanner();
     return;
   }
 
