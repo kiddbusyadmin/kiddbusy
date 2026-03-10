@@ -107,12 +107,20 @@ function normalizeActivities(items) {
 }
 
 function normalizeEvents(items) {
+  const monthMap = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
   const out = [];
   const seen = new Set();
   for (let i = 0; i < items.length; i += 1) {
     const row = items[i] || {};
-    const month = safeString(row.month, 6).toUpperCase();
-    const day = safeString(row.day, 4);
+    let month = safeString(row.month, 6).toUpperCase();
+    let day = safeString(row.day, 4);
+    if (/^\d{1,2}$/.test(month)) {
+      const monthNum = Number(month);
+      if (monthNum >= 1 && monthNum <= 12) month = monthMap[monthNum - 1];
+    }
+    if (/^\d{1,2}$/.test(day)) {
+      day = String(Number(day)).padStart(2, '0');
+    }
     const name = safeString(row.name, 140);
     const detail = safeString(row.detail, 420);
     const sourceUrl = safeString(row.source_url, 500);
