@@ -109,6 +109,32 @@ function profilePrompts(brandName) {
   ];
 }
 
+function heroBackgroundPrompts(brandName) {
+  const base = `Website hero background art for "${brandName}" behind a search box. Must keep center area visually calm for text legibility. No text, no logos, no letters, no watermark, no faces. Family-friendly, modern, playful, premium.`;
+  return [
+    {
+      label: 'Playful Paper Cut Shapes',
+      prompt: `${base} Layered organic paper-cut shapes with teal, sky blue, coral, warm yellow; subtle depth and soft shadows; clean negative space in center.`
+    },
+    {
+      label: 'Balloon Sky Gradient',
+      prompt: `${base} Bright sky gradient with abstract balloon/path motifs around edges, center clean and lightly textured, energetic but not busy.`
+    },
+    {
+      label: 'City Park Abstract',
+      prompt: `${base} Abstract city-park scene with stylized trees and pathways, edge-focused detail, center soft glow for search box readability.`
+    },
+    {
+      label: 'Confetti Wave Motion',
+      prompt: `${base} Dynamic curved ribbons and confetti dots sweeping from corners, high-contrast color pops, center kept open and calm.`
+    },
+    {
+      label: 'Sunburst Discovery',
+      prompt: `${base} Soft radial sunburst with geometric exploration icons abstracted into shapes, cheerful palette, center reserved and uncluttered.`
+    }
+  ];
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return json(405, { error: 'Method not allowed' });
@@ -128,17 +154,28 @@ exports.handler = async (event) => {
   }
 
   const action = safeText(body.action, 80) || 'generate_ig_profile_options';
-  if (action !== 'generate_ig_profile_options' && action !== 'generate_ig_profile_option') {
+  if (
+    action !== 'generate_ig_profile_options' &&
+    action !== 'generate_ig_profile_option' &&
+    action !== 'generate_search_background_options' &&
+    action !== 'generate_search_background_option'
+  ) {
     return json(400, { error: 'Unsupported action' });
   }
   const brandName = safeText(body.brand_name, 80) || 'KiddBusy';
-  const prompts = profilePrompts(brandName);
+  const isHeroMode = action === 'generate_search_background_options' || action === 'generate_search_background_option';
+  const prompts = isHeroMode ? heroBackgroundPrompts(brandName) : profilePrompts(brandName);
   const stamp = Date.now();
   const generateOne = async (idx) => {
     const optionIndex = Math.max(1, Math.min(prompts.length, Number(idx) || 1));
     const item = prompts[optionIndex - 1];
-    const img = await callOpenAiImage(item.prompt, { size: '1024x1024', quality: 'high', model: OPENAI_IMAGE_MODEL });
-    const path = `branding/instagram/${cleanSegment(brandName)}/${stamp}-${optionIndex}.png`;
+    const img = await callOpenAiImage(item.prompt, {
+      size: isHeroMode ? '1536x1024' : '1024x1024',
+      quality: 'high',
+      model: OPENAI_IMAGE_MODEL
+    });
+    const folder = isHeroMode ? 'search-backgrounds' : 'instagram';
+    const path = `branding/${folder}/${cleanSegment(brandName)}/${stamp}-${optionIndex}.png`;
     const upload = await uploadBinaryToStorage(path, img.bytes, img.mimeType);
     if (!upload.response.ok) {
       throw new Error('Storage upload failed');
@@ -151,12 +188,13 @@ exports.handler = async (event) => {
     };
   };
 
-  if (action === 'generate_ig_profile_option') {
+  if (action === 'generate_ig_profile_option' || action === 'generate_search_background_option') {
     try {
       const one = await generateOne(body.option || 1);
       return json(200, {
         success: true,
         brand_name: brandName,
+        mode: isHeroMode ? 'search_background' : 'instagram_profile',
         count: 1,
         model_used: OPENAI_IMAGE_MODEL,
         options: [one]
@@ -171,5 +209,12 @@ exports.handler = async (event) => {
   for (let i = 1; i <= prompts.length; i += 1) {
     out.push(await generateOne(i));
   }
-  return json(200, { success: true, brand_name: brandName, count: out.length, model_used: OPENAI_IMAGE_MODEL, options: out });
+  return json(200, {
+    success: true,
+    brand_name: brandName,
+    mode: isHeroMode ? 'search_background' : 'instagram_profile',
+    count: out.length,
+    model_used: OPENAI_IMAGE_MODEL,
+    options: out
+  });
 };
