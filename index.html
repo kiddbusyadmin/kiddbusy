@@ -2511,11 +2511,8 @@ function renderEvents(events) {
         <div class="event-name">${esc(e.name)}</div>
         <div class="event-detail">📌 ${esc(e.detail || '')}</div>
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-          ${normUrl(e.source_url || e.url || e.link)
-            ? `<a href="${esc(normUrl(e.source_url || e.url || e.link))}" target="_blank" rel="noopener noreferrer" onclick="track('event_source_click', document.getElementById('eventsCity').textContent, '${esc(e.name)}')" style="display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--ink);font-weight:700;font-size:.75rem;text-decoration:none">🔗 Event Link</a>`
-            : ''
-          }
-          <button class="share-btn" style="padding:6px 10px;font-size:.75rem;border-radius:8px" onclick="shareEvent('${esc(e.name)}','${esc(e.detail || '')}','${esc(normUrl(e.source_url || e.url || e.link))}')">📤 Share</button>
+          <a href="${esc(normUrl(e.source_url || e.url || e.link) || buildEventFallbackUrl(e.name, document.getElementById('eventsCity') ? document.getElementById('eventsCity').textContent : ''))}" target="_blank" rel="noopener noreferrer" onclick="track('event_source_click', document.getElementById('eventsCity').textContent, '${esc(e.name)}')" style="display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--ink);font-weight:700;font-size:.75rem;text-decoration:none">🔗 Event Link</a>
+          <button class="share-btn" style="padding:6px 10px;font-size:.75rem;border-radius:8px" onclick="shareEvent('${esc(e.name)}','${esc(e.detail || '')}','${esc(normUrl(e.source_url || e.url || e.link) || buildEventFallbackUrl(e.name, document.getElementById('eventsCity') ? document.getElementById('eventsCity').textContent : ''))}')">📤 Share</button>
         </div>
       </div>
       <span class="${(e.free || e.is_free) ? 'event-free' : 'event-paid'}">${(e.free || e.is_free) ? 'FREE' : 'Paid'}</span>
@@ -2539,9 +2536,15 @@ function normalizeEventUrl(u) {
   }
 }
 
+function buildEventFallbackUrl(name, city) {
+  const q = [String(name || '').trim(), String(city || '').trim(), 'event'].filter(Boolean).join(' ');
+  if (!q) return '';
+  return 'https://www.google.com/search?q=' + encodeURIComponent(q);
+}
+
 async function shareEvent(name, detail, url) {
   const city = document.getElementById('eventsCity') ? document.getElementById('eventsCity').textContent : null;
-  const cleanUrl = normalizeEventUrl(url) || normalizeEventUrl(extractFirstUrl(detail));
+  const cleanUrl = normalizeEventUrl(url) || normalizeEventUrl(extractFirstUrl(detail)) || buildEventFallbackUrl(name, city);
   const text = cleanUrl ? `${name}\n${detail}\n${cleanUrl}` : `${name}\n${detail}`;
   try {
     if (navigator.share) {
@@ -2633,7 +2636,7 @@ async function loadEventsForCity(cityLabel) {
     const match = clean.match(/\[[\s\S]*\]/);
     if (!match) throw new Error('No JSON array in response');
     const events = JSON.parse(match[0]).map(e => {
-      const sourceUrl = normalizeEventUrl(e.source_url || e.url || e.link || extractFirstUrl(e.detail));
+      const sourceUrl = normalizeEventUrl(e.source_url || e.url || e.link || extractFirstUrl(e.detail)) || buildEventFallbackUrl(e.name, cityLabel);
       return {
         month: e.month,
         day: e.day,
