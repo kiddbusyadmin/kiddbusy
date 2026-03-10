@@ -2447,7 +2447,6 @@ async function loadTopPicksForCity(cityLabel, source = 'ai_generated') {
     // Reveal activities section, hide loader
     document.getElementById('loaderArea').classList.remove('visible');
     document.getElementById('activities').style.display = 'block';
-    document.getElementById('activities').scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   } catch (err) {
     console.error('Top Picks failed:', err);
@@ -2958,7 +2957,6 @@ async function onCitySelected(city) {
     document.getElementById('topPicksCity').textContent = city;
     renderCachedListings(_memCache[cityName].rows);
     document.getElementById('activities').style.display = 'block';
-    document.getElementById('activities').scrollIntoView({ behavior: 'smooth', block: 'start' });
     track('city_search', city);
     _sessionCities.push(city);
     if (_sessionCities.length === 2) track('multi_city_session', city, _sessionCities[0]);
@@ -3002,7 +3000,6 @@ async function onCitySelected(city) {
       renderCachedListings(sortedCached);
       document.getElementById('loaderArea').classList.remove('visible');
       document.getElementById('activities').style.display = 'block';
-      document.getElementById('activities').scrollIntoView({ behavior: 'smooth', block: 'start' });
       track('cache_hit', city);
 
       // ── BACKGROUND REFRESH if stale ──
