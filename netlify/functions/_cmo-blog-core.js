@@ -101,6 +101,71 @@ async function getCities() {
   return cities.length ? cities : ['Houston', 'Dallas', 'Austin', 'San Antonio', 'Phoenix'];
 }
 
+async function getCityListingContext(city, limit) {
+  var safeCity = encodeURIComponent(String(city || '').trim());
+  if (!safeCity) return [];
+  var maxRows = clampNumber(limit, 3, 20, 10);
+  var q = 'listings?select=name,category,address,website&city=ilike.*' + safeCity + '*&status=eq.active&order=rating.desc.nullslast&limit=' + String(maxRows);
+  var result = await sbFetch(q);
+  if (!result.response.ok || !Array.isArray(result.data)) return [];
+  return result.data;
+}
+
+function pickTargetCity(cities, preferredCity) {
+  if (preferredCity) {
+    var wanted = String(preferredCity).trim().toLowerCase();
+    for (var i = 0; i < cities.length; i += 1) {
+      if (String(cities[i]).trim().toLowerCase() === wanted) return cities[i];
+    }
+  }
+  if (!cities.length) return 'Houston';
+  return cities[Math.floor(Math.random() * cities.length)];
+}
+
+function buildCityContextBlock(city, rows) {
+  if (!rows || !rows.length) return 'No local listing context available in DB for this city.';
+  var lines = [];
+  lines.push('Known local listings for ' + city + ' (use only if relevant and accurate):');
+  for (var i = 0; i < rows.length; i += 1) {
+    var r = rows[i] || {};
+    lines.push('- ' + String(r.name || 'Unknown Place') + ' | ' + String(r.category || 'activity') + ' | ' + String(r.address || 'no address'));
+  }
+  return lines.join('\n');
+}
+
+function countNameMentions(text, names) {
+  var hay = String(text || '').toLowerCase();
+  if (!hay) return 0;
+  var hits = 0;
+  for (var i = 0; i < names.length; i += 1) {
+    var n = String(names[i] || '').trim().toLowerCase();
+    if (!n || n.length < 4) continue;
+    if (hay.indexOf(n) >= 0) hits += 1;
+  }
+  return hits;
+}
+
+function hasStrongLocalSignals(post, targetCity, localListingNames) {
+  var city = String(targetCity || '').trim().toLowerCase();
+  var body = String((post && post.body_html) || '').toLowerCase();
+  var title = String((post && post.title) || '').toLowerCase();
+  var excerpt = String((post && post.excerpt) || '').toLowerCase();
+  var combined = title + ' ' + excerpt + ' ' + body;
+
+  if (!city || combined.indexOf(city) < 0) return false;
+
+  var mentions = countNameMentions(combined, localListingNames || []);
+  if (localListingNames && localListingNames.length) return mentions >= 2;
+
+  // Fallback heuristic when no local listing names are available.
+  var anchors = ['museum', 'park', 'library', 'zoo', 'children', 'downtown', 'neighborhood'];
+  var anchorHits = 0;
+  for (var i = 0; i < anchors.length; i += 1) {
+    if (combined.indexOf(anchors[i]) >= 0) anchorHits += 1;
+  }
+  return anchorHits >= 3;
+}
+
 async function getIdentitySets() {
   var result = await sbFetch('blog_posts?select=title,slug&order=created_at.desc&limit=5000');
   var titles = new Set();
@@ -169,27 +234,37 @@ function normalizePost(rawPost, cities) {
   };
 }
 
-async function generateBatch(cities, existingTitles, batchSize) {
+async function generateBatch(cities, existingTitles, batchSize, preferredCity) {
+  var targetCity = pickTargetCity(cities, preferredCity);
+  var localRows = await getCityListingContext(targetCity, 12);
+  var localNames = localRows.map(function (r) { return String((r && r.name) || '').trim(); }).filter(Boolean);
+  var cityContext = buildCityContextBlock(targetCity, localRows);
+
   var system = [
     'You are the KiddBusy CMO content agent.',
     'Goal: organic SEO traffic from parents searching for weekend activities.',
     'Return strict JSON only as an array with exactly the requested number of post objects.',
     'No markdown fences. No commentary.',
     'Tone: playful, practical, parent-first.',
-    'Each object keys: title, excerpt, seo_description, city, tags, read_minutes, body_html.'
+    'Each object keys: title, excerpt, seo_description, city, tags, read_minutes, body_html.',
+    'Content must be locally grounded with real place names and specifics.'
   ].join(' ');
 
   var avoidTitles = Array.from(existingTitles).slice(-300).join(' | ') || 'none';
   var prompt = [
     'Generate exactly ' + String(batchSize) + ' unique blog posts for KiddBusy as a JSON array.',
-    'Candidate cities: ' + cities.join(', ') + '.',
+    'Primary city for all posts in this batch: ' + targetCity + '.',
+    'Use web search for current local facts before writing.',
+    cityContext,
     'Hard rules:',
     '- 220-380 words per post in body_html.',
     '- body_html may only use <p>, <h2>, <ul>, <li>, <strong>.',
     '- Title under 70 chars; excerpt 120-180 chars; seo_description 120-155 chars.',
     '- tags must be 4-6 items.',
     '- read_minutes integer 3-10.',
-    '- city must be one of provided cities or null.',
+    '- city must be exactly "' + targetCity + '" (not null).',
+    '- Include at least 3 specific local places by name in each post.',
+    '- Include at least 1 very current time anchor in each post (this weekend, this month, or date range).',
     '- All posts must be materially different.',
     '- Avoid these existing titles: ' + avoidTitles
   ].join('\n');
@@ -203,8 +278,9 @@ async function generateBatch(cities, existingTitles, batchSize) {
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 1600,
+      max_tokens: 2600,
       temperature: 0.7,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
       system: system,
       messages: [{ role: 'user', content: prompt }]
     })
@@ -218,6 +294,8 @@ async function generateBatch(cities, existingTitles, batchSize) {
   for (var i = 0; i < arr.length; i += 1) {
     var n = normalizePost(arr[i], cities);
     if (!n) continue;
+    if (n.city !== targetCity) continue;
+    if (!hasStrongLocalSignals(n, targetCity, localNames)) continue;
     out.push(n);
     if (out.length >= batchSize) break;
   }
@@ -336,6 +414,7 @@ async function runCmoBlog(event) {
       5,
       1
     );
+    var targetCity = Object.prototype.hasOwnProperty.call(body, 'target_city') ? String(body.target_city || '').trim() : '';
 
     var cities = await getCities();
     var identity = await getIdentitySets();
@@ -352,7 +431,7 @@ async function runCmoBlog(event) {
       var batchSize = remaining > 5 ? 5 : remaining;
       var batch = [];
       try {
-        batch = await generateBatch(cities, identity.titles, batchSize);
+        batch = await generateBatch(cities, identity.titles, batchSize, targetCity);
       } catch (e) {
         generationErrors.push('generate: ' + String(e.message || e));
         break;
@@ -394,6 +473,7 @@ async function runCmoBlog(event) {
         distribution_enabled: distributionEnabled,
         publish_rate_per_day: publishRate,
         max_generate_per_run: maxGeneratePerRun,
+        target_city: targetCity || null,
         generated_count: generated.length,
         published_count: published.length,
         queue_depth: depth,
@@ -407,6 +487,7 @@ async function runCmoBlog(event) {
       distribution_enabled: distributionEnabled,
       publish_rate_per_day: publishRate,
       max_generate_per_run: maxGeneratePerRun,
+      target_city: targetCity || null,
       generated_count: generated.length,
       published_count: published.length,
       queue_depth: depth,
