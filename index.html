@@ -188,6 +188,50 @@
     background: #e04449;
     transform: translateY(-2px);
   }
+  .geo-banner {
+    margin-top: 10px;
+    background: rgba(255,255,255,0.92);
+    border: 1px solid rgba(255,255,255,0.55);
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.10);
+    padding: 8px 10px;
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .geo-banner.visible { display: flex; }
+  .geo-banner-text {
+    color: #5f4e8f;
+    font-size: .78rem;
+    font-weight: 700;
+    line-height: 1.25;
+  }
+  .geo-banner-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .geo-banner-change {
+    border: 1px solid #d8c9f4;
+    background: #fff;
+    color: #6c3fc5;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: .72rem;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  .geo-banner-close {
+    border: none;
+    background: transparent;
+    color: #8f80b4;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px 4px;
+  }
   .hero-emojis {
     position: absolute; font-size: 2.5rem; animation: float 4s ease-in-out infinite;
     pointer-events: none;
@@ -875,6 +919,13 @@
         <span class="pick-arrow">▾</span>
       </div>
       <button class="find-btn" id="findBtn" disabled onclick="onFindClicked()">Find Activities 🎉</button>
+      <div class="geo-banner" id="geoBanner" aria-live="polite">
+        <div class="geo-banner-text" id="geoBannerText"></div>
+        <div class="geo-banner-actions">
+          <button class="geo-banner-change" onclick="changeGeoDetectedCity()">Change</button>
+          <button class="geo-banner-close" aria-label="Dismiss" onclick="dismissGeoBanner()">×</button>
+        </div>
+      </div>
     </div>
   </div>
 </section>
@@ -2922,6 +2973,33 @@ function normalizeCityLabel(v) {
     .trim();
 }
 
+function showGeoBanner(city, state) {
+  const banner = document.getElementById('geoBanner');
+  const text = document.getElementById('geoBannerText');
+  if (!banner || !text) return;
+  if (localStorage.getItem('kb_geo_banner_dismissed') === '1') return;
+  const abbr = STATE_ABBR[state] || state;
+  text.textContent = `Showing results for ${city}, ${abbr} based on your location.`;
+  banner.classList.add('visible');
+}
+
+function dismissGeoBanner() {
+  const banner = document.getElementById('geoBanner');
+  if (banner) banner.classList.remove('visible');
+  localStorage.setItem('kb_geo_banner_dismissed', '1');
+}
+
+function changeGeoDetectedCity() {
+  const banner = document.getElementById('geoBanner');
+  if (banner) banner.classList.remove('visible');
+  const stateEl = document.getElementById('stateSelect');
+  if (stateEl) {
+    stateEl.focus();
+    stateEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  track('geo_city_banner_change_click');
+}
+
 async function autoDetectAndApplyCity() {
   try {
     const stateEl = document.getElementById('stateSelect');
@@ -2950,6 +3028,7 @@ async function autoDetectAndApplyCity() {
     cityEl.value = matchedCity;
     findBtn.disabled = false;
     findBtn.classList.add('active');
+    showGeoBanner(matchedCity, detectedState);
 
     // Auto-run only when we have an exact match in our supported city list.
     onFindClicked();
