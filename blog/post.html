@@ -259,7 +259,8 @@ async function load() {
     var desc = document.querySelector('meta[name="description"]');
     if (desc) desc.setAttribute('content', post.seo_description || post.excerpt || 'KiddBusy blog post');
 
-    document.getElementById('meta').textContent = formatDate(post.published_at) + (post.city ? (' - ' + post.city) : '') + ' - ' + (Number(post.read_minutes) || 4) + ' min read';
+    var cityLabel = String(post.city_display || post.city || '').trim();
+    document.getElementById('meta').textContent = formatDate(post.published_at) + (cityLabel ? (' - ' + cityLabel) : '') + ' - ' + (Number(post.read_minutes) || 4) + ' min read';
     document.getElementById('title').textContent = post.title || 'KiddBusy Blog';
     document.getElementById('excerpt').textContent = post.excerpt || '';
     var contentEl = document.getElementById('content');

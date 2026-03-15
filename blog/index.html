@@ -136,7 +136,8 @@ function render(posts) {
   grid.style.display = 'grid';
   grid.innerHTML = posts.map(function (p) {
     var tags = Array.isArray(p.tags) ? p.tags.slice(0, 4) : [];
-    var metaCity = p.city ? (' - ' + esc(p.city)) : '';
+    var cityLabel = String(p.city_display || p.city || '').trim();
+    var metaCity = cityLabel ? (' - ' + esc(cityLabel)) : '';
     return [
       '<article class="card">',
       '  <div class="meta">' + formatDate(p.published_at) + metaCity + ' - ' + (Number(p.read_minutes) || 4) + ' min read</div>',
