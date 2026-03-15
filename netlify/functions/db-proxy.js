@@ -4,6 +4,7 @@
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const { triggerSponsorshipPaymentRequestEmail, verifySponsorshipOwnerClaim } = require('./_sponsorship-payment-email');
+const { enrollClaimNurture } = require('./_sponsorship-claim-nurture');
 const { buildFinanceSnapshot, upsertFinanceSnapshot } = require('./_accounting-core');
 
 const ALLOWED_TABLES = {
@@ -476,6 +477,7 @@ exports.handler = async (event) => {
   try {
     let sponsorshipBefore = null;
     let sponsorshipLinking = null;
+    let claimNurture = null;
     if (table === 'sponsorships' && id) {
       const before = await sbRequest(`sponsorships?id=eq.${encodeURIComponent(String(id))}&select=*&limit=1`);
       if (before.response.ok && Array.isArray(before.data) && before.data.length) {
@@ -544,11 +546,21 @@ exports.handler = async (event) => {
           issueDetail: 'Sponsorship approval blocked: business owner must claim and verify listing before payment.',
           payload: { owner_email: sponsorshipBefore.email || null }
         });
+        try {
+          claimNurture = await enrollClaimNurture({
+            sponsorship: prePatchSponsorship,
+            reason: claimCheck.reason || 'owner_claim_required',
+            source: 'db_proxy_status_update_blocked'
+          });
+        } catch (enrollErr) {
+          claimNurture = { enrolled: false, reason: 'enroll_failed', error: enrollErr.message || 'unknown_error' };
+        }
         return json(409, {
           error: 'Owner claim required before sponsorship payment',
           reason: claimCheck.reason || 'owner_claim_required',
           sponsorship_id: sponsorshipBefore.id,
-          listing_id: prePatchSponsorship.listing_id || null
+          listing_id: prePatchSponsorship.listing_id || null,
+          nurture: claimNurture
         });
       }
     }

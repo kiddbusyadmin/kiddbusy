@@ -88,6 +88,11 @@
   schedule = "30 14 * * *"
   timeout = 60
 
+# Sponsorship claim nurture — runs hourly to follow up blocked sponsorships
+[functions.sponsorship-claim-nurture]
+  schedule = "15 * * * *"
+  timeout = 30
+
 [[redirects]]
   from = "/api/cmo-config"
   to = "/.netlify/functions/cmo-config"
@@ -176,6 +181,11 @@
 [[redirects]]
   from = "/api/revenue-consensus"
   to = "/.netlify/functions/revenue-consensus"
+  status = 200
+
+[[redirects]]
+  from = "/api/sponsorship-claim-nurture"
+  to = "/.netlify/functions/sponsorship-claim-nurture"
   status = 200
 
 [[redirects]]
