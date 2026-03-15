@@ -1782,6 +1782,7 @@ async function loadReviewsFromDB(listingId) {
     .select('*')
     .eq('listing_id', listingId)
     .eq('status', 'approved')
+    .neq('source', 'ai_seed')
     .order('created_at', { ascending: false });
   if (error) { console.warn('Load reviews error:', error); return []; }
   return (data || []).map(r => ({
@@ -1819,6 +1820,12 @@ function sortListingsForDisplay(rows) {
     const aSponsored = a && a.is_sponsored ? 1 : 0;
     const bSponsored = b && b.is_sponsored ? 1 : 0;
     if (bSponsored !== aSponsored) return bSponsored - aSponsored;
+    const aRealUserReviews = Number(a && a.user_review_count ? a.user_review_count : 0);
+    const bRealUserReviews = Number(b && b.user_review_count ? b.user_review_count : 0);
+    if (bRealUserReviews !== aRealUserReviews) return bRealUserReviews - aRealUserReviews;
+    const aReviewCount = Number(a && (a.review_count || a.reviewCount) ? (a.review_count || a.reviewCount) : 0);
+    const bReviewCount = Number(b && (b.review_count || b.reviewCount) ? (b.review_count || b.reviewCount) : 0);
+    if (bReviewCount !== aReviewCount) return bReviewCount - aReviewCount;
     const aRating = Number(a && a.rating ? a.rating : 0);
     const bRating = Number(b && b.rating ? b.rating : 0);
     if (bRating !== aRating) return bRating - aRating;
@@ -1826,6 +1833,69 @@ function sortListingsForDisplay(rows) {
     const bName = String((b && b.name) || '');
     return aName.localeCompare(bName);
   });
+}
+
+async function hydrateListingsWithReviewStats(rows) {
+  const base = Array.isArray(rows) ? rows.slice() : [];
+  if (!base.length) return base;
+  const ids = Array.from(new Set(
+    base
+      .map(r => Number((r && (r.listing_id || r.id)) || 0))
+      .filter(n => Number.isFinite(n) && n > 0)
+  ));
+  if (!ids.length) return base;
+
+  const { data, error } = await sb
+    .from('reviews')
+    .select('listing_id,rating,source,status')
+    .in('listing_id', ids)
+    .eq('status', 'approved');
+  if (error || !Array.isArray(data)) return base;
+
+  const byId = {};
+  for (const row of data) {
+    const id = Number(row && row.listing_id);
+    if (!Number.isFinite(id) || id <= 0) continue;
+    if (!byId[id]) byId[id] = { non_ai_count: 0, non_ai_sum: 0, user_count: 0 };
+    const src = String((row && row.source) || '').toLowerCase();
+    const rating = Number(row && row.rating);
+    if (src !== 'ai_seed') {
+      byId[id].non_ai_count += 1;
+      if (Number.isFinite(rating)) byId[id].non_ai_sum += rating;
+    }
+    if (src === 'user') byId[id].user_count += 1;
+  }
+
+  return base.map((r) => {
+    const id = Number((r && (r.listing_id || r.id)) || 0);
+    const stats = byId[id] || { non_ai_count: 0, non_ai_sum: 0, user_count: 0 };
+    const displayCount = Number(stats.non_ai_count || 0);
+    const displayRating = displayCount > 0 ? (stats.non_ai_sum / displayCount) : Number(r && r.rating ? r.rating : 0);
+    return Object.assign({}, r, {
+      rating: Number.isFinite(displayRating) ? Math.round(displayRating * 10) / 10 : (Number(r && r.rating) || 0),
+      review_count: displayCount,
+      reviewCount: displayCount,
+      user_review_count: Number(stats.user_count || 0)
+    });
+  });
+}
+
+async function recomputeListingReviewSnapshot(listingId) {
+  const id = Number(listingId || 0);
+  if (!Number.isFinite(id) || id <= 0) return;
+  const { data, error } = await sb
+    .from('reviews')
+    .select('rating,source,status')
+    .eq('listing_id', id)
+    .eq('status', 'approved');
+  if (error || !Array.isArray(data)) return;
+  const nonAi = data.filter((r) => String((r && r.source) || '').toLowerCase() !== 'ai_seed');
+  const count = nonAi.length;
+  const avg = count ? (nonAi.reduce((sum, r) => sum + (Number(r && r.rating) || 0), 0) / count) : null;
+  await sb.from('listings').update({
+    review_count: count,
+    rating: count ? Math.round(avg * 10) / 10 : null
+  }).eq('listing_id', id);
 }
 
 function getCardPhotoUrl(a) {
@@ -2222,15 +2292,18 @@ async function submitReview() {
       review_text: text || null,
       age_range: ageRange,
       reviewer_email: email || null,
-      status: 'pending'
+      status: 'approved',
+      source: 'user'
     });
     if (error) console.warn('Review save error:', error);
+    await recomputeListingReviewSnapshot(listingId);
   }
 
   // Update rating display on the card in the grid
-  const a = currentListings.find(x => x.id === currentModalId) || sampleActivities.find(x => x.id === currentModalId);
+  const a = currentListings.find(x => x.id === currentModalId || x.listing_id === currentModalId) || sampleActivities.find(x => x.id === currentModalId);
   if (a) {
-    const allR = (reviews[currentModalId] || []).concat(seedReviews[currentModalId] || []);
+    const dbR = await loadReviewsFromDB(currentModalId);
+    const allR = dbR.concat(reviews[currentModalId] || []);
     a.rating = (allR.reduce((s,r)=>s+r.rating,0)/allR.length).toFixed(1);
     a.reviewCount = allR.length;
     a.review_count = allR.length; // also update DB field name
@@ -2622,6 +2695,7 @@ async function loadTopPicksForCity(cityLabel, source = 'ai_generated') {
         };
       });
     }
+    enriched = await hydrateListingsWithReviewStats(enriched);
     enriched = sortListingsForDisplay(enriched);
 
     // Store as current listings for filter operations
@@ -3251,7 +3325,8 @@ async function onCitySelected(city) {
     console.log(`[KiddBusy] Cache check for "${cityName}": ${cached?.length ?? 0} rows found`);
 
     if (cached && cached.length >= 5) {
-      const sortedCached = sortListingsForDisplay(cached);
+      const hydratedCached = await hydrateListingsWithReviewStats(cached);
+      const sortedCached = sortListingsForDisplay(hydratedCached);
       // Store in memory for instant repeat access
       _memCache[cityName] = { rows: sortedCached, ts: Date.now() };
 
