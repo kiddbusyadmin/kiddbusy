@@ -239,7 +239,7 @@ exports.handler = async (event) => {
 
   if (action === 'query_sponsorship_lifecycle') {
     const safeLimit = Math.min(Math.max(Number(limit) || 300, 1), 1000);
-    const filters = ['select=*', 'order=updated_at.desc.nullslast,created_at.desc', `limit=${safeLimit}`];
+    const filters = ['select=*', 'order=created_at.desc', `limit=${safeLimit}`];
     const queryUrl = `${SUPABASE_URL}/rest/v1/sponsorships?${filters.join('&')}`;
     try {
       const response = await fetch(queryUrl, {
