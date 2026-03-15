@@ -735,10 +735,11 @@ async function runCmoBlog(event) {
     var forcePublishGenerated = Object.prototype.hasOwnProperty.call(body, 'force_publish_generated')
       ? !!body.force_publish_generated
       : !!repairAny;
+    var hasExplicitPublishRate = Object.prototype.hasOwnProperty.call(body, 'publish_rate');
     var publishRate = clampNumber(
-      Object.prototype.hasOwnProperty.call(body, 'publish_rate') ? body.publish_rate : settings.blog_publish_rate_per_day,
+      hasExplicitPublishRate ? body.publish_rate : settings.blog_publish_rate_per_day,
       1,
-      20,
+      25,
       1
     );
     var hasExplicitMaxGenerate = Object.prototype.hasOwnProperty.call(body, 'max_generate_per_run');
@@ -821,6 +822,7 @@ async function runCmoBlog(event) {
         queueTarget = top25Plan.target_count;
         plannedCityRotation = top25Plan.missing_cities.slice();
         already = top25Plan.already_count;
+        if (isCron && !hasExplicitPublishRate) publishRate = top25Plan.target_count;
       }
     }
     var remaining = queueTarget - already;
