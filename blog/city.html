@@ -130,6 +130,14 @@ function esc(s) {
   });
 }
 
+function normalizeExternalUrl(v) {
+  var raw = String(v || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(raw)) return 'https://' + raw;
+  return '';
+}
+
 function params() {
   var qp = new URLSearchParams(window.location.search);
   var city = qp.get('city');
@@ -169,7 +177,7 @@ function renderHub(hub) {
 
   document.getElementById('listingsSection').style.display = 'block';
   document.getElementById('listings').innerHTML = listings.length ? listings.map(function(r){
-    var website = String(r.website || '').trim();
+    var website = normalizeExternalUrl(r.website);
     var title = website
       ? '<a href="' + esc(website) + '" target="_blank" rel="noopener noreferrer">' + esc(r.name || '') + '</a>'
       : esc(r.name || '');

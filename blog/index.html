@@ -65,6 +65,15 @@ nav {
   color: #2f1f53;
 }
 .city-chip:hover { border-color: #d2c0ff; color: var(--plum); }
+.city-chip-listings { margin-top: 7px; display: grid; gap: 4px; }
+.city-chip-listings a {
+  display: block;
+  font-size: .73rem;
+  color: #4f3e75;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.city-chip-listings a:hover { color: #2f1f53; }
 .main-col { min-width: 0; }
 .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .card {
@@ -151,6 +160,14 @@ function esc(s) {
   });
 }
 
+function normalizeExternalUrl(v) {
+  var raw = String(v || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(raw)) return 'https://' + raw;
+  return '';
+}
+
 function formatDate(value) {
   try {
     return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -211,11 +228,20 @@ function renderHubs(hubs, refreshedDate) {
   hubsList.innerHTML = rows.map(function(h) {
     var display = String(h.city_display || h.city || '').trim();
     var url = String(h.url || ('/blog/city/' + encodeURIComponent(h.city_slug || ''))).trim();
+    var listingLinks = (Array.isArray(h.top_listings) ? h.top_listings : [])
+      .map(function(r) {
+        var site = normalizeExternalUrl(r && r.website);
+        if (!site) return '';
+        return '<a href=\"' + esc(site) + '\" target=\"_blank\" rel=\"noopener noreferrer\">' + esc((r && r.name) || '') + '</a>';
+      })
+      .filter(Boolean)
+      .slice(0, 3)
+      .join('');
     return [
       '<a class=\"city-chip\" href=\"' + esc(url) + '\">',
       '  <div>' + esc(display) + '</div>',
       '</a>'
-    ].join('');
+    ].join('') + (listingLinks ? '<div class=\"city-chip-listings\">' + listingLinks + '</div>' : '');
   }).join('');
   Array.from(hubsList.querySelectorAll('a.city-chip')).forEach(function(a) {
     a.addEventListener('click', function() {
