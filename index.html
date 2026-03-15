@@ -1729,20 +1729,77 @@ async function upsertListing(activity, city, source = 'ai_generated') {
   const stateName = cityParts[1]?.trim() || '';
   const now = new Date().toISOString();
 
+  function normalizeText(v) {
+    return String(v || '')
+      .toLowerCase()
+      .replace(/&/g, ' and ')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function normalizeAddress(v) {
+    return normalizeText(v)
+      .replace(/\bstreet\b/g, 'st')
+      .replace(/\bavenue\b/g, 'ave')
+      .replace(/\broad\b/g, 'rd')
+      .replace(/\bdrive\b/g, 'dr')
+      .replace(/\bboulevard\b/g, 'blvd')
+      .replace(/\bparkway\b/g, 'pkwy');
+  }
+
+  function canonicalName(v) {
+    return normalizeText(v)
+      .replace(/\b(the|inc|llc|co|company)\b/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function isNearDuplicate(a, b) {
+    const aCanon = canonicalName(a && a.name);
+    const bCanon = canonicalName(b && b.name);
+    if (!aCanon || !bCanon) return false;
+    if (aCanon === bCanon) return true;
+    if (aCanon.includes(bCanon) || bCanon.includes(aCanon)) return true;
+    const aAddr = normalizeAddress(a && a.address);
+    const bAddr = normalizeAddress(b && b.address);
+    if (aAddr && bAddr && (aAddr === bAddr || aAddr.includes(bAddr) || bAddr.includes(aAddr))) {
+      const aTokens = new Set(aCanon.split(' ').filter(Boolean));
+      const bTokens = new Set(bCanon.split(' ').filter(Boolean));
+      const inter = Array.from(aTokens).filter(t => bTokens.has(t)).length;
+      const union = new Set([...aTokens, ...bTokens]).size || 1;
+      return (inter / union) >= 0.6;
+    }
+    return false;
+  }
+
+  if (!window._listingCityCache) window._listingCityCache = {};
+  let cityRows = window._listingCityCache[cityName];
+  if (!Array.isArray(cityRows)) {
+    const { data: cityData } = await sb
+      .from('listings')
+      .select('listing_id,name,address,city,status,last_refreshed')
+      .ilike('city', cityName)
+      .eq('status', 'active')
+      .limit(400);
+    cityRows = Array.isArray(cityData) ? cityData : [];
+    window._listingCityCache[cityName] = cityRows;
+  }
+
   // Check if listing already exists
-  const { data: existing } = await sb
-    .from('listings')
-    .select('listing_id')
-    .ilike('name', activity.name)
-    .ilike('city', cityName)
-    .maybeSingle();
+  const probe = { name: activity.name, address: activity.addr };
+  let existing = cityRows.find(r => isNearDuplicate(probe, r)) || null;
 
   if (existing) {
     // Update description + last_refreshed on existing listing
     await sb.from('listings').update({
+      name: activity.name,
+      category: activity.category,
       description: activity.desc,
+      address: activity.addr,
       is_open: activity.open ?? true,
       last_refreshed: now,
+      source: source
     }).eq('listing_id', existing.listing_id);
     return existing.listing_id;
   }
@@ -1772,6 +1829,17 @@ async function upsertListing(activity, city, source = 'ai_generated') {
     .single();
 
   if (error) { console.warn('Listing upsert error:', error); return null; }
+  if (created && created.listing_id) {
+    cityRows.push({
+      listing_id: created.listing_id,
+      name: activity.name,
+      address: activity.addr,
+      city: cityName,
+      status: 'active',
+      last_refreshed: now
+    });
+    window._listingCityCache[cityName] = cityRows;
+  }
   return created?.listing_id || created?.id || null;
 }
 

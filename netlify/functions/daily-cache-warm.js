@@ -50,16 +50,92 @@ async function callAI(city, useWebSearch) {
     return JSON.parse(match[0]);
   }
 }
+
+function normalizeText(v) {
+  return String(v || '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeAddress(v) {
+  return normalizeText(v)
+    .replace(/\bstreet\b/g, 'st')
+    .replace(/\bavenue\b/g, 'ave')
+    .replace(/\broad\b/g, 'rd')
+    .replace(/\bdrive\b/g, 'dr')
+    .replace(/\bboulevard\b/g, 'blvd')
+    .replace(/\bparkway\b/g, 'pkwy');
+}
+
+function canonicalName(v) {
+  return normalizeText(v)
+    .replace(/\b(the|inc|llc|co|company)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isNearDuplicate(activity, row) {
+  var aCanon = canonicalName(activity && activity.name);
+  var bCanon = canonicalName(row && row.name);
+  if (!aCanon || !bCanon) return false;
+  if (aCanon === bCanon) return true;
+  if (aCanon.indexOf(bCanon) >= 0 || bCanon.indexOf(aCanon) >= 0) return true;
+  var aAddr = normalizeAddress(activity && activity.addr);
+  var bAddr = normalizeAddress(row && row.address);
+  if (aAddr && bAddr && (aAddr === bAddr || aAddr.indexOf(bAddr) >= 0 || bAddr.indexOf(aAddr) >= 0)) {
+    var aTokens = aCanon.split(' ').filter(Boolean);
+    var bTokens = bCanon.split(' ').filter(Boolean);
+    var set = {};
+    var inter = 0;
+    for (var i = 0; i < aTokens.length; i += 1) set[aTokens[i]] = 1;
+    for (var j = 0; j < bTokens.length; j += 1) {
+      if (set[bTokens[j]]) inter += 1;
+      set[bTokens[j]] = 1;
+    }
+    var union = Object.keys(set).length || 1;
+    return (inter / union) >= 0.6;
+  }
+  return false;
+}
+
 async function upsertListings(sb, activities, city) {
   const now = new Date().toISOString(); let saved = 0;
+  const { data: cityRows } = await sb
+    .from('listings')
+    .select('listing_id,name,address,city,status,last_refreshed')
+    .ilike('city', city)
+    .eq('status', 'active')
+    .limit(500);
+  const cacheRows = Array.isArray(cityRows) ? cityRows.slice() : [];
   for (const a of activities) {
     const ages = Array.isArray(a.ages) ? a.ages.join(',') : (a.ages || '');
     const tags = Array.isArray(a.tags) ? a.tags.join(',') : (a.tags || '');
-    const { data: existing } = await sb.from('listings').select('listing_id').ilike('name', a.name).ilike('city', city).maybeSingle();
+    const existing = cacheRows.find(function(r) { return isNearDuplicate(a, r); }) || null;
     if (existing) {
-      await sb.from('listings').update({ description: a.desc, is_open: a.open ?? true, last_refreshed: now, source: 'background_refresh' }).eq('listing_id', existing.listing_id);
+      await sb.from('listings').update({
+        name: a.name,
+        category: a.category,
+        description: a.desc,
+        address: a.addr,
+        is_open: a.open ?? true,
+        last_refreshed: now,
+        source: 'background_refresh'
+      }).eq('listing_id', existing.listing_id);
     } else {
-      await sb.from('listings').insert({ name: a.name, category: a.category, description: a.desc, address: a.addr, city, state: '', emoji: a.emoji, ages, tags, is_open: a.open ?? true, is_sponsored: false, rating: a.rating || 4.5, review_count: 0, status: 'active', last_refreshed: now, source: 'background_refresh' });
+      const out = await sb.from('listings').insert({ name: a.name, category: a.category, description: a.desc, address: a.addr, city, state: '', emoji: a.emoji, ages, tags, is_open: a.open ?? true, is_sponsored: false, rating: a.rating || 4.5, review_count: 0, status: 'active', last_refreshed: now, source: 'background_refresh' }).select('listing_id').single();
+      if (out && out.data && out.data.listing_id) {
+        cacheRows.push({
+          listing_id: out.data.listing_id,
+          name: a.name,
+          address: a.addr,
+          city: city,
+          status: 'active',
+          last_refreshed: now
+        });
+      }
     }
     saved++;
   }
