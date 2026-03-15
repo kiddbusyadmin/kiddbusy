@@ -78,6 +78,64 @@ async function purgePlaceholderReviewsOnFirstOrganicApprove(reviewId) {
   };
 }
 
+function parseListingId(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  const id = Math.floor(n);
+  return id > 0 ? id : null;
+}
+
+async function createSponsorshipLinkException({
+  sponsorshipId = null,
+  listingId = null,
+  businessName = '',
+  city = '',
+  issueCode = 'listing_link_issue',
+  issueDetail = '',
+  payload = {}
+} = {}) {
+  await sbRequest('sponsorship_link_exceptions', {
+    method: 'POST',
+    body: {
+      sponsorship_id: sponsorshipId ? String(sponsorshipId) : null,
+      listing_id: parseListingId(listingId),
+      business_name: String(businessName || '').slice(0, 200),
+      city: String(city || '').slice(0, 120),
+      issue_code: String(issueCode || 'listing_link_issue').slice(0, 100),
+      issue_detail: String(issueDetail || '').slice(0, 600),
+      status: 'open',
+      payload: payload || {}
+    }
+  });
+}
+
+async function resolveSponsorshipListingId(sponsorshipRow) {
+  const row = sponsorshipRow || {};
+  const existing = parseListingId(row.listing_id);
+  if (existing) return { listing_id: existing, source: 'existing' };
+
+  const city = String(row.city || '').trim();
+  const businessName = String(row.business_name || '').trim();
+  if (!city || !businessName) {
+    return { listing_id: null, source: 'missing_city_or_business' };
+  }
+
+  const q = `listings?select=listing_id,name,city,status&city=ilike.${encodeURIComponent(city)}&name=ilike.${encodeURIComponent(businessName)}&status=eq.active&limit=5`;
+  const out = await sbRequest(q);
+  if (!out.response.ok || !Array.isArray(out.data)) {
+    return { listing_id: null, source: 'lookup_failed' };
+  }
+
+  const candidates = out.data.map((r) => parseListingId(r && r.listing_id)).filter(Boolean);
+  if (candidates.length === 1) {
+    return { listing_id: candidates[0], source: 'city_business_unique' };
+  }
+  if (candidates.length > 1) {
+    return { listing_id: null, source: 'ambiguous', candidates };
+  }
+  return { listing_id: null, source: 'not_found', candidates: [] };
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return json(405, { error: 'Method not allowed' });
@@ -295,6 +353,79 @@ exports.handler = async (event) => {
     }
   }
 
+  if (action === 'query_sponsorship_exceptions') {
+    const safeLimit = Math.min(Math.max(Number(limit) || 200, 1), 1000);
+    const statusFilter = String((body && body.status_filter) || 'open').trim().toLowerCase();
+    const filters = ['select=*', 'order=created_at.desc', `limit=${safeLimit}`];
+    if (statusFilter && statusFilter !== 'all') filters.push(`status=eq.${encodeURIComponent(statusFilter)}`);
+    const queryUrl = `${SUPABASE_URL}/rest/v1/sponsorship_link_exceptions?${filters.join('&')}`;
+    try {
+      const response = await fetch(queryUrl, {
+        method: 'GET',
+        headers: {
+          apikey: SUPABASE_SERVICE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const text = await response.text();
+      let data = [];
+      try {
+        data = text ? JSON.parse(text) : [];
+      } catch {
+        data = [];
+      }
+      if (!response.ok) {
+        return json(response.status, { error: 'Supabase query failed', details: data });
+      }
+      return json(200, { count: Array.isArray(data) ? data.length : 0, exceptions: data });
+    } catch (err) {
+      return json(500, { error: err.message || 'Unexpected error' });
+    }
+  }
+
+  if (action === 'resolve_sponsorship_exception') {
+    const exceptionId = body && body.exception_id != null ? Number(body.exception_id) : null;
+    const listingId = body && body.listing_id != null ? parseListingId(body.listing_id) : null;
+    const resolutionNote = String((body && body.resolution_note) || '').slice(0, 500);
+    if (!Number.isFinite(exceptionId) || exceptionId <= 0) {
+      return json(400, { error: 'exception_id is required' });
+    }
+
+    try {
+      const ex = await sbRequest(`sponsorship_link_exceptions?exception_id=eq.${encodeURIComponent(String(exceptionId))}&select=*&limit=1`);
+      if (!ex.response.ok || !Array.isArray(ex.data) || !ex.data.length) {
+        return json(404, { error: 'Exception not found' });
+      }
+      const row = ex.data[0] || {};
+      const sponsorshipId = row.sponsorship_id ? String(row.sponsorship_id) : null;
+      if (sponsorshipId && listingId) {
+        await sbRequest(`sponsorships?id=eq.${encodeURIComponent(sponsorshipId)}`, {
+          method: 'PATCH',
+          prefer: 'return=representation',
+          body: { listing_id: listingId }
+        });
+      }
+      const patch = await sbRequest(`sponsorship_link_exceptions?exception_id=eq.${encodeURIComponent(String(exceptionId))}`, {
+        method: 'PATCH',
+        prefer: 'return=representation',
+        body: {
+          status: 'resolved',
+          listing_id: listingId || parseListingId(row.listing_id),
+          resolved_at: new Date().toISOString(),
+          resolved_by: 'command_center',
+          resolution_note: resolutionNote || (listingId ? `Linked to listing_id=${listingId}` : 'Resolved')
+        }
+      });
+      if (!patch.response.ok) {
+        return json(patch.response.status, { error: 'Failed to resolve exception', details: patch.data });
+      }
+      return json(200, { success: true, exception: Array.isArray(patch.data) ? patch.data[0] : patch.data });
+    } catch (err) {
+      return json(500, { error: err.message || 'Unexpected error' });
+    }
+  }
+
   if (action !== 'update') {
     return json(400, { error: 'Unsupported action' });
   }
@@ -344,6 +475,7 @@ exports.handler = async (event) => {
 
   try {
     let sponsorshipBefore = null;
+    let sponsorshipLinking = null;
     if (table === 'sponsorships' && id) {
       const before = await sbRequest(`sponsorships?id=eq.${encodeURIComponent(String(id))}&select=*&limit=1`);
       if (before.response.ok && Array.isArray(before.data) && before.data.length) {
@@ -380,6 +512,24 @@ exports.handler = async (event) => {
     }
 
     const patchBody = { status: nextStatus };
+    if (table === 'sponsorships' && nextStatus === 'approved_awaiting_payment' && sponsorshipBefore) {
+      sponsorshipLinking = await resolveSponsorshipListingId(sponsorshipBefore);
+      if (parseListingId(sponsorshipLinking && sponsorshipLinking.listing_id)) {
+        patchBody.listing_id = parseListingId(sponsorshipLinking.listing_id);
+      } else {
+        await createSponsorshipLinkException({
+          sponsorshipId: sponsorshipBefore.id,
+          listingId: sponsorshipBefore.listing_id,
+          businessName: sponsorshipBefore.business_name,
+          city: sponsorshipBefore.city,
+          issueCode: (sponsorshipLinking && sponsorshipLinking.source === 'ambiguous') ? 'listing_ambiguous' : 'listing_not_found',
+          issueDetail: (sponsorshipLinking && sponsorshipLinking.source === 'ambiguous')
+            ? 'Multiple active listings matched while approving sponsorship for payment.'
+            : 'No active listing matched while approving sponsorship for payment.',
+          payload: { candidates: sponsorshipLinking && sponsorshipLinking.candidates ? sponsorshipLinking.candidates : [] }
+        });
+      }
+    }
     if (table === 'sponsorships' && nextStatus === 'approved_awaiting_payment') {
       patchBody.approved_at = new Date().toISOString();
       patchBody.payment_error = null;
@@ -420,16 +570,21 @@ exports.handler = async (event) => {
     if (table === 'sponsorships' && nextStatus === 'approved_awaiting_payment') {
       const prev = String((sponsorshipBefore && sponsorshipBefore.status) || '').toLowerCase();
       const shouldSendPayment = prev !== 'approved_awaiting_payment' && prev !== 'active' && prev !== 'cancel_at_period_end';
+      const linkedListingId = parseListingId((Array.isArray(data) && data.length ? data[0] : sponsorshipBefore || {}).listing_id);
       if (shouldSendPayment) {
-        const updated = Array.isArray(data) && data.length ? data[0] : null;
-        const sponsorshipRow = updated || sponsorshipBefore || { id, status: nextStatus, approved_at: new Date().toISOString() };
-        try {
-          paymentEmail = await triggerSponsorshipPaymentRequestEmail({
-            sponsorship: sponsorshipRow,
-            activationSource: 'manual'
-          });
-        } catch (emailErr) {
-          paymentEmail = { sent: false, error: emailErr.message || 'Payment email failed' };
+        if (!linkedListingId) {
+          paymentEmail = { sent: false, skipped: true, reason: 'listing_link_required', detail: 'Resolve sponsorship link exception before sending payment link' };
+        } else {
+          const updated = Array.isArray(data) && data.length ? data[0] : null;
+          const sponsorshipRow = updated || sponsorshipBefore || { id, status: nextStatus, approved_at: new Date().toISOString() };
+          try {
+            paymentEmail = await triggerSponsorshipPaymentRequestEmail({
+              sponsorship: sponsorshipRow,
+              activationSource: 'manual'
+            });
+          } catch (emailErr) {
+            paymentEmail = { sent: false, error: emailErr.message || 'Payment email failed' };
+          }
         }
       } else {
         paymentEmail = { sent: false, skipped: true, reason: 'already_approved_or_active' };
@@ -451,6 +606,7 @@ exports.handler = async (event) => {
       updates: { status: nextStatus },
       data,
       cleanup,
+      sponsorship_linking: sponsorshipLinking,
       payment_email: paymentEmail,
       finance_snapshot: financeSnapshot
     });

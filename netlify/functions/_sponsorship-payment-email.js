@@ -62,6 +62,9 @@ async function createStripeCheckoutLink(sponsorship, plan) {
   params.set('metadata[business_name]', businessName);
   params.set('metadata[first_name]', firstName);
   params.set('metadata[city]', city);
+  if (Number.isFinite(Number(sponsorship.listing_id)) && Number(sponsorship.listing_id) > 0) {
+    params.set('metadata[listing_id]', String(Number(sponsorship.listing_id)));
+  }
   if (sponsorship.email) params.set('customer_email', String(sponsorship.email).trim());
 
   const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
@@ -114,6 +117,15 @@ async function triggerSponsorshipPaymentRequestEmail({ sponsorship, activationSo
   }
 
   const plan = planMeta(row.plan);
+  const listingId = Number(row.listing_id);
+  if (plan.key !== 'banner' && (!Number.isFinite(listingId) || listingId <= 0)) {
+    return {
+      sent: false,
+      skipped: true,
+      reason: 'listing_link_required',
+      detail: 'sponsorship must be linked to a listing before payment link can be sent'
+    };
+  }
   const checkoutUrl = await createStripeCheckoutLink(row, plan);
   const firstName = String(row.first_name || '').trim();
   const businessName = String(row.business_name || '').trim();

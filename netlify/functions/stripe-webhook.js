@@ -98,6 +98,56 @@ function normalizePlan(planRaw) {
   return 'sponsored';
 }
 
+function parseListingId(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  const id = Math.floor(n);
+  return id > 0 ? id : null;
+}
+
+function mergeMetadata(base, patch) {
+  return Object.assign({}, base || {}, patch || {});
+}
+
+async function getListingById(listingId) {
+  const id = parseListingId(listingId);
+  if (!id) return null;
+  const q = `listings?listing_id=eq.${encodeURIComponent(String(id))}&select=listing_id,name,city,status,is_sponsored&limit=1`;
+  const out = await sbFetch(q);
+  if (!out.response.ok || !Array.isArray(out.data) || !out.data.length) return null;
+  return out.data[0];
+}
+
+async function findListingCandidates(city, businessName) {
+  const c = String(city || '').trim();
+  const b = String(businessName || '').trim();
+  if (!c || !b) return [];
+  const q = `listings?select=listing_id,name,city,status&city=ilike.${encodeURIComponent(c)}&name=ilike.${encodeURIComponent(b)}&status=eq.active&limit=5`;
+  const out = await sbFetch(q);
+  if (!out.response.ok || !Array.isArray(out.data)) return [];
+  return out.data;
+}
+
+async function recordLinkException(args) {
+  const p = args || {};
+  const sponsorship = p.sponsorship || {};
+  const body = {
+    sponsorship_id: firstDefined([p.sponsorship_id, sponsorship.id], null),
+    stripe_event_id: firstDefined([p.stripe_event_id], null),
+    event_type: firstDefined([p.event_type], null),
+    listing_id: parseListingId(firstDefined([p.listing_id, sponsorship.listing_id], null)),
+    business_name: String(firstDefined([p.business_name, sponsorship.business_name], '') || ''),
+    city: String(firstDefined([p.city, sponsorship.city], '') || ''),
+    issue_code: String(p.issue_code || 'listing_link_issue').slice(0, 100),
+    issue_detail: String(p.issue_detail || '').slice(0, 600),
+    status: 'open',
+    payload: p.payload || {}
+  };
+  try {
+    await sbFetch('sponsorship_link_exceptions', { method: 'POST', body: body });
+  } catch (_) {}
+}
+
 async function getSponsorshipById(id) {
   const sid = String(id || '').trim();
   if (!sid) return null;
@@ -139,18 +189,27 @@ async function patchSponsorship(id, patch) {
   return Array.isArray(out.data) && out.data.length ? out.data[0] : null;
 }
 
-async function insertStripeEventBase(evt, sponsorshipId, customerId, subscriptionId) {
+async function insertStripeEventBase(evt, sponsorshipId, customerId, subscriptionId, listingId) {
   const body = {
     event_id: String(evt.id || ''),
     event_type: String(evt.type || 'unknown'),
     sponsorship_id: sponsorshipId ? String(sponsorshipId) : null,
     stripe_customer_id: customerId ? String(customerId) : null,
     stripe_subscription_id: subscriptionId ? String(subscriptionId) : null,
+    listing_id: parseListingId(listingId),
     payload: evt,
     processing_status: 'received',
     created_at: nowIso()
   };
-  const out = await sbFetch('stripe_events', { method: 'POST', body: body, prefer: 'return=representation' });
+  let out = await sbFetch('stripe_events', { method: 'POST', body: body, prefer: 'return=representation' });
+  if (!out.response.ok) {
+    const detail = JSON.stringify(out.data || {});
+    if (detail.indexOf('listing_id') >= 0) {
+      const fallbackBody = Object.assign({}, body);
+      delete fallbackBody.listing_id;
+      out = await sbFetch('stripe_events', { method: 'POST', body: fallbackBody, prefer: 'return=representation' });
+    }
+  }
   if (out.response.ok) return { inserted: true, row: Array.isArray(out.data) ? out.data[0] : out.data };
   const msg = JSON.stringify(out.data || {});
   if (String(msg).indexOf('duplicate key') >= 0 || String(msg).indexOf('23505') >= 0) {
@@ -184,36 +243,81 @@ async function stripeGet(path) {
   return data || {};
 }
 
-async function syncListingSponsorFlag(sponsorshipRow, shouldBeSponsored) {
+async function ensureSponsorshipListingId(sponsorshipRow, eventInfo, preferredListingId) {
+  const row = sponsorshipRow || {};
+  const evt = eventInfo || {};
+  const existingId = parseListingId(row.listing_id);
+  if (existingId) {
+    const existing = await getListingById(existingId);
+    if (existing) return { listing_id: existingId, source: 'sponsorship_row' };
+  }
+
+  const preferredId = parseListingId(preferredListingId);
+  if (preferredId) {
+    const listing = await getListingById(preferredId);
+    if (listing) {
+      const updated = await patchSponsorship(row.id, {
+        listing_id: preferredId,
+        metadata: mergeMetadata(row.metadata, { stripe_listing_link_source: 'metadata_listing_id' })
+      });
+      return { listing_id: preferredId, source: 'metadata', sponsorship: updated || row };
+    }
+  }
+
+  const candidates = await findListingCandidates(row.city, row.business_name);
+  if (candidates.length === 1) {
+    const cid = parseListingId(candidates[0].listing_id);
+    const updated = await patchSponsorship(row.id, {
+      listing_id: cid,
+      metadata: mergeMetadata(row.metadata, { stripe_listing_link_source: 'city_business_unique' })
+    });
+    return { listing_id: cid, source: 'city_business_unique', sponsorship: updated || row };
+  }
+
+  const issueCode = candidates.length > 1 ? 'listing_ambiguous' : 'listing_not_found';
+  const candidateListingIds = candidates.map((c) => parseListingId(c && c.listing_id)).filter(Boolean);
+  await recordLinkException({
+    sponsorship: row,
+    stripe_event_id: evt.id || null,
+    event_type: evt.type || null,
+    issue_code: issueCode,
+    issue_detail: candidates.length > 1
+      ? `Multiple active listing matches for "${row.business_name}" in "${row.city}".`
+      : `No active listing match for "${row.business_name}" in "${row.city}".`,
+    payload: { candidate_listing_ids: candidateListingIds }
+  });
+  return { listing_id: null, source: issueCode, candidate_listing_ids: candidateListingIds };
+}
+
+async function syncListingSponsorFlag(sponsorshipRow, shouldBeSponsored, eventInfo, preferredListingId) {
   const row = sponsorshipRow || {};
   const plan = normalizePlan(row.plan);
-  if (!(plan === 'sponsored' || plan === 'bundle')) return;
-  const city = String(row.city || '').trim();
-  const business = String(row.business_name || '').trim();
-  if (!city || !business) return;
+  if (!(plan === 'sponsored' || plan === 'bundle')) return { updated: false, reason: 'plan_not_listing_based' };
 
-  const q = `listings?select=listing_id,name,city,is_sponsored,status&city=ilike.${encodeURIComponent(city)}&name=ilike.${encodeURIComponent(business)}&status=eq.active&limit=5`;
-  const out = await sbFetch(q);
-  if (!out.response.ok || !Array.isArray(out.data) || !out.data.length) return;
-  const listing = out.data[0];
-  if (!listing || !listing.listing_id) return;
+  const ensured = await ensureSponsorshipListingId(row, eventInfo, preferredListingId);
+  const listingId = parseListingId(ensured && ensured.listing_id);
+  if (!listingId) {
+    return { updated: false, reason: 'listing_link_missing', link_source: ensured ? ensured.source : null };
+  }
 
   if (!shouldBeSponsored) {
     const activeCheck = await sbFetch(
-      `sponsorships?select=id&status=in.(active,cancel_at_period_end)&city=eq.${encodeURIComponent(city)}&business_name=eq.${encodeURIComponent(business)}&limit=2`
+      `sponsorships?select=id&listing_id=eq.${encodeURIComponent(String(listingId))}&status=in.(active,cancel_at_period_end)&limit=2`
     );
     const activeRows = activeCheck.response.ok && Array.isArray(activeCheck.data) ? activeCheck.data : [];
-    if (activeRows.length > 0) return;
+    if (activeRows.length > 0) return { updated: false, reason: 'other_active_sponsorship_exists', listing_id: listingId };
   }
 
-  await sbFetch(`listings?listing_id=eq.${encodeURIComponent(String(listing.listing_id))}`, {
+  await sbFetch(`listings?listing_id=eq.${encodeURIComponent(String(listingId))}`, {
     method: 'PATCH',
     body: { is_sponsored: !!shouldBeSponsored }
   });
+  return { updated: true, listing_id: listingId, link_source: ensured ? ensured.source : null };
 }
 
 async function handleCheckoutSessionCompleted(evt, session) {
   const metadata = session && session.metadata ? session.metadata : {};
+  const metadataListingId = firstDefined([metadata.listing_id], null);
   const sponsorshipId = firstDefined([
     metadata.sponsorship_id,
     session.client_reference_id
@@ -225,10 +329,27 @@ async function handleCheckoutSessionCompleted(evt, session) {
   if (!sponsorship) {
     sponsorship = await getSponsorshipByCustomer(session.customer);
   }
-  if (!sponsorship) return { status: 'ignored', reason: 'sponsorship_not_found' };
+  if (!sponsorship) {
+    await recordLinkException({
+      sponsorship_id: sponsorshipId,
+      stripe_event_id: evt.id,
+      event_type: evt.type,
+      listing_id: metadataListingId,
+      business_name: metadata.business_name || null,
+      city: metadata.city || null,
+      issue_code: 'sponsorship_not_found',
+      issue_detail: 'checkout.session.completed did not match any sponsorship row',
+      payload: { metadata: metadata }
+    });
+    return { status: 'ignored', reason: 'sponsorship_not_found' };
+  }
+
+  const ensured = await ensureSponsorshipListingId(sponsorship, evt, metadataListingId);
+  const listingId = parseListingId(firstDefined([ensured && ensured.listing_id, sponsorship.listing_id], null));
 
   const patch = {
     status: 'active',
+    listing_id: listingId,
     stripe_checkout_session_id: firstDefined([session.id, sponsorship.stripe_checkout_session_id], null),
     stripe_customer_id: firstDefined([session.customer, sponsorship.stripe_customer_id], null),
     stripe_subscription_id: firstDefined([session.subscription, sponsorship.stripe_subscription_id], null),
@@ -237,23 +358,38 @@ async function handleCheckoutSessionCompleted(evt, session) {
     activated_at: sponsorship.activated_at || nowIso(),
     last_payment_at: nowIso(),
     payment_error: null,
-    metadata: Object.assign({}, sponsorship.metadata || {}, { stripe_last_event: evt.id })
+    metadata: mergeMetadata(sponsorship.metadata, {
+      stripe_last_event: evt.id,
+      stripe_listing_link_source: ensured && ensured.source ? ensured.source : null
+    })
   };
   const updated = await patchSponsorship(sponsorship.id, patch);
-  await syncListingSponsorFlag(updated || sponsorship, true);
+  await syncListingSponsorFlag(updated || sponsorship, true, evt, listingId);
   return { status: 'processed', sponsorship_id: String(sponsorship.id) };
 }
 
 async function handleInvoicePaid(evt, invoice) {
   let sponsorship = await getSponsorshipBySubscription(invoice.subscription);
   if (!sponsorship) sponsorship = await getSponsorshipByCustomer(invoice.customer);
-  if (!sponsorship) return { status: 'ignored', reason: 'sponsorship_not_found' };
+  if (!sponsorship) {
+    await recordLinkException({
+      stripe_event_id: evt.id,
+      event_type: evt.type,
+      issue_code: 'sponsorship_not_found',
+      issue_detail: 'invoice.paid did not match any sponsorship row',
+      payload: { customer: invoice.customer || null, subscription: invoice.subscription || null }
+    });
+    return { status: 'ignored', reason: 'sponsorship_not_found' };
+  }
 
   const line0 = Array.isArray(invoice.lines && invoice.lines.data) && invoice.lines.data[0] ? invoice.lines.data[0] : null;
   const periodEnd = line0 && line0.period && line0.period.end ? new Date(Number(line0.period.end) * 1000).toISOString() : null;
   const priceId = line0 && line0.price && line0.price.id ? String(line0.price.id) : null;
+  const ensured = await ensureSponsorshipListingId(sponsorship, evt, null);
+  const listingId = parseListingId(firstDefined([ensured && ensured.listing_id, sponsorship.listing_id], null));
   const patch = {
     status: 'active',
+    listing_id: listingId,
     stripe_customer_id: firstDefined([invoice.customer, sponsorship.stripe_customer_id], null),
     stripe_subscription_id: firstDefined([invoice.subscription, sponsorship.stripe_subscription_id], null),
     stripe_price_id: firstDefined([priceId, sponsorship.stripe_price_id], null),
@@ -261,10 +397,13 @@ async function handleInvoicePaid(evt, invoice) {
     cancel_at_period_end: false,
     last_payment_at: nowIso(),
     payment_error: null,
-    metadata: Object.assign({}, sponsorship.metadata || {}, { stripe_last_event: evt.id })
+    metadata: mergeMetadata(sponsorship.metadata, {
+      stripe_last_event: evt.id,
+      stripe_listing_link_source: ensured && ensured.source ? ensured.source : null
+    })
   };
   const updated = await patchSponsorship(sponsorship.id, patch);
-  await syncListingSponsorFlag(updated || sponsorship, true);
+  await syncListingSponsorFlag(updated || sponsorship, true, evt, listingId);
   return { status: 'processed', sponsorship_id: String(sponsorship.id) };
 }
 
@@ -278,7 +417,7 @@ async function handleInvoiceFailed(evt, invoice) {
     stripe_customer_id: firstDefined([invoice.customer, sponsorship.stripe_customer_id], null),
     stripe_subscription_id: firstDefined([invoice.subscription, sponsorship.stripe_subscription_id], null),
     payment_error: 'invoice_payment_failed',
-    metadata: Object.assign({}, sponsorship.metadata || {}, { stripe_last_event: evt.id })
+    metadata: mergeMetadata(sponsorship.metadata, { stripe_last_event: evt.id })
   };
   await patchSponsorship(sponsorship.id, patch);
   return { status: 'processed', sponsorship_id: String(sponsorship.id) };
@@ -308,13 +447,13 @@ async function handleSubscriptionUpdated(evt, subscription) {
     current_period_end: firstDefined([periodEnd, sponsorship.current_period_end], null),
     cancel_at_period_end: cancelAtPeriodEnd,
     canceled_at: nextStatus === 'cancelled' ? nowIso() : sponsorship.canceled_at,
-    metadata: Object.assign({}, sponsorship.metadata || {}, { stripe_last_event: evt.id })
+    metadata: mergeMetadata(sponsorship.metadata, { stripe_last_event: evt.id })
   };
   const updated = await patchSponsorship(sponsorship.id, patch);
   if (nextStatus === 'cancelled') {
-    await syncListingSponsorFlag(updated || sponsorship, false);
+    await syncListingSponsorFlag(updated || sponsorship, false, evt, null);
   } else if (nextStatus === 'active' || nextStatus === 'cancel_at_period_end') {
-    await syncListingSponsorFlag(updated || sponsorship, true);
+    await syncListingSponsorFlag(updated || sponsorship, true, evt, null);
   }
   return { status: 'processed', sponsorship_id: String(sponsorship.id) };
 }
@@ -330,10 +469,10 @@ async function handleSubscriptionDeleted(evt, subscription) {
     stripe_subscription_id: firstDefined([subscription.id, sponsorship.stripe_subscription_id], null),
     cancel_at_period_end: false,
     canceled_at: nowIso(),
-    metadata: Object.assign({}, sponsorship.metadata || {}, { stripe_last_event: evt.id })
+    metadata: mergeMetadata(sponsorship.metadata, { stripe_last_event: evt.id })
   };
   const updated = await patchSponsorship(sponsorship.id, patch);
-  await syncListingSponsorFlag(updated || sponsorship, false);
+  await syncListingSponsorFlag(updated || sponsorship, false, evt, null);
   return { status: 'processed', sponsorship_id: String(sponsorship.id) };
 }
 
@@ -369,10 +508,14 @@ exports.handler = async (event) => {
       obj.metadata && obj.metadata.sponsorship_id,
       obj.client_reference_id
     ], null);
+    const preListingId = firstDefined([
+      obj.metadata && obj.metadata.listing_id,
+      obj.listing_id
+    ], null);
     const preCustomerId = firstDefined([obj.customer], null);
     const preSubscriptionId = firstDefined([obj.subscription, obj.id && String(evt.type || '').indexOf('customer.subscription.') === 0 ? obj.id : null], null);
 
-    const eventInsert = await insertStripeEventBase(evt, preSponsorshipId, preCustomerId, preSubscriptionId);
+    const eventInsert = await insertStripeEventBase(evt, preSponsorshipId, preCustomerId, preSubscriptionId, preListingId);
     if (eventInsert.duplicate) {
       return json(200, { received: true, duplicate: true, event_id: evt.id });
     }
@@ -400,4 +543,3 @@ exports.handler = async (event) => {
     return json(400, { error: String(err.message || err || 'Webhook processing failed') });
   }
 };
-

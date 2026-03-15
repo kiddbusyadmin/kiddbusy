@@ -822,9 +822,26 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
       <div class="stat-value" id="finance-paid-mix">--</div>
       <div class="stat-sub">active vs cancelled</div>
     </div>
+    <div class="stat-card red">
+      <div class="stat-label">Payment Link Exceptions</div>
+      <div class="stat-value" id="finance-exceptions-open">--</div>
+      <div class="stat-sub">requires resolution before payment email</div>
+    </div>
   </div>
 
   <div class="panels">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Sponsorship Link Exceptions (Action Required)</div>
+        <div class="panel-badge" id="finance-exceptions-badge">--</div>
+      </div>
+      <div class="panel-body" id="finance-exceptions-body">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panels" style="margin-top:20px">
     <div class="panel">
       <div class="panel-header">
         <div class="panel-title">Cost Inputs</div>
@@ -2427,12 +2444,18 @@ async function fetchSponsorshipLifecycleAndStripeEvents() {
       body: JSON.stringify({ action: action, limit: limit || 200 })
     }).then(function(r) { return r.json().then(function(j) { return { ok: r.ok, body: j }; }); });
   };
-  var res = await Promise.all([req('query_sponsorship_lifecycle', 600), req('query_stripe_events', 120)]);
+  var res = await Promise.all([
+    req('query_sponsorship_lifecycle', 600),
+    req('query_stripe_events', 120),
+    req('query_sponsorship_exceptions', 300)
+  ]);
   if (!res[0].ok) throw new Error((res[0].body && res[0].body.error) || 'Failed to load sponsorship lifecycle');
   if (!res[1].ok) throw new Error((res[1].body && res[1].body.error) || 'Failed to load stripe events');
+  if (!res[2].ok) throw new Error((res[2].body && res[2].body.error) || 'Failed to load sponsorship exceptions');
   return {
     sponsorships: res[0].body.sponsorships || [],
-    stripeEvents: res[1].body.events || []
+    stripeEvents: res[1].body.events || [],
+    exceptions: res[2].body.exceptions || []
   };
 }
 
@@ -2444,9 +2467,64 @@ function renderStripeStatusClass(status) {
   return 'pending';
 }
 
+function renderFinanceExceptionList(rows) {
+  var list = Array.isArray(rows) ? rows : [];
+  if (!list.length) return emptyHTML('No open sponsorship link exceptions');
+  return '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+    '<th>Time</th><th>Sponsorship</th><th>Business</th><th>City</th><th>Issue</th><th>Action</th>' +
+    '</tr></thead><tbody>' +
+    list.slice(0, 80).map(function(r) {
+      var sid = r.sponsorship_id ? ('#' + r.sponsorship_id) : '--';
+      var detail = (r.issue_detail || '').toString();
+      var note = detail.length > 120 ? (detail.slice(0, 120) + '...') : detail;
+      return '<tr>' +
+        '<td style="font-family:var(--mono);font-size:.72rem;color:var(--muted)">' + timeAgo(r.created_at) + '</td>' +
+        '<td style="font-family:var(--mono);font-size:.72rem;color:var(--muted)">' + sid + '</td>' +
+        '<td style="font-weight:600">' + (r.business_name || '--') + '</td>' +
+        '<td style="color:var(--muted)">' + (r.city || '--') + '</td>' +
+        '<td style="max-width:240px;white-space:normal">' +
+          '<span class="status-badge pending">' + (r.issue_code || '--') + '</span>' +
+          '<div style="margin-top:6px;color:var(--muted);font-size:.74rem">' + (note || '--') + '</div>' +
+        '</td>' +
+        '<td><button class="topbar-btn" onclick="resolveFinanceException(' + Number(r.exception_id || 0) + ')">Resolve</button></td>' +
+      '</tr>';
+    }).join('') +
+    '</tbody></table></div>';
+}
+
+async function resolveFinanceException(exceptionId) {
+  var eid = Number(exceptionId || 0);
+  if (!Number.isFinite(eid) || eid <= 0) return;
+  var raw = prompt('Enter listing_id to link this sponsorship and resolve the exception:');
+  if (raw == null) return;
+  var listingId = Number(raw);
+  if (!Number.isFinite(listingId) || listingId <= 0) {
+    return alert('Valid listing_id is required.');
+  }
+  try {
+    var res = await fetch('/.netlify/functions/db-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
+      body: JSON.stringify({
+        action: 'resolve_sponsorship_exception',
+        exception_id: eid,
+        listing_id: listingId,
+        resolution_note: 'Resolved in Command Center'
+      })
+    });
+    var out = await res.json();
+    if (!res.ok) throw new Error((out && out.error) || 'Resolve failed');
+    await loadFinanceDashboard();
+  } catch (e) {
+    alert('Resolve failed: ' + e.message);
+  }
+}
+
 async function loadFinanceDashboard() {
   var paidBody = document.getElementById('finance-paid-body');
   var cancelledBody = document.getElementById('finance-cancelled-body');
+  var exceptionsBody = document.getElementById('finance-exceptions-body');
+  var exceptionsBadge = document.getElementById('finance-exceptions-badge');
   var stripeSummary = document.getElementById('finance-stripe-summary');
   var stripeEventsBody = document.getElementById('finance-stripe-events');
   var stripeSummaryBadge = document.getElementById('finance-stripe-summary-badge');
@@ -2454,6 +2532,7 @@ async function loadFinanceDashboard() {
   if (!paidBody || !cancelledBody) return;
   paidBody.innerHTML = loadingHTML();
   cancelledBody.innerHTML = loadingHTML();
+  if (exceptionsBody) exceptionsBody.innerHTML = loadingHTML();
   if (stripeSummary) stripeSummary.innerHTML = loadingHTML();
   if (stripeEventsBody) stripeEventsBody.innerHTML = loadingHTML();
   try {
@@ -2465,11 +2544,13 @@ async function loadFinanceDashboard() {
     var details = snap.details || {};
     var paid = details.paid_listings || [];
     var cancelled = details.no_longer_paid || [];
+    var exceptions = lifecycle.exceptions || [];
 
     document.getElementById('finance-mrr').textContent = moneyFmt(snap.mrr_active);
     document.getElementById('finance-proj-rev').textContent = moneyFmt(snap.projected_revenue_30d);
     document.getElementById('finance-net').textContent = moneyFmt(snap.net_projection_30d);
     document.getElementById('finance-paid-mix').textContent = String(snap.active_sponsors || 0) + ' / ' + String(snap.cancelled_sponsors || 0);
+    document.getElementById('finance-exceptions-open').textContent = String(exceptions.length || 0);
 
     document.getElementById('finance-api-cost').value = Number(settings.default_monthly_api_cost || 0).toFixed(2);
     document.getElementById('finance-sub-cost').value = Number(settings.default_monthly_subscription_cost || 0).toFixed(2);
@@ -2480,6 +2561,10 @@ async function loadFinanceDashboard() {
     document.getElementById('finance-cancelled-badge').textContent = cancelled.length + ' shown';
     paidBody.innerHTML = renderFinanceSponsorList(paid, 'No paid listings right now');
     cancelledBody.innerHTML = renderFinanceSponsorList(cancelled, 'No cancelled sponsors yet');
+    if (exceptionsBody && exceptionsBadge) {
+      exceptionsBadge.textContent = exceptions.length + ' open';
+      exceptionsBody.innerHTML = renderFinanceExceptionList(exceptions);
+    }
 
     if (stripeSummary && stripeEventsBody && stripeSummaryBadge && stripeEventsBadge) {
       var sponsorships = lifecycle.sponsorships || [];
@@ -2515,6 +2600,10 @@ async function loadFinanceDashboard() {
   } catch (e) {
     paidBody.innerHTML = '<div class="empty" style="padding:24px;color:var(--accent)">Finance unavailable: ' + e.message + '</div>';
     cancelledBody.innerHTML = '<div class="empty" style="padding:24px;color:var(--accent)">Finance unavailable: ' + e.message + '</div>';
+    if (exceptionsBody) exceptionsBody.innerHTML = '<div class="empty" style="padding:24px;color:var(--accent)">Exception queue unavailable: ' + e.message + '</div>';
+    if (exceptionsBadge) exceptionsBadge.textContent = 'unavailable';
+    var exceptionsOpen = document.getElementById('finance-exceptions-open');
+    if (exceptionsOpen) exceptionsOpen.textContent = '--';
     if (stripeSummary) stripeSummary.innerHTML = '<div class="empty" style="padding:24px;color:var(--accent)">Stripe lifecycle unavailable: ' + e.message + '</div>';
     if (stripeEventsBody) stripeEventsBody.innerHTML = '<div class="empty" style="padding:24px;color:var(--accent)">Stripe events unavailable: ' + e.message + '</div>';
     if (stripeSummaryBadge) stripeSummaryBadge.textContent = 'unavailable';

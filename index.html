@@ -2420,7 +2420,29 @@ async function uploadOwnerSubmissionPhoto(file, meta) {
   return data;
 }
 
-function submitAdvertise() {
+async function resolveSponsorshipListingId(businessName, city) {
+  var name = String(businessName || '').trim();
+  var cityName = String(city || '').trim();
+  if (!name || !cityName) return null;
+  try {
+    var res = await supabase
+      .from('listings')
+      .select('listing_id,name,city,status')
+      .ilike('name', name)
+      .ilike('city', cityName)
+      .eq('status', 'active')
+      .limit(3);
+    if (res.error || !Array.isArray(res.data) || res.data.length !== 1) return null;
+    var row = res.data[0] || {};
+    var id = Number(row.listing_id);
+    if (!Number.isFinite(id) || id <= 0) return null;
+    return id;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function submitAdvertise() {
   const required = ['ad-bizname','ad-plan','ad-fname','ad-lname','ad-email','ad-phone','ad-addr','ad-city','ad-bill-name','ad-bill-addr','ad-bill-city','ad-bill-state','ad-bill-zip'];
   for (const id of required) {
     if (!document.getElementById(id).value.trim()) {
@@ -2434,20 +2456,25 @@ function submitAdvertise() {
     return;
   }
 
+  const businessName = document.getElementById('ad-bizname').value.trim();
+  const cityName = document.getElementById('ad-city').value.trim();
+  const listingId = await resolveSponsorshipListingId(businessName, cityName);
+
   const payload = {
-    business_name: document.getElementById('ad-bizname').value.trim(),
+    business_name: businessName,
     plan: document.getElementById('ad-plan').value,
     first_name: document.getElementById('ad-fname').value.trim(),
     last_name: document.getElementById('ad-lname').value.trim(),
     email: document.getElementById('ad-email').value.trim(),
     phone: document.getElementById('ad-phone').value.trim(),
     address: document.getElementById('ad-addr').value.trim(),
-    city: document.getElementById('ad-city').value.trim(),
+    city: cityName,
     billing_name: document.getElementById('ad-bill-name').value.trim(),
     billing_address: document.getElementById('ad-bill-addr').value.trim(),
     billing_city: document.getElementById('ad-bill-city').value.trim(),
     billing_state: document.getElementById('ad-bill-state').value.trim(),
     billing_zip: document.getElementById('ad-bill-zip').value.trim(),
+    listing_id: listingId || null,
     status: 'pending_review'
   };
 
