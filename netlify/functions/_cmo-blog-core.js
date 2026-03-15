@@ -133,7 +133,7 @@ async function getSettings() {
 
 async function getCities() {
   var result = await sbFetch('listings?select=city&status=eq.active&order=city.asc&limit=2000');
-  if (!result.response.ok || !Array.isArray(result.data)) return ['Houston', 'Dallas', 'Austin', 'San Antonio', 'Phoenix'];
+  if (!result.response.ok || !Array.isArray(result.data)) return TOP_25_CITIES_BY_POPULATION.slice();
 
   var seen = {};
   var cities = [];
@@ -143,9 +143,15 @@ async function getCities() {
     if (seen[city]) continue;
     seen[city] = true;
     cities.push(city);
-    if (cities.length >= 40) break;
   }
-  return cities.length ? cities : ['Houston', 'Dallas', 'Austin', 'San Antonio', 'Phoenix'];
+  for (var j = 0; j < TOP_25_CITIES_BY_POPULATION.length; j += 1) {
+    var topCity = TOP_25_CITIES_BY_POPULATION[j];
+    if (!seen[topCity]) {
+      seen[topCity] = true;
+      cities.push(topCity);
+    }
+  }
+  return cities.length ? cities : TOP_25_CITIES_BY_POPULATION.slice();
 }
 
 async function getCityListingContext(city, limit) {
@@ -735,13 +741,14 @@ async function runCmoBlog(event) {
       20,
       1
     );
+    var hasExplicitMaxGenerate = Object.prototype.hasOwnProperty.call(body, 'max_generate_per_run');
     var maxGeneratePerRun = clampNumber(
-      Object.prototype.hasOwnProperty.call(body, 'max_generate_per_run')
+      hasExplicitMaxGenerate
         ? body.max_generate_per_run
-        : (repairAny ? 3 : 1),
+        : (repairAny ? 3 : (isCron ? 25 : 1)),
       0,
-      5,
-      (repairAny ? 3 : 1)
+      25,
+      (repairAny ? 3 : (isCron ? 25 : 1))
     );
     var targetCity = Object.prototype.hasOwnProperty.call(body, 'target_city') ? String(body.target_city || '').trim() : '';
 
