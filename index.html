@@ -2104,16 +2104,41 @@ function renderStars(id, rating) {
   return `<span class="stars-clickable" onclick="event.stopPropagation();openReviewSummary(${id})" title="See reviews" style="cursor:pointer;display:inline-flex;align-items:center;gap:2px">${starsHtml}<span class="star-count">(${a?.reviewCount||0})</span></span>`;
 }
 
-function showAllActivities() {
+async function showAllActivities() {
   // Clear any active category filter
   const banner = document.getElementById('categoryBanner');
   if (banner) banner.style.display = 'none';
   document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
   document.querySelector('.filter-chip').classList.add('active');
-  if (currentListings.length) {
-    const isDbRow = currentListings[0].description !== undefined && currentListings[0].desc === undefined;
-    isDbRow ? renderCachedListings(currentListings) : renderActivities(currentListings);
+
+  try {
+    const cityLabel = String((document.getElementById('topPicksCity') || {}).textContent || '').trim();
+    const cityName = cityLabel.split(',')[0].trim();
+    if (cityName) {
+      const { data, error } = await sb
+        .from('listings')
+        .select('*')
+        .ilike('city', cityName)
+        .eq('status', 'active')
+        .limit(200);
+
+      if (!error && Array.isArray(data) && data.length) {
+        const hydrated = await hydrateListingsWithReviewStats(data);
+        const sortedAll = sortListingsForDisplay(hydrated);
+        currentListings = sortedAll;
+        renderCachedListings(sortedAll);
+      } else if (currentListings.length) {
+        const isDbRow = currentListings[0].description !== undefined && currentListings[0].desc === undefined;
+        isDbRow ? renderCachedListings(currentListings) : renderActivities(currentListings);
+      }
+    }
+  } catch (_) {
+    if (currentListings.length) {
+      const isDbRow = currentListings[0].description !== undefined && currentListings[0].desc === undefined;
+      isDbRow ? renderCachedListings(currentListings) : renderActivities(currentListings);
+    }
   }
+
   document.getElementById('activities').scrollIntoView({ behavior: 'smooth' });
 }
 
