@@ -5,6 +5,33 @@ const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABA
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const CMO_RUN_TOKEN = process.env.CMO_RUN_TOKEN || process.env.ADMIN_PASSWORD || '';
 const CMO_BLOG_MODELS = String(process.env.CMO_BLOG_MODELS || '').trim();
+const TOP_25_CITIES_BY_POPULATION = [
+  'New York',
+  'Los Angeles',
+  'Chicago',
+  'Houston',
+  'Phoenix',
+  'Philadelphia',
+  'San Antonio',
+  'San Diego',
+  'Dallas',
+  'Jacksonville',
+  'Austin',
+  'Fort Worth',
+  'San Jose',
+  'Columbus',
+  'Charlotte',
+  'Indianapolis',
+  'San Francisco',
+  'Seattle',
+  'Denver',
+  'Washington',
+  'Boston',
+  'El Paso',
+  'Nashville',
+  'Detroit',
+  'Oklahoma City'
+];
 
 function json(statusCode, payload) {
   return {
@@ -31,6 +58,14 @@ function slugify(value) {
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
     .slice(0, 80);
+}
+
+function cityBase(value) {
+  return String(value || '').split(',')[0].trim();
+}
+
+function cityKey(value) {
+  return cityBase(value).toLowerCase();
 }
 
 function startOfUtcDayIso() {
@@ -516,6 +551,51 @@ async function countDraftsToday() {
   return result.data.length;
 }
 
+async function getCmoPostsCreatedToday() {
+  var start = startOfUtcDayIso();
+  var q = 'blog_posts?select=id,city,status,created_at&source=eq.cmo_agent&status=in.(draft,published)&created_at=gte.' + encodeURIComponent(start) + '&limit=5000';
+  var result = await sbFetch(q);
+  if (!result.response.ok || !Array.isArray(result.data)) return [];
+  return result.data;
+}
+
+function buildTop25DailyPlan(cities, todayRows) {
+  var availableCities = [];
+  var cityByKey = {};
+  for (var i = 0; i < cities.length; i += 1) {
+    var c = String(cities[i] || '').trim();
+    if (!c) continue;
+    var key = cityKey(c);
+    if (!cityByKey[key]) cityByKey[key] = c;
+  }
+  for (var j = 0; j < TOP_25_CITIES_BY_POPULATION.length; j += 1) {
+    var top = TOP_25_CITIES_BY_POPULATION[j];
+    var matched = cityByKey[String(top || '').toLowerCase()];
+    if (matched) availableCities.push(matched);
+  }
+
+  var postedKeys = {};
+  for (var k = 0; k < (todayRows || []).length; k += 1) {
+    var row = todayRows[k] || {};
+    var key = cityKey(row.city || '');
+    if (!key) continue;
+    postedKeys[key] = true;
+  }
+
+  var missingCities = [];
+  for (var x = 0; x < availableCities.length; x += 1) {
+    var city = availableCities[x];
+    if (!postedKeys[cityKey(city)]) missingCities.push(city);
+  }
+
+  return {
+    target_count: availableCities.length,
+    already_count: availableCities.length - missingCities.length,
+    available_cities: availableCities,
+    missing_cities: missingCities
+  };
+}
+
 async function queueDepth() {
   var result = await sbFetch('blog_posts?select=id&status=eq.draft&source=eq.cmo_agent&limit=5000');
   if (!result.response.ok || !Array.isArray(result.data)) return 0;
@@ -726,6 +806,16 @@ async function runCmoBlog(event) {
     }
 
     var already = await countDraftsToday();
+    var top25Plan = null;
+    if (!repairAny && !targetCity) {
+      var todayRows = await getCmoPostsCreatedToday();
+      top25Plan = buildTop25DailyPlan(cities, todayRows);
+      if (top25Plan.target_count > 0) {
+        queueTarget = top25Plan.target_count;
+        plannedCityRotation = top25Plan.missing_cities.slice();
+        already = top25Plan.already_count;
+      }
+    }
     var remaining = queueTarget - already;
     if (remaining < 0) remaining = 0;
     if (remaining > 200) remaining = 200;
@@ -810,7 +900,10 @@ async function runCmoBlog(event) {
         generated_count: generated.length,
         published_count: published.length,
         queue_depth: depth,
-        generation_errors: generationErrors.slice(0, 6)
+        generation_errors: generationErrors.slice(0, 6),
+        daily_top25_target: top25Plan ? top25Plan.target_count : null,
+        daily_top25_already: top25Plan ? top25Plan.already_count : null,
+        daily_top25_missing: top25Plan ? top25Plan.missing_cities.slice(0, 25) : null
       }
     });
 
@@ -834,7 +927,10 @@ async function runCmoBlog(event) {
       queue_depth: depth,
       generation_errors: generationErrors,
       generated_slugs: generated.map(function (p) { return p.slug; }),
-      published_slugs: published.map(function (p) { return p.slug; })
+      published_slugs: published.map(function (p) { return p.slug; }),
+      daily_top25_target: top25Plan ? top25Plan.target_count : null,
+      daily_top25_already: top25Plan ? top25Plan.already_count : null,
+      daily_top25_missing: top25Plan ? top25Plan.missing_cities : null
     });
   } catch (err) {
     try {
