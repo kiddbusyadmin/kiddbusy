@@ -5,6 +5,8 @@ const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
 const STRIPE_PAYMENT_LINK_SPONSORED = process.env.STRIPE_PAYMENT_LINK_SPONSORED || '';
 const STRIPE_PAYMENT_LINK_BANNER = process.env.STRIPE_PAYMENT_LINK_BANNER || '';
 const STRIPE_PAYMENT_LINK_BUNDLE = process.env.STRIPE_PAYMENT_LINK_BUNDLE || '';
+const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 function normalizePlan(planRaw) {
   const v = String(planRaw || '').toLowerCase();
@@ -28,6 +30,68 @@ function paymentLinkFromEnv(planKey) {
   if (planKey === 'banner') return STRIPE_PAYMENT_LINK_BANNER || '';
   if (planKey === 'bundle') return STRIPE_PAYMENT_LINK_BUNDLE || '';
   return STRIPE_PAYMENT_LINK_SPONSORED || '';
+}
+
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function parseListingId(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  const id = Math.floor(n);
+  return id > 0 ? id : null;
+}
+
+async function sbFetch(path, { method = 'GET', body = null, prefer = null } = {}) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+    return { response: { ok: false, status: 500 }, data: { error: 'Supabase configuration missing' } };
+  }
+  const headers = {
+    apikey: SUPABASE_SERVICE_KEY,
+    Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+    'Content-Type': 'application/json'
+  };
+  if (prefer) headers.Prefer = prefer;
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : null
+  });
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (_) {
+    data = text;
+  }
+  return { response, data };
+}
+
+async function verifySponsorshipOwnerClaim(sponsorship, plan) {
+  const row = sponsorship || {};
+  const p = plan || planMeta(row.plan);
+  if (p.key === 'banner') return { ok: true, reason: 'banner_plan_no_claim_required' };
+
+  const listingId = parseListingId(row.listing_id);
+  if (!listingId) return { ok: false, reason: 'listing_link_required' };
+
+  const ownerEmail = normalizeEmail(row.email);
+  if (!ownerEmail || ownerEmail.indexOf('@') < 0) return { ok: false, reason: 'owner_email_required' };
+
+  const ownerQ = `listing_owners?select=owner_id&listing_id=eq.${encodeURIComponent(String(listingId))}&owner_email=eq.${encodeURIComponent(ownerEmail)}&status=eq.active&limit=1`;
+  const owners = await sbFetch(ownerQ);
+  if (owners.response.ok && Array.isArray(owners.data) && owners.data.length > 0) {
+    return { ok: true, reason: 'listing_owner_active' };
+  }
+
+  const claimQ = `owner_claims?select=claim_id,status,verified_at&listing_id=eq.${encodeURIComponent(String(listingId))}&owner_email=eq.${encodeURIComponent(ownerEmail)}&verified_at=not.is.null&limit=1&order=verified_at.desc`;
+  const claims = await sbFetch(claimQ);
+  if (claims.response.ok && Array.isArray(claims.data) && claims.data.length > 0) {
+    return { ok: true, reason: 'owner_claim_verified' };
+  }
+
+  return { ok: false, reason: 'owner_claim_required' };
 }
 
 async function createStripeCheckoutLink(sponsorship, plan) {
@@ -117,13 +181,13 @@ async function triggerSponsorshipPaymentRequestEmail({ sponsorship, activationSo
   }
 
   const plan = planMeta(row.plan);
-  const listingId = Number(row.listing_id);
-  if (plan.key !== 'banner' && (!Number.isFinite(listingId) || listingId <= 0)) {
+  const claimCheck = await verifySponsorshipOwnerClaim(row, plan);
+  if (!claimCheck.ok) {
     return {
       sent: false,
       skipped: true,
-      reason: 'listing_link_required',
-      detail: 'sponsorship must be linked to a listing before payment link can be sent'
+      reason: claimCheck.reason || 'owner_claim_required',
+      detail: 'Owner must claim and verify this listing before payment link can be sent.'
     };
   }
   const checkoutUrl = await createStripeCheckoutLink(row, plan);
@@ -152,5 +216,6 @@ async function triggerSponsorshipPaymentRequestEmail({ sponsorship, activationSo
 module.exports = {
   triggerSponsorshipPaymentRequestEmail,
   planMeta,
-  normalizePlan
+  normalizePlan,
+  verifySponsorshipOwnerClaim
 };
