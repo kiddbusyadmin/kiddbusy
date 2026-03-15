@@ -88,9 +88,15 @@ async function buildFinanceSnapshot() {
     getManualEntriesLast30()
   ]);
 
-  const active = sponsorships.filter((s) => String(s.status || '').toLowerCase() === 'active');
+  const active = sponsorships.filter((s) => {
+    const st = String(s.status || '').toLowerCase();
+    return st === 'active' || st === 'cancel_at_period_end';
+  });
   const cancelled = sponsorships.filter((s) => String(s.status || '').toLowerCase() === 'cancelled');
-  const pending = sponsorships.filter((s) => String(s.status || '').toLowerCase() === 'pending');
+  const pending = sponsorships.filter((s) => {
+    const st = String(s.status || '').toLowerCase();
+    return st === 'pending' || st === 'pending_review' || st === 'approved_awaiting_payment' || st === 'past_due';
+  });
 
   const activeMrr = round2(sum(active.map((s) => planAmount(s.plan))));
   const avgActivePlan = active.length ? round2(activeMrr / active.length) : 0;

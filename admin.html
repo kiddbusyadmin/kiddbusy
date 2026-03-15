@@ -125,6 +125,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 .status-badge.pending{background:rgba(255,207,47,.15);color:var(--yellow);}
 .status-badge.approved{background:rgba(0,214,143,.15);color:var(--green);}
 .status-badge.rejected{background:rgba(255,77,109,.15);color:var(--accent);}
+.status-badge.pending_review{background:rgba(255,207,47,.15);color:var(--yellow);}
+.status-badge.approved_awaiting_payment{background:rgba(74,198,255,.16);color:var(--blue);}
+.status-badge.active{background:rgba(0,214,143,.15);color:var(--green);}
+.status-badge.past_due{background:rgba(255,77,109,.15);color:var(--accent);}
+.status-badge.cancel_at_period_end{background:rgba(191,123,17,.18);color:var(--yellow);}
+.status-badge.cancelled{background:rgba(128,128,128,.18);color:#b8bccf;}
 
 /* Cache */
 .cache-item{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:.82rem;}
@@ -888,6 +894,27 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
         <div class="panel-badge" id="finance-cancelled-badge">--</div>
       </div>
       <div class="panel-body" id="finance-cancelled-body">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panels" style="margin-top:20px">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Stripe Lifecycle Status</div>
+        <div class="panel-badge" id="finance-stripe-summary-badge">--</div>
+      </div>
+      <div class="panel-body" id="finance-stripe-summary">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Recent Stripe Webhook Events</div>
+        <div class="panel-badge" id="finance-stripe-events-badge">--</div>
+      </div>
+      <div class="panel-body" id="finance-stripe-events">
         <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
       </div>
     </div>
@@ -2392,14 +2419,47 @@ function renderFinanceSponsorList(rows, emptyMsg) {
     '</tbody></table></div>';
 }
 
+async function fetchSponsorshipLifecycleAndStripeEvents() {
+  var req = function(action, limit) {
+    return fetch('/.netlify/functions/db-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
+      body: JSON.stringify({ action: action, limit: limit || 200 })
+    }).then(function(r) { return r.json().then(function(j) { return { ok: r.ok, body: j }; }); });
+  };
+  var res = await Promise.all([req('query_sponsorship_lifecycle', 600), req('query_stripe_events', 120)]);
+  if (!res[0].ok) throw new Error((res[0].body && res[0].body.error) || 'Failed to load sponsorship lifecycle');
+  if (!res[1].ok) throw new Error((res[1].body && res[1].body.error) || 'Failed to load stripe events');
+  return {
+    sponsorships: res[0].body.sponsorships || [],
+    stripeEvents: res[1].body.events || []
+  };
+}
+
+function renderStripeStatusClass(status) {
+  var s = String(status || '').toLowerCase();
+  if (s === 'processed') return 'approved';
+  if (s === 'error') return 'rejected';
+  if (s === 'ignored') return 'pending';
+  return 'pending';
+}
+
 async function loadFinanceDashboard() {
   var paidBody = document.getElementById('finance-paid-body');
   var cancelledBody = document.getElementById('finance-cancelled-body');
+  var stripeSummary = document.getElementById('finance-stripe-summary');
+  var stripeEventsBody = document.getElementById('finance-stripe-events');
+  var stripeSummaryBadge = document.getElementById('finance-stripe-summary-badge');
+  var stripeEventsBadge = document.getElementById('finance-stripe-events-badge');
   if (!paidBody || !cancelledBody) return;
   paidBody.innerHTML = loadingHTML();
   cancelledBody.innerHTML = loadingHTML();
+  if (stripeSummary) stripeSummary.innerHTML = loadingHTML();
+  if (stripeEventsBody) stripeEventsBody.innerHTML = loadingHTML();
   try {
-    var out = await accountantApi('GET');
+    var results = await Promise.all([accountantApi('GET'), fetchSponsorshipLifecycleAndStripeEvents()]);
+    var out = results[0];
+    var lifecycle = results[1];
     var settings = out.settings || {};
     var snap = out.snapshot_preview || {};
     var details = snap.details || {};
@@ -2420,9 +2480,45 @@ async function loadFinanceDashboard() {
     document.getElementById('finance-cancelled-badge').textContent = cancelled.length + ' shown';
     paidBody.innerHTML = renderFinanceSponsorList(paid, 'No paid listings right now');
     cancelledBody.innerHTML = renderFinanceSponsorList(cancelled, 'No cancelled sponsors yet');
+
+    if (stripeSummary && stripeEventsBody && stripeSummaryBadge && stripeEventsBadge) {
+      var sponsorships = lifecycle.sponsorships || [];
+      var stripeEvents = lifecycle.stripeEvents || [];
+      var byStatus = {};
+      sponsorships.forEach(function(s) {
+        var k = String(s.status || 'unknown');
+        byStatus[k] = (byStatus[k] || 0) + 1;
+      });
+      var rows = Object.entries(byStatus).sort(function(a,b){ return b[1]-a[1]; });
+      stripeSummaryBadge.textContent = sponsorships.length + ' sponsorships';
+      stripeSummary.innerHTML = rows.length
+        ? rows.map(function(r) {
+            return '<div class="cache-item"><span class="cache-city">' + r[0] + '</span><span class="cache-count">' + r[1] + '</span></div>';
+          }).join('')
+        : emptyHTML('No sponsorship lifecycle rows yet');
+
+      stripeEventsBadge.textContent = stripeEvents.length + ' recent';
+      stripeEventsBody.innerHTML = stripeEvents.length
+        ? '<table class="data-table"><thead><tr><th>Time</th><th>Event</th><th>Status</th><th>Sponsorship</th><th>Error</th></tr></thead><tbody>' +
+          stripeEvents.slice(0, 60).map(function(e) {
+            var sid = e.sponsorship_id ? ('#' + e.sponsorship_id) : '--';
+            return '<tr>' +
+              '<td style="font-family:var(--mono);font-size:.72rem;color:var(--muted)">' + timeAgo(e.created_at) + '</td>' +
+              '<td style="font-family:var(--mono);font-size:.72rem">' + (e.event_type || '--') + '</td>' +
+              '<td><span class="status-badge ' + renderStripeStatusClass(e.processing_status) + '">' + (e.processing_status || '--') + '</span></td>' +
+              '<td style="font-family:var(--mono);font-size:.72rem;color:var(--muted)">' + sid + '</td>' +
+              '<td style="max-width:220px;white-space:normal;color:var(--muted);font-size:.74rem">' + ((e.processing_error || '--').toString().slice(0, 220)) + '</td>' +
+            '</tr>';
+          }).join('') + '</tbody></table>'
+        : emptyHTML('No Stripe webhook events yet');
+    }
   } catch (e) {
     paidBody.innerHTML = '<div class="empty" style="padding:24px;color:var(--accent)">Finance unavailable: ' + e.message + '</div>';
     cancelledBody.innerHTML = '<div class="empty" style="padding:24px;color:var(--accent)">Finance unavailable: ' + e.message + '</div>';
+    if (stripeSummary) stripeSummary.innerHTML = '<div class="empty" style="padding:24px;color:var(--accent)">Stripe lifecycle unavailable: ' + e.message + '</div>';
+    if (stripeEventsBody) stripeEventsBody.innerHTML = '<div class="empty" style="padding:24px;color:var(--accent)">Stripe events unavailable: ' + e.message + '</div>';
+    if (stripeSummaryBadge) stripeSummaryBadge.textContent = 'unavailable';
+    if (stripeEventsBadge) stripeEventsBadge.textContent = 'unavailable';
   }
 }
 

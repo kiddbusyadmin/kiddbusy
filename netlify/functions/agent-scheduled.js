@@ -160,19 +160,19 @@ async function executeTool(name, input, log) {
         const before = Array.isArray(beforeRows) && beforeRows.length ? beforeRows[0] : null;
         await dbUpdate('sponsorships', input.id, { status: input.status });
         let paymentEmail = null;
-        if (String(input.status || '').toLowerCase() === 'active') {
+        if (String(input.status || '').toLowerCase() === 'approved_awaiting_payment') {
           const prev = String((before && before.status) || '').toLowerCase();
-          if (prev !== 'active') {
+          if (prev !== 'approved_awaiting_payment' && prev !== 'active' && prev !== 'cancel_at_period_end') {
             try {
               paymentEmail = await triggerSponsorshipPaymentRequestEmail({
-                sponsorship: Object.assign({}, before || {}, { id: input.id, status: 'active' }),
+                sponsorship: Object.assign({}, before || {}, { id: input.id, status: 'approved_awaiting_payment' }),
                 activationSource: 'scheduled_agent'
               });
             } catch (emailErr) {
               paymentEmail = { sent: false, error: emailErr.message || 'Payment email failed' };
             }
           } else {
-            paymentEmail = { sent: false, skipped: true, reason: 'already_active' };
+            paymentEmail = { sent: false, skipped: true, reason: 'already_approved_or_active' };
           }
         }
         let financeSnapshot = null;

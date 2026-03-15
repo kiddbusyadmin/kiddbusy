@@ -31,9 +31,11 @@ function paymentLinkFromEnv(planKey) {
 }
 
 async function createStripeCheckoutLink(sponsorship, plan) {
-  const staticLink = paymentLinkFromEnv(plan.key);
-  if (staticLink) return staticLink;
+  // For full automation, prefer dynamic Checkout Sessions so metadata can map
+  // webhook events back to a specific sponsorship row.
   if (!STRIPE_SECRET_KEY) {
+    const staticLink = paymentLinkFromEnv(plan.key);
+    if (staticLink) return staticLink;
     throw new Error('Stripe checkout is not configured (missing STRIPE_SECRET_KEY or payment links)');
   }
 
@@ -55,6 +57,7 @@ async function createStripeCheckoutLink(sponsorship, plan) {
   params.set('line_items[0][price_data][product_data][name]', `KiddBusy ${plan.title}`);
   params.set('line_items[0][price_data][product_data][description]', productDescription);
   params.set('metadata[sponsorship_id]', String(sponsorship.id || ''));
+  params.set('client_reference_id', String(sponsorship.id || ''));
   params.set('metadata[plan]', plan.key);
   params.set('metadata[business_name]', businessName);
   params.set('metadata[first_name]', firstName);

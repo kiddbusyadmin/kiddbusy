@@ -2448,7 +2448,7 @@ function submitAdvertise() {
     billing_city: document.getElementById('ad-bill-city').value.trim(),
     billing_state: document.getElementById('ad-bill-state').value.trim(),
     billing_zip: document.getElementById('ad-bill-zip').value.trim(),
-    status: 'pending'
+    status: 'pending_review'
   };
 
   supabase.from('sponsorships').insert(payload).then(({ error }) => {

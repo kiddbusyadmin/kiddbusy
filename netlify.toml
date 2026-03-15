@@ -53,6 +53,9 @@
 [functions.sponsor-banners]
   timeout = 30
 
+[functions.stripe-webhook]
+  timeout = 30
+
 [functions.revenue-consensus]
   timeout = 60
 
@@ -163,6 +166,11 @@
 [[redirects]]
   from = "/api/sponsor-banners"
   to = "/.netlify/functions/sponsor-banners"
+  status = 200
+
+[[redirects]]
+  from = "/api/stripe-webhook"
+  to = "/.netlify/functions/stripe-webhook"
   status = 200
 
 [[redirects]]

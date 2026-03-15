@@ -9,7 +9,16 @@ const { buildFinanceSnapshot, upsertFinanceSnapshot } = require('./_accounting-c
 const ALLOWED_TABLES = {
   submissions: new Set(['pending', 'approved', 'rejected']),
   reviews: new Set(['pending', 'approved', 'rejected']),
-  sponsorships: new Set(['pending', 'active', 'cancelled'])
+  sponsorships: new Set([
+    'pending',
+    'pending_review',
+    'approved_awaiting_payment',
+    'active',
+    'past_due',
+    'cancel_at_period_end',
+    'cancelled',
+    'rejected'
+  ])
 };
 
 function json(statusCode, payload) {
@@ -228,6 +237,64 @@ exports.handler = async (event) => {
     }
   }
 
+  if (action === 'query_sponsorship_lifecycle') {
+    const safeLimit = Math.min(Math.max(Number(limit) || 300, 1), 1000);
+    const filters = ['select=*', 'order=updated_at.desc.nullslast,created_at.desc', `limit=${safeLimit}`];
+    const queryUrl = `${SUPABASE_URL}/rest/v1/sponsorships?${filters.join('&')}`;
+    try {
+      const response = await fetch(queryUrl, {
+        method: 'GET',
+        headers: {
+          apikey: SUPABASE_SERVICE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const text = await response.text();
+      let data = [];
+      try {
+        data = text ? JSON.parse(text) : [];
+      } catch {
+        data = [];
+      }
+      if (!response.ok) {
+        return json(response.status, { error: 'Supabase query failed', details: data });
+      }
+      return json(200, { count: Array.isArray(data) ? data.length : 0, sponsorships: data });
+    } catch (err) {
+      return json(500, { error: err.message || 'Unexpected error' });
+    }
+  }
+
+  if (action === 'query_stripe_events') {
+    const safeLimit = Math.min(Math.max(Number(limit) || 150, 1), 500);
+    const filters = ['select=*', 'order=created_at.desc', `limit=${safeLimit}`];
+    const queryUrl = `${SUPABASE_URL}/rest/v1/stripe_events?${filters.join('&')}`;
+    try {
+      const response = await fetch(queryUrl, {
+        method: 'GET',
+        headers: {
+          apikey: SUPABASE_SERVICE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const text = await response.text();
+      let data = [];
+      try {
+        data = text ? JSON.parse(text) : [];
+      } catch {
+        data = [];
+      }
+      if (!response.ok) {
+        return json(response.status, { error: 'Supabase query failed', details: data });
+      }
+      return json(200, { count: Array.isArray(data) ? data.length : 0, events: data });
+    } catch (err) {
+      return json(500, { error: err.message || 'Unexpected error' });
+    }
+  }
+
   if (action !== 'update') {
     return json(400, { error: 'Unsupported action' });
   }
@@ -312,6 +379,15 @@ exports.handler = async (event) => {
       }
     }
 
+    const patchBody = { status: nextStatus };
+    if (table === 'sponsorships' && nextStatus === 'approved_awaiting_payment') {
+      patchBody.approved_at = new Date().toISOString();
+      patchBody.payment_error = null;
+    }
+    if (table === 'sponsorships' && (nextStatus === 'cancelled' || nextStatus === 'past_due')) {
+      patchBody.canceled_at = nextStatus === 'cancelled' ? new Date().toISOString() : null;
+    }
+
     const response = await fetch(url, {
       method: 'PATCH',
       headers: {
@@ -320,7 +396,7 @@ exports.handler = async (event) => {
         'Content-Type': 'application/json',
         'Prefer': 'return=representation'
       },
-      body: JSON.stringify({ status: nextStatus })
+      body: JSON.stringify(patchBody)
     });
 
     const text = await response.text();
@@ -341,12 +417,12 @@ exports.handler = async (event) => {
     if (table === 'reviews' && nextStatus === 'approved') {
       cleanup = await purgePlaceholderReviewsOnFirstOrganicApprove(id);
     }
-    if (table === 'sponsorships' && nextStatus === 'active') {
+    if (table === 'sponsorships' && nextStatus === 'approved_awaiting_payment') {
       const prev = String((sponsorshipBefore && sponsorshipBefore.status) || '').toLowerCase();
-      const becameActive = prev !== 'active';
-      if (becameActive) {
+      const shouldSendPayment = prev !== 'approved_awaiting_payment' && prev !== 'active' && prev !== 'cancel_at_period_end';
+      if (shouldSendPayment) {
         const updated = Array.isArray(data) && data.length ? data[0] : null;
-        const sponsorshipRow = updated || sponsorshipBefore || { id, status: nextStatus };
+        const sponsorshipRow = updated || sponsorshipBefore || { id, status: nextStatus, approved_at: new Date().toISOString() };
         try {
           paymentEmail = await triggerSponsorshipPaymentRequestEmail({
             sponsorship: sponsorshipRow,
@@ -356,7 +432,7 @@ exports.handler = async (event) => {
           paymentEmail = { sent: false, error: emailErr.message || 'Payment email failed' };
         }
       } else {
-        paymentEmail = { sent: false, skipped: true, reason: 'already_active' };
+        paymentEmail = { sent: false, skipped: true, reason: 'already_approved_or_active' };
       }
     }
 
