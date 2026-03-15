@@ -33,7 +33,7 @@
   timeout = 30
 
 [functions.blog-posts]
-  timeout = 30
+  timeout = 60
 
 [functions.geo-city]
   timeout = 10

@@ -1,6 +1,8 @@
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const CITY_STATE_TTL_MS = 6 * 60 * 60 * 1000;
+const EVENTS_MIN_RENDER_COUNT = 2;
+const searchFunction = require('./search');
 
 const TOP_25_CITIES_BY_POPULATION = [
   'New York',
@@ -43,14 +45,16 @@ function json(statusCode, payload) {
   };
 }
 
-async function sbGet(path) {
+async function sbRequest(path, method, body, prefer) {
   const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    method: 'GET',
+    method: method || 'GET',
     headers: {
       apikey: SUPABASE_SERVICE_KEY,
       Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-      'Content-Type': 'application/json'
-    }
+      'Content-Type': 'application/json',
+      Prefer: prefer || 'return=representation'
+    },
+    body: body == null ? undefined : JSON.stringify(body)
   });
   const text = await response.text();
   let data = null;
@@ -60,6 +64,10 @@ async function sbGet(path) {
     data = text;
   }
   return { response, data };
+}
+
+async function sbGet(path) {
+  return sbRequest(path, 'GET', null, 'return=representation');
 }
 
 function normalizeState(value) {
@@ -175,6 +183,80 @@ function sortPosts(rows) {
   const out = rows.slice();
   out.sort((a, b) => String((b && b.published_at) || '').localeCompare(String((a && a.published_at) || '')));
   return out;
+}
+
+function normalizeHubEventRows(items, cityName) {
+  if (!Array.isArray(items)) return [];
+  const out = [];
+  const nowIso = new Date().toISOString();
+  for (let i = 0; i < items.length; i += 1) {
+    const row = items[i] || {};
+    const name = String(row.name || '').trim().slice(0, 180);
+    const sourceUrl = String(row.source_url || '').trim().slice(0, 500);
+    const month = String(row.month || '').trim().slice(0, 6).toUpperCase();
+    const day = String(row.day || '').trim().slice(0, 4);
+    const detail = String(row.detail || '').trim().slice(0, 420);
+    if (!name || !sourceUrl || !month || !day || !detail) continue;
+    out.push({
+      city: cityName,
+      month: month,
+      day: day,
+      name: name,
+      detail: detail,
+      is_free: !!row.free,
+      source_url: sourceUrl,
+      start_date: toIsoDate(row.start_date) || null,
+      end_date: toIsoDate(row.end_date) || null,
+      ongoing: !!row.ongoing,
+      last_refreshed: nowIso
+    });
+  }
+  return out.slice(0, 8);
+}
+
+function parseSearchPayload(functionResult) {
+  if (!functionResult || !functionResult.body) return [];
+  let parsed = null;
+  try {
+    parsed = JSON.parse(functionResult.body);
+  } catch {
+    parsed = null;
+  }
+  if (!parsed || !Array.isArray(parsed.content) || !parsed.content.length) return [];
+  const first = parsed.content[0] || {};
+  const text = String(first.text || '').trim();
+  if (!text) return [];
+  let arr = null;
+  try {
+    arr = JSON.parse(text);
+  } catch {
+    arr = null;
+  }
+  return Array.isArray(arr) ? arr : [];
+}
+
+async function warmCityEvents(cityName) {
+  const event = {
+    httpMethod: 'POST',
+    body: JSON.stringify({ city: cityName, type: 'events' })
+  };
+  const response = await searchFunction.handler(event, {});
+  if (!response || Number(response.statusCode) !== 200) {
+    return { ok: false, inserted: 0, reason: 'search_unavailable' };
+  }
+  const items = parseSearchPayload(response);
+  const rows = normalizeHubEventRows(items, cityName);
+  if (rows.length < EVENTS_MIN_RENDER_COUNT) {
+    return { ok: false, inserted: 0, reason: 'insufficient_events' };
+  }
+
+  const cityPrefix = `${cityName}%`;
+  await sbRequest(`events?city=ilike.${encodeURIComponent(cityPrefix)}`, 'DELETE', null, 'return=minimal');
+  const insert = await sbRequest('events', 'POST', rows, 'return=representation');
+  if (!insert.response.ok || !Array.isArray(insert.data)) {
+    return { ok: false, inserted: 0, reason: 'db_insert_failed' };
+  }
+  return { ok: true, inserted: insert.data.length };
 }
 
 async function loadHubDatasets() {
@@ -299,9 +381,20 @@ exports.handler = async (event) => {
   }
 
   if (cityHub) {
-    const datasets = await loadHubDatasets();
     const city = resolveHubCity(cityHub);
-    const hub = buildCityHub(city, datasets, cityStateMap, { currentSlug: currentSlug });
+    let datasets = await loadHubDatasets();
+    let hub = buildCityHub(city, datasets, cityStateMap, { currentSlug: currentSlug });
+    if ((hub.summary && Number(hub.summary.events_count || 0) < EVENTS_MIN_RENDER_COUNT)) {
+      try {
+        const warmed = await warmCityEvents(city);
+        if (warmed.ok) {
+          datasets = await loadHubDatasets();
+          hub = buildCityHub(city, datasets, cityStateMap, { currentSlug: currentSlug });
+          hub.cache_warmed = true;
+          hub.cache_warm_inserted = warmed.inserted;
+        }
+      } catch (_) {}
+    }
     return json(200, { success: true, hub: hub });
   }
 
