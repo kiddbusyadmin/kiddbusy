@@ -589,6 +589,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 
   <div class="panel" style="margin-top:20px">
     <div class="panel-header">
+      <div class="panel-title">Recently Verified Claims (Review Queue)</div>
+      <div class="panel-badge" id="ownerkpi-verified-queue-count">--</div>
+    </div>
+    <div class="panel-body" id="ownerkpi-verified-queue-body">
+      <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:20px">
+    <div class="panel-header">
       <div class="panel-title">Owner Contact Inbox</div>
       <div class="panel-badge" id="ownerkpi-contact-count">--</div>
     </div>
@@ -1941,6 +1951,11 @@ async function loadOwnerKpis() {
     var abandonRate = starts > 0 ? Math.round((abandons / starts) * 100) : 0;
 
     var claimsRes = await sb.from('owner_claims').select('status, owner_email, listing_id, created_at').order('created_at', { ascending: false }).limit(200);
+    var verifiedClaimsRes = await sb.from('owner_claims')
+      .select('claim_id, listing_id, owner_name, owner_email, status, verification_method, verified_at, created_at')
+      .not('verified_at', 'is', null)
+      .order('verified_at', { ascending: false })
+      .limit(100);
     var changesRes = await sb.from('owner_change_requests').select('status, change_type, created_at').order('created_at', { ascending: false }).limit(200);
     var contactsRes = await fetch('/.netlify/functions/db-proxy', {
       method: 'POST',
@@ -1973,6 +1988,36 @@ async function loadOwnerKpis() {
           return '<div class=\"cache-item\"><span class=\"cache-city\">' + r[0] + '</span><span class=\"cache-count\">' + r[1] + '</span></div>';
         }).join('')
       : emptyHTML('No owner claims yet');
+
+    var verifiedClaims = verifiedClaimsRes.data || [];
+    var verifiedListingIds = Array.from(new Set(verifiedClaims.map(function(c) { return c.listing_id; }).filter(Boolean)));
+    var listingMap = {};
+    if (verifiedListingIds.length) {
+      var listingRes = await sb.from('listings').select('listing_id,name,city,website').in('listing_id', verifiedListingIds);
+      (listingRes.data || []).forEach(function(l) {
+        listingMap[String(l.listing_id)] = l;
+      });
+    }
+    document.getElementById('ownerkpi-verified-queue-count').textContent = verifiedClaims.length + ' recent';
+    document.getElementById('ownerkpi-verified-queue-body').innerHTML = verifiedClaims.length
+      ? '<table class=\"data-table\"><thead><tr><th>Verified</th><th>Business</th><th>City</th><th>Owner</th><th>Email</th><th>Method</th><th>Status</th><th>Claim ID</th></tr></thead><tbody>' +
+        verifiedClaims.slice(0, 60).map(function(c) {
+          var listing = listingMap[String(c.listing_id)] || {};
+          var businessName = listing.name || ('Listing #' + c.listing_id);
+          var city = listing.city || '--';
+          var method = c.verification_method || '--';
+          return '<tr>' +
+            '<td style=\"font-family:var(--mono);font-size:.72rem;color:var(--muted)\">' + timeAgo(c.verified_at) + '</td>' +
+            '<td>' + businessName + '</td>' +
+            '<td style=\"color:var(--muted)\">' + city + '</td>' +
+            '<td>' + (c.owner_name || '--') + '</td>' +
+            '<td style=\"color:var(--muted);font-size:.75rem\">' + (c.owner_email || '--') + '</td>' +
+            '<td style=\"font-family:var(--mono);font-size:.72rem\">' + method + '</td>' +
+            '<td><span class=\"status-badge status-' + (c.status || 'unknown') + '\">' + (c.status || 'unknown') + '</span></td>' +
+            '<td style=\"font-family:var(--mono);font-size:.72rem;color:var(--muted)\">#' + c.claim_id + '</td>' +
+          '</tr>';
+        }).join('') + '</tbody></table>'
+      : emptyHTML('No verified owner claims yet');
 
     var eventsPreview = ownerEvents.slice(0, 80);
     document.getElementById('ownerkpi-events-body').innerHTML = eventsPreview.length
@@ -2014,6 +2059,8 @@ async function loadOwnerKpis() {
     document.getElementById('ownerkpi-funnel-body').innerHTML = '<div class=\"empty\" style=\"padding:24px;color:var(--accent)\">Owner KPI unavailable: ' + e.message + '</div>';
     document.getElementById('ownerkpi-claims-body').innerHTML = emptyHTML('Run owner claims migration first');
     document.getElementById('ownerkpi-events-body').innerHTML = emptyHTML('No owner event data yet');
+    document.getElementById('ownerkpi-verified-queue-body').innerHTML = emptyHTML('No verified claims available');
+    document.getElementById('ownerkpi-verified-queue-count').textContent = 'unavailable';
     document.getElementById('ownerkpi-contact-body').innerHTML = emptyHTML('No owner contact messages yet');
     document.getElementById('ownerkpi-contact-count').textContent = 'unavailable';
   }
