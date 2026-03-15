@@ -1688,7 +1688,8 @@ function eventSourceDomain(url) {
 
 async function loadEventSourceCatalog() {
   try {
-    var res = await sb.from('events').select('source_url, city').order('last_refreshed', { ascending: false }).limit(4000);
+    // Pull a larger, city-mixed slice so one recently-refreshed city does not dominate samples.
+    var res = await sb.from('events').select('source_url, city').order('city', { ascending: true }).limit(8000);
     var rows = res.data || [];
     var withUrls = rows.filter(function(r) { return r && r.source_url; });
     if (!withUrls.length) {
@@ -1699,13 +1700,20 @@ async function loadEventSourceCatalog() {
 
     var domainCounts = {};
     var domainSamples = {};
+    var domainSampleCities = {};
     withUrls.forEach(function(r) {
       var domain = eventSourceDomain(r.source_url);
       if (!domain) return;
       domainCounts[domain] = (domainCounts[domain] || 0) + 1;
       if (!domainSamples[domain]) domainSamples[domain] = [];
-      if (domainSamples[domain].length < 3) {
-        domainSamples[domain].push({ url: r.source_url, city: r.city || '--' });
+      if (!domainSampleCities[domain]) domainSampleCities[domain] = {};
+      var city = r.city || '--';
+      var cityKey = String(city).toLowerCase();
+
+      // Prefer unique-city examples so the table reflects multi-city coverage.
+      if (domainSamples[domain].length < 3 && !domainSampleCities[domain][cityKey]) {
+        domainSamples[domain].push({ url: r.source_url, city: city });
+        domainSampleCities[domain][cityKey] = true;
       }
     });
 
