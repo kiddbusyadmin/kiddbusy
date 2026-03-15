@@ -201,6 +201,33 @@ function buildCityContextBlock(city, rows) {
   return lines.join('\n');
 }
 
+function buildLocalSeoKeywordPlan(city) {
+  var c = String(city || '').trim();
+  if (!c) return [];
+  return [
+    'toddler activities ' + c + ' nc',
+    'things to do with toddlers in ' + c,
+    'free toddler activities ' + c + ' nc',
+    'indoor toddler activities ' + c + ' nc',
+    'outdoor toddler activities ' + c + ' nc',
+    'weekend toddler activities ' + c + ' nc',
+    'rainy day toddler activities ' + c + ' nc',
+    c + ' toddler parks and playgrounds',
+    c + ' library activities for toddlers',
+    c + ' family activities this weekend',
+    c + ' kids activities this weekend',
+    c + ' free family activities this weekend',
+    c + ' activities for 2 year olds',
+    c + ' activities for 3 year olds',
+    c + ' activities for 4 year olds',
+    c + ' stroller friendly activities',
+    c + ' free things to do with kids',
+    c + ' nature walks for toddlers',
+    c + ' splash pad and water play for toddlers',
+    c + ' playgrounds worth visiting'
+  ];
+}
+
 function countNameMentions(text, names) {
   var hay = String(text || '').toLowerCase();
   if (!hay) return 0;
@@ -440,11 +467,12 @@ function normalizePost(rawPost, cities) {
   };
 }
 
-async function generateBatch(cities, existingTitles, batchSize, preferredCity) {
+async function generateBatch(cities, existingTitles, batchSize, preferredCity, keywordTargets) {
   var targetCity = pickTargetCity(cities, preferredCity);
   var localRows = await getCityListingContext(targetCity, 8);
   var localNames = localRows.map(function (r) { return String((r && r.name) || '').trim(); }).filter(Boolean);
   var cityContext = buildCityContextBlock(targetCity, localRows);
+  var targets = Array.isArray(keywordTargets) ? keywordTargets.filter(Boolean).slice(0, batchSize) : [];
 
   var system = [
     'You are the KiddBusy CMO content agent.',
@@ -460,6 +488,9 @@ async function generateBatch(cities, existingTitles, batchSize, preferredCity) {
   var prompt = [
     'Generate exactly ' + String(batchSize) + ' unique blog posts for KiddBusy as a JSON array.',
     'Primary city for all posts in this batch: ' + targetCity + '.',
+    (targets.length
+      ? ('SEO target keywords for this batch (use each at most once):\n- ' + targets.join('\n- '))
+      : 'SEO target keywords for this batch: create high-intent local family search variants naturally.'),
     cityContext,
     'Hard rules:',
     '- 220-380 words per post in body_html.',
@@ -468,6 +499,7 @@ async function generateBatch(cities, existingTitles, batchSize, preferredCity) {
     '- tags must be 4-6 items.',
     '- read_minutes integer 3-10.',
     '- city must be exactly "' + targetCity + '" (not null).',
+    '- Each post must target one keyword phrase and include that exact phrase in the title and first paragraph.',
     '- Include at least 3 specific free/public spaces by exact name from the Known local listings block.',
     '- Do not mention businesses, private venues, museums, zoos, ticketed attractions, classes, or paid admissions.',
     '- Include a <h2>Local Picks</h2> section with a <ul> and at least 3 <li> entries.',
@@ -752,6 +784,7 @@ async function runCmoBlog(event) {
       (repairAny ? 3 : (isCron ? 25 : 1))
     );
     var targetCity = Object.prototype.hasOwnProperty.call(body, 'target_city') ? String(body.target_city || '').trim() : '';
+    var seoKeywordTheme = String(body.seo_keyword_theme || '').trim().toLowerCase();
 
     var cities = await getCities();
     var identity = await getIdentitySets();
@@ -835,6 +868,11 @@ async function runCmoBlog(event) {
     var generated = [];
     var generationErrors = [];
     var cityCursor = 0;
+    var keywordCursor = 0;
+    var keywordPlan = [];
+    if (targetCity && (!seoKeywordTheme || seoKeywordTheme === 'local_toddler')) {
+      keywordPlan = buildLocalSeoKeywordPlan(targetCity);
+    }
     while (remaining > 0) {
       var preferredCity = targetCity;
       if (plannedCityRotation.length) {
@@ -843,8 +881,13 @@ async function runCmoBlog(event) {
       }
       var batchSize = plannedCityRotation.length ? 1 : (remaining > 5 ? 5 : remaining);
       var batch = [];
+      var batchKeywords = [];
+      if (keywordPlan.length) {
+        batchKeywords = keywordPlan.slice(keywordCursor, keywordCursor + batchSize);
+        keywordCursor += batchKeywords.length;
+      }
       try {
-        batch = await generateBatch(cities, identity.titles, batchSize, preferredCity);
+        batch = await generateBatch(cities, identity.titles, batchSize, preferredCity, batchKeywords);
       } catch (e) {
         generationErrors.push('generate: ' + String(e.message || e));
         break;
