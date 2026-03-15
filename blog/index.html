@@ -60,12 +60,11 @@ nav {
   border: 1px solid #e6dcff;
   border-radius: 10px;
   background: #faf7ff;
-  font-size: .84rem;
+  font-size: .86rem;
   font-weight: 800;
   color: #2f1f53;
 }
 .city-chip:hover { border-color: #d2c0ff; color: var(--plum); }
-.city-chip-meta { color: var(--muted); font-size: .72rem; font-weight: 700; margin-top: 3px; }
 .main-col { min-width: 0; }
 .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .card {
@@ -212,13 +211,9 @@ function renderHubs(hubs, refreshedDate) {
   hubsList.innerHTML = rows.map(function(h) {
     var display = String(h.city_display || h.city || '').trim();
     var url = String(h.url || ('/blog/city/' + encodeURIComponent(h.city_slug || ''))).trim();
-    var listings = h.summary && Number(h.summary.listings_count || 0);
-    var events = h.summary && Number(h.summary.events_count || 0);
-    var posts = h.summary && Number(h.summary.posts_count || 0);
     return [
       '<a class=\"city-chip\" href=\"' + esc(url) + '\">',
       '  <div>' + esc(display) + '</div>',
-      '  <div class=\"city-chip-meta\">L: ' + listings + ' | E: ' + events + ' | P: ' + posts + '</div>',
       '</a>'
     ].join('');
   }).join('');
