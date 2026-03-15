@@ -1,6 +1,35 @@
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const CITY_STATE_TTL_MS = 6 * 60 * 60 * 1000;
+
+const TOP_25_CITIES_BY_POPULATION = [
+  'New York',
+  'Los Angeles',
+  'Chicago',
+  'Houston',
+  'Phoenix',
+  'Philadelphia',
+  'San Antonio',
+  'San Diego',
+  'Dallas',
+  'Jacksonville',
+  'Austin',
+  'Fort Worth',
+  'San Jose',
+  'Columbus',
+  'Charlotte',
+  'Indianapolis',
+  'San Francisco',
+  'Seattle',
+  'Denver',
+  'Washington',
+  'Boston',
+  'El Paso',
+  'Nashville',
+  'Detroit',
+  'Oklahoma City'
+];
+
 let cityStateCache = { at: 0, map: {} };
 
 function json(statusCode, payload) {
@@ -42,6 +71,31 @@ function normalizeCityBase(value) {
   return String(value || '').split(',')[0].trim();
 }
 
+function cityKey(value) {
+  return normalizeCityBase(value).toLowerCase();
+}
+
+function slugifyCity(value) {
+  return normalizeCityBase(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 80);
+}
+
+function withCityState(cityRaw, cityStateMap) {
+  const raw = String(cityRaw || '').trim();
+  if (!raw) return '';
+  const parts = raw.split(',').map((p) => p.trim()).filter(Boolean);
+  const city = parts[0] || '';
+  const explicitState = normalizeState(parts[1] || '');
+  if (city && explicitState) return `${city}, ${explicitState}`;
+  const inferred = cityStateMap[String(city || '').toLowerCase()] || '';
+  return inferred ? `${city}, ${inferred}` : city;
+}
+
 async function loadCityStateMap() {
   const now = Date.now();
   if (cityStateCache.at && (now - cityStateCache.at) < CITY_STATE_TTL_MS) {
@@ -64,22 +118,159 @@ async function loadCityStateMap() {
   return map;
 }
 
-function withCityState(cityRaw, cityStateMap) {
-  const raw = String(cityRaw || '').trim();
-  if (!raw) return '';
-  const parts = raw.split(',').map((p) => p.trim()).filter(Boolean);
-  const city = parts[0] || '';
-  const explicitState = normalizeState(parts[1] || '');
-  if (city && explicitState) return `${city}, ${explicitState}`;
-  const inferred = cityStateMap[String(city || '').toLowerCase()] || '';
-  return inferred ? `${city}, ${inferred}` : city;
-}
-
 function addCityDisplay(post, cityStateMap) {
   const row = post || {};
+  const base = normalizeCityBase(row.city);
   return Object.assign({}, row, {
-    city_display: withCityState(row.city, cityStateMap)
+    city_display: withCityState(row.city, cityStateMap),
+    city_slug: slugifyCity(base),
+    city_hub_url: base ? `/blog/city/${encodeURIComponent(slugifyCity(base))}` : null
   });
+}
+
+function toIsoDate(value) {
+  const v = String(value || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '';
+}
+
+function isPastEventRow(row, todayIso) {
+  const start = toIsoDate(row.start_date);
+  const end = toIsoDate(row.end_date);
+  const ongoing = !!row.ongoing;
+  if (ongoing && end) return end < todayIso;
+  if (end) return end < todayIso;
+  if (start) return start < todayIso;
+  return false;
+}
+
+function sortListings(rows) {
+  const out = rows.slice();
+  out.sort((a, b) => {
+    const as = a && a.is_sponsored ? 1 : 0;
+    const bs = b && b.is_sponsored ? 1 : 0;
+    if (bs !== as) return bs - as;
+    const ar = Number(a && a.rating) || 0;
+    const br = Number(b && b.rating) || 0;
+    if (br !== ar) return br - ar;
+    return String((a && a.name) || '').localeCompare(String((b && b.name) || ''));
+  });
+  return out;
+}
+
+function sortEvents(rows) {
+  const out = rows.slice();
+  out.sort((a, b) => {
+    const ad = toIsoDate(a && a.start_date);
+    const bd = toIsoDate(b && b.start_date);
+    if (ad && bd && ad !== bd) return ad.localeCompare(bd);
+    const ar = String((a && a.last_refreshed) || '');
+    const br = String((b && b.last_refreshed) || '');
+    if (ar !== br) return br.localeCompare(ar);
+    return String((a && a.name) || '').localeCompare(String((b && b.name) || ''));
+  });
+  return out;
+}
+
+function sortPosts(rows) {
+  const out = rows.slice();
+  out.sort((a, b) => String((b && b.published_at) || '').localeCompare(String((a && a.published_at) || '')));
+  return out;
+}
+
+async function loadHubDatasets() {
+  const [listings, events, posts] = await Promise.all([
+    sbGet('listings?select=listing_id,name,city,category,address,website,rating,is_sponsored,status&status=eq.active&limit=10000'),
+    sbGet('events?select=id,city,month,day,name,detail,is_free,source_url,start_date,end_date,ongoing,last_refreshed&limit=10000'),
+    sbGet('blog_posts?select=id,slug,title,excerpt,city,published_at,tags&status=eq.published&order=published_at.desc&limit=5000')
+  ]);
+
+  return {
+    listings: (listings.response.ok && Array.isArray(listings.data)) ? listings.data : [],
+    events: (events.response.ok && Array.isArray(events.data)) ? events.data : [],
+    posts: (posts.response.ok && Array.isArray(posts.data)) ? posts.data : []
+  };
+}
+
+function buildCityHub(cityName, datasets, cityStateMap, opts) {
+  const options = opts || {};
+  const base = normalizeCityBase(cityName);
+  const key = cityKey(base);
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const currentSlug = String(options.currentSlug || '').trim().toLowerCase();
+
+  const listings = sortListings((datasets.listings || []).filter((r) => cityKey(r && r.city) === key));
+  const events = sortEvents((datasets.events || []).filter((r) => cityKey(r && r.city) === key && !!String((r && r.source_url) || '').trim() && !isPastEventRow(r || {}, todayIso)));
+  const posts = sortPosts((datasets.posts || []).filter((r) => cityKey(r && r.city) === key && String((r && r.slug) || '').toLowerCase() !== currentSlug));
+
+  const relatedOtherCities = [];
+  for (let i = 0; i < TOP_25_CITIES_BY_POPULATION.length; i += 1) {
+    const c = TOP_25_CITIES_BY_POPULATION[i];
+    const cKey = cityKey(c);
+    if (!cKey || cKey === key) continue;
+    const count = (datasets.posts || []).filter((r) => cityKey(r && r.city) === cKey).length;
+    relatedOtherCities.push({ city: c, post_count: count, city_slug: slugifyCity(c), city_display: withCityState(c, cityStateMap) });
+  }
+  relatedOtherCities.sort((a, b) => b.post_count - a.post_count);
+
+  return {
+    city: base,
+    city_display: withCityState(base, cityStateMap),
+    city_slug: slugifyCity(base),
+    refreshed_date: todayIso,
+    summary: {
+      listings_count: listings.length,
+      events_count: events.length,
+      posts_count: posts.length
+    },
+    top_listings: listings.slice(0, 8).map((r) => ({
+      listing_id: r.listing_id,
+      name: r.name,
+      category: r.category,
+      address: r.address,
+      website: r.website,
+      rating: r.rating,
+      is_sponsored: !!r.is_sponsored
+    })),
+    latest_events: events.slice(0, 8).map((r) => ({
+      event_id: r.id,
+      month: r.month,
+      day: r.day,
+      name: r.name,
+      detail: r.detail,
+      is_free: !!r.is_free,
+      source_url: r.source_url,
+      start_date: r.start_date,
+      end_date: r.end_date,
+      ongoing: !!r.ongoing
+    })),
+    related_posts: posts.slice(0, 8).map((p) => ({
+      slug: p.slug,
+      title: p.title,
+      excerpt: p.excerpt,
+      city: p.city,
+      city_display: withCityState(p.city, cityStateMap),
+      city_slug: slugifyCity(p.city),
+      city_hub_url: '/blog/city/' + encodeURIComponent(slugifyCity(p.city)),
+      published_at: p.published_at
+    })),
+    related_city_hubs: relatedOtherCities.slice(0, 8).map((c) => ({
+      city: c.city,
+      city_display: c.city_display,
+      city_slug: c.city_slug,
+      url: '/blog/city/' + encodeURIComponent(c.city_slug)
+    }))
+  };
+}
+
+function resolveHubCity(value) {
+  const raw = normalizeCityBase(value);
+  const key = cityKey(raw);
+  if (!raw) return '';
+  for (let i = 0; i < TOP_25_CITIES_BY_POPULATION.length; i += 1) {
+    const c = TOP_25_CITIES_BY_POPULATION[i];
+    if (cityKey(c) === key || slugifyCity(c) === raw.toLowerCase()) return c;
+  }
+  return raw;
 }
 
 exports.handler = async (event) => {
@@ -93,6 +284,9 @@ exports.handler = async (event) => {
   const params = event.queryStringParameters || {};
   const slug = String(params.slug || '').trim();
   const limit = Math.min(Math.max(Number(params.limit) || 25, 1), 100);
+  const cityHub = String(params.city_hub || '').trim();
+  const cityHubs = String(params.city_hubs || '').trim() === '1';
+  const currentSlug = String(params.current_slug || '').trim();
   const cityStateMap = await loadCityStateMap();
 
   if (slug) {
@@ -102,6 +296,34 @@ exports.handler = async (event) => {
     const post = Array.isArray(data) && data.length ? data[0] : null;
     if (!post) return json(404, { error: 'Post not found' });
     return json(200, { success: true, post: addCityDisplay(post, cityStateMap) });
+  }
+
+  if (cityHub) {
+    const datasets = await loadHubDatasets();
+    const city = resolveHubCity(cityHub);
+    const hub = buildCityHub(city, datasets, cityStateMap, { currentSlug: currentSlug });
+    return json(200, { success: true, hub: hub });
+  }
+
+  if (cityHubs) {
+    const datasets = await loadHubDatasets();
+    const hubs = TOP_25_CITIES_BY_POPULATION.map((city) => buildCityHub(city, datasets, cityStateMap, {})).map((hub) => ({
+      city: hub.city,
+      city_display: hub.city_display,
+      city_slug: hub.city_slug,
+      url: '/blog/city/' + encodeURIComponent(hub.city_slug),
+      refreshed_date: hub.refreshed_date,
+      summary: hub.summary,
+      top_listings: hub.top_listings.slice(0, 3),
+      latest_events: hub.latest_events.slice(0, 3),
+      related_posts: hub.related_posts.slice(0, 3)
+    }));
+    return json(200, {
+      success: true,
+      refreshed_date: new Date().toISOString().slice(0, 10),
+      count: hubs.length,
+      hubs: hubs
+    });
   }
 
   const query = `blog_posts?select=id,slug,title,excerpt,seo_description,tags,city,author,read_minutes,published_at&status=eq.published&order=published_at.desc&limit=${limit}`;

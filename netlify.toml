@@ -204,6 +204,11 @@
   status = 301
 
 [[redirects]]
+  from = "/blog/city/:city"
+  to = "/blog/city.html?city=:city"
+  status = 200
+
+[[redirects]]
   from = "/blog/:slug"
   to = "/blog/post.html?slug=:slug"
   status = 200

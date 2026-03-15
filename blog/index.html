@@ -43,6 +43,7 @@ nav {
 .hero p { color: rgba(255,255,255,.9); max-width: 760px; font-size: 1.05rem; }
 .container { max-width: 980px; margin: 26px auto 48px; padding: 0 16px; }
 .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.grid.hubs { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom: 18px; }
 .card {
   background: var(--card); border: 2px solid var(--border); border-radius: 16px; padding: 16px;
   box-shadow: 0 4px 18px rgba(108,63,197,.08);
@@ -54,6 +55,7 @@ nav {
 .tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .tag { background: #f2ebff; color: #4c2f8f; border-radius: 50px; padding: 4px 10px; font-size: .78rem; font-weight: 800; }
 .empty, .error { padding: 16px; border-radius: 12px; background: #fff; border: 2px dashed var(--border); color: var(--muted); }
+.hub-meta { color: var(--muted); font-size: .8rem; margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -73,6 +75,8 @@ nav {
   </section>
 
   <main class="container">
+    <div id="hubsState" class="empty">Loading top city guides...</div>
+    <div id="hubsGrid" class="grid hubs" style="display:none"></div>
     <div id="state" class="empty">Loading posts...</div>
     <div id="grid" class="grid" style="display:none"></div>
   </main>
@@ -137,7 +141,8 @@ function render(posts) {
   grid.innerHTML = posts.map(function (p) {
     var tags = Array.isArray(p.tags) ? p.tags.slice(0, 4) : [];
     var cityLabel = String(p.city_display || p.city || '').trim();
-    var metaCity = cityLabel ? (' - ' + esc(cityLabel)) : '';
+    var cityHubUrl = p.city_slug ? ('/blog/city/' + encodeURIComponent(p.city_slug)) : '';
+    var metaCity = cityLabel ? (' - ' + (cityHubUrl ? ('<a href=\"' + cityHubUrl + '\">' + esc(cityLabel) + '</a>') : esc(cityLabel))) : '';
     return [
       '<article class="card">',
       '  <div class="meta">' + formatDate(p.published_at) + metaCity + ' - ' + (Number(p.read_minutes) || 4) + ' min read</div>',
@@ -157,12 +162,52 @@ function render(posts) {
   });
 }
 
+function renderHubs(hubs, refreshedDate) {
+  var hubsState = document.getElementById('hubsState');
+  var hubsGrid = document.getElementById('hubsGrid');
+  var rows = Array.isArray(hubs) ? hubs : [];
+  if (!rows.length) {
+    hubsState.className = 'empty';
+    hubsState.textContent = 'Top city guides will appear here shortly.';
+    hubsGrid.style.display = 'none';
+    return;
+  }
+  hubsState.style.display = 'none';
+  hubsGrid.style.display = 'grid';
+  hubsGrid.innerHTML = rows.map(function(h) {
+    var display = String(h.city_display || h.city || '').trim();
+    var url = String(h.url || ('/blog/city/' + encodeURIComponent(h.city_slug || ''))).trim();
+    var listings = h.summary && Number(h.summary.listings_count || 0);
+    var events = h.summary && Number(h.summary.events_count || 0);
+    var posts = h.summary && Number(h.summary.posts_count || 0);
+    return [
+      '<article class=\"card\">',
+      '  <a href=\"' + esc(url) + '\"><h2 class=\"title\">' + esc(display) + '</h2></a>',
+      '  <p class=\"excerpt\">Top local listings, current events, and linked blog guides for families in this city.</p>',
+      '  <div class=\"hub-meta\">Listings: ' + listings + ' | Events: ' + events + ' | Posts: ' + posts + '</div>',
+      '  <div class=\"hub-meta\">Refreshed: ' + esc(refreshedDate || h.refreshed_date || '') + '</div>',
+      '</article>'
+    ].join('');
+  }).join('');
+}
+
 async function load() {
   var state = document.getElementById('state');
   try {
-    var res = await fetch('/api/blog-posts?limit=50');
+    var responses = await Promise.all([
+      fetch('/api/blog-posts?limit=50'),
+      fetch('/api/blog-posts?city_hubs=1')
+    ]);
+    var res = responses[0];
+    var hubsRes = responses[1];
     var out = await res.json();
+    var hubsOut = await hubsRes.json();
     if (!res.ok) throw new Error(out.error || 'Failed to load blog');
+    if (hubsRes.ok && hubsOut && Array.isArray(hubsOut.hubs)) {
+      renderHubs(hubsOut.hubs, hubsOut.refreshed_date || '');
+    } else {
+      renderHubs([], '');
+    }
     track('blog_index_view', {
       referrer_type: referrerType(),
       post_count: (out.posts || []).length
