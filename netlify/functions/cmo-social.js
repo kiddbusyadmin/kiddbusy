@@ -1,5 +1,6 @@
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+const INSTAGRAM_AUTOMATION_ENABLED = String(process.env.CMO_INSTAGRAM_AUTOMATION_ENABLED || '').toLowerCase() === 'true';
 const { logAgentActivity } = require('./_agent-activity');
 
 function json(statusCode, payload) {
@@ -141,6 +142,14 @@ function dailyInstructions(cfg, signals, index) {
 }
 
 async function runPlanner() {
+  if (!INSTAGRAM_AUTOMATION_ENABLED) {
+    return {
+      created: [],
+      open: [],
+      disabled: true,
+      reason: 'Instagram automation disabled until a direct publishing integration is configured'
+    };
+  }
   const cfg = await fetchConfig();
   const signals = await fetchContextSignals();
   const openTasks = await listTasks(1000, 'open');
@@ -259,6 +268,21 @@ async function handler(event) {
 
   const action = String(body.action || 'list').trim();
   try {
+    if (!INSTAGRAM_AUTOMATION_ENABLED) {
+      if (action === 'list') {
+        return json(200, {
+          success: true,
+          disabled: true,
+          reason: 'Instagram automation disabled until a direct publishing integration is configured',
+          count: 0,
+          tasks: []
+        });
+      }
+      return json(409, {
+        error: 'Instagram automation is disabled until a direct publishing integration is configured',
+        disabled: true
+      });
+    }
     if (action === 'list') {
       const tasks = await listTasks(body.limit || 300, body.status || '');
       return json(200, { success: true, count: tasks.length, tasks });
