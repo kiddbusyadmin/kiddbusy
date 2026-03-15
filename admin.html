@@ -1696,6 +1696,26 @@ function eventSourceDomain(url) {
   }
 }
 
+function eventSourceTier(url) {
+  var domain = eventSourceDomain(url);
+  if (!domain) return 'blocked';
+  var rootParts = domain.split('.');
+  var root = rootParts.length <= 2 ? domain : rootParts.slice(-2).join('.');
+  var blocked = {
+    'google.com': 1, 'bing.com': 1, 'yahoo.com': 1, 'duckduckgo.com': 1, 'yelp.com': 1,
+    'tripadvisor.com': 1, 'instagram.com': 1, 'tiktok.com': 1, 'x.com': 1, 'twitter.com': 1, 'pinterest.com': 1
+  };
+  var trusted = {
+    'eventbrite.com': 1, 'allevents.in': 1, 'facebook.com': 1, 'mommypoppins.com': 1,
+    'metrosfamilymagazine.com': 1, 'redtri.com': 1, 'patch.com': 1, '10times.com': 1
+  };
+  if (blocked[root]) return 'blocked';
+  if (/\.gov$/.test(root) || /\.edu$/.test(root)) return 'official';
+  if (trusted[root]) return 'trusted_aggregator';
+  if (/\.org$/.test(root)) return 'official_like_org';
+  return 'unknown';
+}
+
 async function loadEventSourceCatalog() {
   try {
     // Pull a larger, city-mixed slice so one recently-refreshed city does not dominate samples.
@@ -1711,10 +1731,13 @@ async function loadEventSourceCatalog() {
     var domainCounts = {};
     var domainSamples = {};
     var domainSampleCities = {};
+    var tierCounts = { official: 0, official_like_org: 0, trusted_aggregator: 0, unknown: 0, blocked: 0 };
     withUrls.forEach(function(r) {
       var domain = eventSourceDomain(r.source_url);
       if (!domain) return;
+      var tier = eventSourceTier(r.source_url);
       domainCounts[domain] = (domainCounts[domain] || 0) + 1;
+      tierCounts[tier] = (tierCounts[tier] || 0) + 1;
       if (!domainSamples[domain]) domainSamples[domain] = [];
       if (!domainSampleCities[domain]) domainSampleCities[domain] = {};
       var city = r.city || '--';
@@ -1741,8 +1764,10 @@ async function loadEventSourceCatalog() {
       var sampleLinks = samples.map(function(s) {
         return '<a href="' + s.url + '" target="_blank" rel="noopener noreferrer" style="color:var(--blue);text-decoration:none">' + domain + '</a> <span style="color:var(--muted)">(' + s.city + ')</span>';
       }).join('<br>');
+      var tier = eventSourceTier(samples[0] ? samples[0].url : ('https://' + domain));
       return '<tr>' +
         '<td style="font-family:var(--mono);font-size:.74rem">' + domain + '</td>' +
+        '<td><span class="status-badge ' + (tier === 'official' || tier === 'official_like_org' ? 'status-approved' : (tier === 'trusted_aggregator' ? 'status-pending' : 'status-rejected')) + '">' + tier + '</span></td>' +
         '<td><span class="status-badge status-approved">' + count + '</span></td>' +
         '<td style="font-size:.73rem;line-height:1.45">' + (sampleLinks || '--') + '</td>' +
       '</tr>';
@@ -1750,7 +1775,14 @@ async function loadEventSourceCatalog() {
 
     document.getElementById('badge-event-sources').textContent = Object.keys(domainCounts).length + ' domains';
     document.getElementById('body-event-sources').innerHTML =
-      '<table class="data-table"><thead><tr><th>Source Domain</th><th>Events</th><th>Sample Links</th></tr></thead><tbody>' +
+      '<div style="font-size:.74rem;color:var(--muted);font-family:var(--mono);margin-bottom:10px">' +
+      'Tier mix: official=' + (tierCounts.official || 0) +
+      ' | official_like_org=' + (tierCounts.official_like_org || 0) +
+      ' | trusted_aggregator=' + (tierCounts.trusted_aggregator || 0) +
+      ' | unknown=' + (tierCounts.unknown || 0) +
+      ' | blocked=' + (tierCounts.blocked || 0) +
+      '</div>' +
+      '<table class="data-table"><thead><tr><th>Source Domain</th><th>Tier</th><th>Events</th><th>Sample Links</th></tr></thead><tbody>' +
       topRows +
       '</tbody></table>';
   } catch (e) {

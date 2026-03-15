@@ -161,6 +161,22 @@ function normalizeEventUrl(u){
     return x.toString();
   }catch(_){return ''}
 }
+function classifyEventSourceUrlClient(u){
+  const raw=String(u||'').trim();if(!raw) return {allowed:false,tier:'blocked'};
+  try{
+    const x=new URL(raw);
+    const host=String(x.hostname||'').toLowerCase().replace(/^www\./,'');
+    const parts=host.split('.');
+    const root=parts.length<=2?host:parts.slice(-2).join('.');
+    const blocked={'google.com':1,'bing.com':1,'yahoo.com':1,'duckduckgo.com':1,'yelp.com':1,'tripadvisor.com':1,'instagram.com':1,'tiktok.com':1,'x.com':1,'twitter.com':1,'pinterest.com':1};
+    const trusted={'eventbrite.com':1,'allevents.in':1,'facebook.com':1,'mommypoppins.com':1,'metrosfamilymagazine.com':1,'redtri.com':1,'patch.com':1,'10times.com':1};
+    if(blocked[root]) return {allowed:false,tier:'blocked'};
+    if(/\.gov$/.test(root)||/\.edu$/.test(root)) return {allowed:true,tier:'official'};
+    if(trusted[root]) return {allowed:true,tier:'trusted_aggregator'};
+    if(/\.org$/.test(root)) return {allowed:true,tier:'official_like_org'};
+    return {allowed:false,tier:'unknown'};
+  }catch(_){return {allowed:false,tier:'blocked'}}
+}
 function extractFirstUrl(text){
   const all=String(text||'').match(/https?:\/\/[^\s)]+/ig)||[];
   for(const u of all){
@@ -176,11 +192,13 @@ function inferDate(month,day){const m=monthToNumber(month);const d=Number(day);i
 function isPastEvent(e){const today=startOfToday();if(e.ongoing){if(e.end_date) return e.end_date<today;return false;}const end=e.end_date||e.start_date;if(!end) return false;return end<today}
 function normalizeEventRow(raw){
   const detail=String(raw.detail||'');
-  const sourceUrl=normalizeEventUrl(raw.source_url||raw.url||raw.link||extractFirstUrl(detail))||'';
+  const sourceUrlRaw=normalizeEventUrl(raw.source_url||raw.url||raw.link||extractFirstUrl(detail))||'';
+  const quality=classifyEventSourceUrlClient(sourceUrlRaw);
+  const sourceUrl=quality.allowed?sourceUrlRaw:'';
   const startDate=parseIsoDateLocal(raw.start_date)||inferDate(raw.month||raw.event_month,raw.day||raw.event_day);
   const endDate=parseIsoDateLocal(raw.end_date);
   const ongoingHint=/ongoing|runs through|daily|every weekend|through\s+\w+\s+\d{1,2}/i.test(detail);
-  return {month:raw.month||raw.event_month||'',day:raw.day||raw.event_day||'',name:raw.name||'',detail,free:!!(raw.free||raw.is_free),source_url:sourceUrl,ongoing:!!raw.ongoing||ongoingHint,start_date:startDate,end_date:endDate};
+  return {month:raw.month||raw.event_month||'',day:raw.day||raw.event_day||'',name:raw.name||'',detail,free:!!(raw.free||raw.is_free),source_url:sourceUrl,source_tier:quality.tier,ongoing:!!raw.ongoing||ongoingHint,start_date:startDate,end_date:endDate};
 }
 
 function renderEvents(rows){
@@ -215,7 +233,7 @@ async function fetchEventsForCity(cityLabel,attempt){
   const textBlocks=(data&&data.content?data.content:[]).filter(b=>b&&b.type==='text');
   const parsed=extractJsonArrayCandidate(textBlocks.map(b=>String(b.text||'')).join('\n'));
   if(!parsed) throw new Error('No JSON array in response');
-  const events=parsed.map(normalizeEventRow).filter(e=>!isPastEvent(e));
+  const events=parsed.map(normalizeEventRow).filter(e=>!isPastEvent(e)&&!!e.source_url);
   if(!events.length) throw new Error('Empty events payload');
   return events;
 }
@@ -245,7 +263,7 @@ async function getCachedEvents(cityLabel){
   const isFresh=lastRefreshed && (Date.now()-new Date(lastRefreshed))<EVENTS_TTL_MS;
 
   const ev=await sb.from('events').select('*').ilike('city',pattern).order('id',{ascending:true});
-  const normalized=(ev.data||[]).map(normalizeEventRow).filter(e=>!isPastEvent(e));
+  const normalized=(ev.data||[]).map(normalizeEventRow).filter(e=>!isPastEvent(e)&&!!e.source_url);
   return {events:normalized,lastRefreshed,age,isFresh};
 }
 

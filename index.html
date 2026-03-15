@@ -2799,7 +2799,9 @@ function isPastEventRow(eventRow) {
 }
 
 function normalizeEventRow(raw, cityLabel) {
-  const sourceUrl = normalizeEventUrl(raw.source_url || raw.url || raw.link || extractFirstUrl(raw.detail)) || '';
+  const sourceUrlRaw = normalizeEventUrl(raw.source_url || raw.url || raw.link || extractFirstUrl(raw.detail)) || '';
+  const sourceQuality = classifyEventSourceUrlClient(sourceUrlRaw);
+  const sourceUrl = sourceQuality.allowed ? sourceUrlRaw : '';
   const startDate = parseIsoDateLocal(raw.start_date) || inferDateFromMonthDay(raw.month || raw.event_month, raw.day || raw.event_day);
   const endDate = parseIsoDateLocal(raw.end_date);
   const detail = String(raw.detail || '');
@@ -2812,6 +2814,7 @@ function normalizeEventRow(raw, cityLabel) {
     detail,
     free: !!(raw.free || raw.is_free),
     source_url: sourceUrl,
+    source_tier: sourceQuality.tier,
     ongoing,
     start_date: startDate,
     end_date: endDate
@@ -2894,6 +2897,32 @@ function normalizeEventUrl(u) {
   }
 }
 
+function classifyEventSourceUrlClient(u) {
+  const raw = String(u || '').trim();
+  if (!raw) return { allowed: false, tier: 'blocked' };
+  try {
+    const parsed = new URL(raw);
+    const host = String(parsed.hostname || '').toLowerCase().replace(/^www\./, '');
+    const parts = host.split('.');
+    const root = parts.length <= 2 ? host : parts.slice(-2).join('.');
+    const blocked = {
+      'google.com': 1, 'bing.com': 1, 'yahoo.com': 1, 'duckduckgo.com': 1, 'yelp.com': 1,
+      'tripadvisor.com': 1, 'instagram.com': 1, 'tiktok.com': 1, 'x.com': 1, 'twitter.com': 1, 'pinterest.com': 1
+    };
+    const trusted = {
+      'eventbrite.com': 1, 'allevents.in': 1, 'facebook.com': 1, 'mommypoppins.com': 1,
+      'metrosfamilymagazine.com': 1, 'redtri.com': 1, 'patch.com': 1, '10times.com': 1
+    };
+    if (blocked[root]) return { allowed: false, tier: 'blocked' };
+    if (/\.gov$/.test(root) || /\.edu$/.test(root)) return { allowed: true, tier: 'official' };
+    if (trusted[root]) return { allowed: true, tier: 'trusted_aggregator' };
+    if (/\.org$/.test(root)) return { allowed: true, tier: 'official_like_org' };
+    return { allowed: false, tier: 'unknown' };
+  } catch (_) {
+    return { allowed: false, tier: 'blocked' };
+  }
+}
+
 function buildEventFallbackUrl(name, city) {
   const q = [String(name || '').trim(), String(city || '').trim(), 'event'].filter(Boolean).join(' ');
   if (!q) return '';
@@ -2941,7 +2970,7 @@ function parseEventsFromSearchResponse(data, cityLabel) {
   const joined = textBlocks.map(b => String(b.text || '')).join('\n');
   const parsed = extractJsonArrayCandidate(joined);
   if (!parsed) throw new Error('No JSON array in response');
-  return parsed.map(e => normalizeEventRow(e, cityLabel)).filter(e => !isPastEventRow(e));
+  return parsed.map(e => normalizeEventRow(e, cityLabel)).filter(e => !isPastEventRow(e) && !!e.source_url);
 }
 
 async function fetchEventsForCity(cityLabel, attempt) {
@@ -3049,7 +3078,7 @@ async function loadEventsForCity(cityLabel) {
     .ilike('city', cityLabel)
     .order('id', { ascending: true });
 
-  const normalizedCachedEvents = (cachedEvents || []).map(e => normalizeEventRow(e, cityLabel)).filter(e => !isPastEventRow(e));
+  const normalizedCachedEvents = (cachedEvents || []).map(e => normalizeEventRow(e, cityLabel)).filter(e => !isPastEventRow(e) && !!e.source_url);
   const hasCached = normalizedCachedEvents && normalizedCachedEvents.length >= 2;
   if (hasCached) {
     renderEvents(normalizedCachedEvents);

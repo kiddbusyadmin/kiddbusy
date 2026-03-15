@@ -7,6 +7,7 @@ const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || '';
 const OPENAI_KEY = process.env.OPENAI_API_KEY || '';
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_SEARCH_MODEL || 'claude-haiku-4-5-20251001';
 const OPENAI_MODEL = process.env.OPENAI_SEARCH_MODEL || 'gpt-4.1-mini';
+const { classifyEventSourceUrl } = require('./_event-source-quality');
 const OPENAI_WEB_SEARCH_TOOL_TYPES = String(process.env.OPENAI_WEB_SEARCH_TOOL_TYPES || 'web_search,web_search_preview')
   .split(',')
   .map(function (v) { return String(v || '').trim(); })
@@ -127,7 +128,10 @@ function normalizeEvents(items) {
     const startDate = safeString(row.start_date, 20);
     const endDateRaw = row.end_date == null ? null : safeString(row.end_date, 20);
     if (!month || !day || !name || !detail || !sourceUrl || !startDate) continue;
-    if (!/^https:\/\//i.test(sourceUrl)) continue;
+    if (!/^https?:\/\//i.test(sourceUrl)) continue;
+    const quality = classifyEventSourceUrl(sourceUrl);
+    // Hard validation policy: only allow official or trusted domains in cached pipeline.
+    if (!quality.allowed || quality.tier === 'unknown') continue;
     if (!isIsoDate(startDate)) continue;
     const endDate = endDateRaw && isIsoDate(endDateRaw) ? endDateRaw : null;
     const free = !!row.free;
@@ -142,6 +146,7 @@ function normalizeEvents(items) {
       detail: detail,
       free: free,
       source_url: sourceUrl,
+      source_tier: quality.tier,
       start_date: startDate,
       end_date: endDate,
       ongoing: ongoing
