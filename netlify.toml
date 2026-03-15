@@ -56,9 +56,9 @@
 [functions.revenue-consensus]
   timeout = 60
 
-# Daily cache warm — runs at 3am ET (8am UTC)
+# Cache warm — runs hourly; each run handles a deterministic city bucket so all supported cities refresh within 24h
 [functions.daily-cache-warm]
-  schedule = "0 8 * * *"
+  schedule = "0 * * * *"
   timeout = 900
 
 # Autonomous agent — runs every morning at 9am ET (2pm UTC)
