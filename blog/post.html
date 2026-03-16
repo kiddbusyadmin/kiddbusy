@@ -7,6 +7,17 @@
 <link rel="apple-touch-icon" href="/favicon.svg">
 <title>KiddBusy Blog</title>
 <meta name="description" content="KiddBusy blog post" />
+<meta name="robots" content="index,follow,max-image-preview:large" />
+<link rel="canonical" href="https://kiddbusy.com/blog/" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://kiddbusy.com/blog/" />
+<meta property="og:title" content="KiddBusy Blog" />
+<meta property="og:description" content="KiddBusy blog post" />
+<meta property="og:image" content="https://kiddbusy.com/og-image.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="KiddBusy Blog" />
+<meta name="twitter:description" content="KiddBusy blog post" />
+<meta name="twitter:image" content="https://kiddbusy.com/og-image.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -137,6 +148,26 @@ function safeBody(html) {
     .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
     .replace(/on\w+\s*=\s*"[^"]*"/gi, '')
     .replace(/on\w+\s*=\s*'[^']*'/gi, '');
+}
+
+function upsertMeta(selector, attr, value) {
+  if (!value) return;
+  var el = document.querySelector(selector);
+  if (!el) {
+    if (selector.indexOf('meta[') === 0) {
+      el = document.createElement('meta');
+      var nameMatch = selector.match(/name=\"([^\"]+)\"/i);
+      var propMatch = selector.match(/property=\"([^\"]+)\"/i);
+      if (nameMatch && nameMatch[1]) el.setAttribute('name', nameMatch[1]);
+      if (propMatch && propMatch[1]) el.setAttribute('property', propMatch[1]);
+      document.head.appendChild(el);
+    } else if (selector === 'link[rel="canonical"]') {
+      el = document.createElement('link');
+      el.setAttribute('rel', 'canonical');
+      document.head.appendChild(el);
+    }
+  }
+  if (el) el.setAttribute(attr, value);
 }
 
 function escapeRegExp(value) {
@@ -346,10 +377,13 @@ async function load() {
       }
     } catch (_) {}
 
-    var canonical = document.createElement('link');
-    canonical.rel = 'canonical';
-    canonical.href = 'https://kiddbusy.com/blog/' + encodeURIComponent(post.slug);
-    document.head.appendChild(canonical);
+    var canonicalUrl = 'https://kiddbusy.com/blog/' + encodeURIComponent(post.slug);
+    upsertMeta('link[rel="canonical"]', 'href', canonicalUrl);
+    upsertMeta('meta[property="og:url"]', 'content', canonicalUrl);
+    upsertMeta('meta[property="og:title"]', 'content', post.title || 'KiddBusy Blog');
+    upsertMeta('meta[property="og:description"]', 'content', post.seo_description || post.excerpt || 'KiddBusy blog post');
+    upsertMeta('meta[name="twitter:title"]', 'content', post.title || 'KiddBusy Blog');
+    upsertMeta('meta[name="twitter:description"]', 'content', post.seo_description || post.excerpt || 'KiddBusy blog post');
 
     track('blog_post_view', {
       slug: __blogState.slug,

@@ -59,6 +59,9 @@
 [functions.revenue-consensus]
   timeout = 60
 
+[functions.sitemap]
+  timeout = 30
+
 # Cache warm — runs hourly; each run handles a deterministic city bucket so all supported cities refresh within 24h
 [functions.daily-cache-warm]
   schedule = "0 * * * *"
@@ -196,6 +199,11 @@
 [[redirects]]
   from = "/api/brand-image-kit"
   to = "/.netlify/functions/brand-image-kit"
+  status = 200
+
+[[redirects]]
+  from = "/sitemap.xml"
+  to = "/.netlify/functions/sitemap"
   status = 200
 
 [[redirects]]

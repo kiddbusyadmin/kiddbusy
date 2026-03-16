@@ -7,6 +7,8 @@
 <link rel="apple-touch-icon" href="/favicon.svg">
 <title>KiddBusy – Find Kid-Friendly Fun Near You</title>
 <meta name="description" content="Discover kid-friendly businesses open today, local events, and hidden gems in your city. The parent-powered activity finder." />
+<meta name="robots" content="index,follow,max-image-preview:large" />
+<link rel="canonical" href="https://kiddbusy.com/" />
 
 <!-- ── OPEN GRAPH (Facebook, iMessage, LinkedIn) ── -->
 <meta property="og:type" content="website" />
@@ -3369,8 +3371,10 @@ async function loadEventsForCity(cityLabel) {
 const CACHE_TTL_MS = 3 * 60 * 60 * 1000; // 3 hours
 const _memCache = {}; // in-memory cache: cityName -> { rows, ts }
 
-async function onCitySelected(city) {
+async function onCitySelected(city, options) {
   if (!city) return;
+  const opts = options || {};
+  const isAutoDetected = !!opts.autoDetected;
 
   const cityName = city.split(',')[0].trim();
 
@@ -3382,7 +3386,11 @@ async function onCitySelected(city) {
     renderCachedListings(_memCache[cityName].rows);
     loadSponsoredCityBanner(city);
     document.getElementById('activities').style.display = 'block';
-    track('city_search', city);
+    if (isAutoDetected) {
+      track('city_search_auto', city);
+    } else {
+      track('city_search', city);
+    }
     _sessionCities.push(city);
     if (_sessionCities.length === 2) track('multi_city_session', city, _sessionCities[0]);
     sb.from('city_searches').upsert({ city, last_searched: new Date().toISOString() }, { onConflict: 'city' }).then(() => {});
@@ -3400,7 +3408,11 @@ async function onCitySelected(city) {
   sb.from('city_searches').upsert({ city, last_searched: new Date().toISOString() }, { onConflict: 'city' }).then(() => {});
 
   // Track analytics
-  track('city_search', city);
+  if (isAutoDetected) {
+    track('city_search_auto', city);
+  } else {
+    track('city_search', city);
+  }
   _sessionCities.push(city);
   if (_sessionCities.length === 2) track('multi_city_session', city, _sessionCities[0]);
 
@@ -3511,12 +3523,12 @@ function onStateSelected(state) {
   };
 }
 
-function onFindClicked() {
+function onFindClicked(options) {
   const state = document.getElementById('stateSelect').value;
   const city = document.getElementById('citySelect').value;
   if (!state || !city) return;
   const abbr = STATE_ABBR[state] || state;
-  onCitySelected(`${city}, ${abbr}`);
+  onCitySelected(`${city}, ${abbr}`, options || {});
 }
 
 function openEventsPage() {
@@ -3617,7 +3629,7 @@ async function autoDetectAndApplyCity() {
     showGeoBanner(matchedCity, detectedState);
 
     // Auto-run only when we have an exact match in our supported city list.
-    onFindClicked();
+    onFindClicked({ autoDetected: true });
     track('geo_city_autoselect', detectedState, matchedCity);
   } catch (e) {
     // Best-effort only.

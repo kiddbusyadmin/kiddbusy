@@ -7,6 +7,17 @@
 <link rel="apple-touch-icon" href="/favicon.svg">
 <title>KiddBusy City Guide</title>
 <meta name="description" content="Top kid-friendly listings, latest events, and related guides for your city." />
+<meta name="robots" content="index,follow,max-image-preview:large" />
+<link rel="canonical" href="https://kiddbusy.com/blog/" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://kiddbusy.com/blog/" />
+<meta property="og:title" content="KiddBusy City Guide" />
+<meta property="og:description" content="Top kid-friendly listings, latest events, and related guides for your city." />
+<meta property="og:image" content="https://kiddbusy.com/og-image.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="KiddBusy City Guide" />
+<meta name="twitter:description" content="Top kid-friendly listings, latest events, and related guides for your city." />
+<meta name="twitter:image" content="https://kiddbusy.com/og-image.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -138,6 +149,26 @@ function normalizeExternalUrl(v) {
   return '';
 }
 
+function upsertMeta(selector, attr, value) {
+  if (!value) return;
+  var el = document.querySelector(selector);
+  if (!el) {
+    if (selector.indexOf('meta[') === 0) {
+      el = document.createElement('meta');
+      var nameMatch = selector.match(/name=\"([^\"]+)\"/i);
+      var propMatch = selector.match(/property=\"([^\"]+)\"/i);
+      if (nameMatch && nameMatch[1]) el.setAttribute('name', nameMatch[1]);
+      if (propMatch && propMatch[1]) el.setAttribute('property', propMatch[1]);
+      document.head.appendChild(el);
+    } else if (selector === 'link[rel="canonical"]') {
+      el = document.createElement('link');
+      el.setAttribute('rel', 'canonical');
+      document.head.appendChild(el);
+    }
+  }
+  if (el) el.setAttribute(attr, value);
+}
+
 function params() {
   var qp = new URLSearchParams(window.location.search);
   var city = qp.get('city');
@@ -163,6 +194,18 @@ function renderHub(hub) {
 
   document.getElementById('heroTitle').textContent = (hub.city_display || hub.city || 'City') + ' Family Guide';
   document.getElementById('heroSub').textContent = 'Refreshed ' + esc(hub.refreshed_date || '') + ' with top listings, latest events, and related blog links.';
+  var cityTitle = (hub.city_display || hub.city || 'City') + ' Family Guide | KiddBusy';
+  var cityDesc = 'Top kid-friendly listings, latest events, and related guides for families in ' + (hub.city_display || hub.city || 'this city') + '.';
+  var cityCanonical = 'https://kiddbusy.com/blog/city/' + encodeURIComponent(hub.city_slug || '');
+  document.title = cityTitle;
+  var descEl = document.querySelector('meta[name="description"]');
+  if (descEl) descEl.setAttribute('content', cityDesc);
+  upsertMeta('link[rel="canonical"]', 'href', cityCanonical);
+  upsertMeta('meta[property="og:url"]', 'content', cityCanonical);
+  upsertMeta('meta[property="og:title"]', 'content', cityTitle);
+  upsertMeta('meta[property="og:description"]', 'content', cityDesc);
+  upsertMeta('meta[name="twitter:title"]', 'content', cityTitle);
+  upsertMeta('meta[name="twitter:description"]', 'content', cityDesc);
 
   document.getElementById('summary').style.display = 'block';
   document.getElementById('summaryText').textContent =
