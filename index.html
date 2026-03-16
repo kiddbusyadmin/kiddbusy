@@ -2192,12 +2192,15 @@ async function showAllActivities() {
       const { data, error } = await sb
         .from('listings')
         .select('*')
-        .ilike('city', cityName)
+        .ilike('city', cityName + '%')
         .eq('status', 'active')
         .limit(200);
 
       if (!error && Array.isArray(data) && data.length) {
-        const hydrated = await hydrateListingsWithReviewStats(data);
+        const matched = data.filter(function(r) {
+          return cityBaseName(r && r.city).toLowerCase() === cityName.toLowerCase();
+        });
+        const hydrated = await hydrateListingsWithReviewStats(matched);
         const sortedAll = sortListingsForDisplay(hydrated);
         currentListings = sortedAll;
         renderCachedListings(sortedAll);
@@ -3387,7 +3390,7 @@ async function onCitySelected(city, options) {
   const cityName = cityBaseName(city);
 
   // ── INSTANT RENDER from in-memory cache (zero network) ──
-  if (_memCache[cityName] && _memCache[cityName].rows.length >= 5) {
+  if (_memCache[cityName] && _memCache[cityName].rows.length >= 5 && _memCache[cityName].ranked) {
     document.getElementById('splashState').style.display = 'none';
     document.getElementById('loaderArea').classList.remove('visible');
     document.getElementById('topPicksCity').textContent = city;
@@ -3431,23 +3434,22 @@ async function onCitySelected(city, options) {
       .select('*')
       .ilike('city', cityName + '%')
       .eq('status', 'active')
-      .order('is_sponsored', { ascending: false })
-      .order('rating', { ascending: false })
-      .limit(80);
+      .limit(200);
 
     const matchedCityCached = (cached || []).filter(function(r) {
       return cityBaseName(r && r.city).toLowerCase() === cityName.toLowerCase();
-    }).slice(0, 20);
+    });
 
     console.log(`[KiddBusy] Cache check for "${cityName}": ${matchedCityCached?.length ?? 0} rows found`);
 
     if (matchedCityCached && matchedCityCached.length >= 5) {
       const hydratedCached = await hydrateListingsWithReviewStats(matchedCityCached);
       const sortedCached = sortListingsForDisplay(hydratedCached);
+      const topRows = sortedCached.slice(0, 20);
       // Store in memory for instant repeat access
-      _memCache[cityName] = { rows: sortedCached, ts: Date.now() };
+      _memCache[cityName] = { rows: topRows, ts: Date.now(), ranked: true };
 
-      renderCachedListings(sortedCached);
+      renderCachedListings(topRows);
       loadSponsoredCityBanner(city);
       document.getElementById('loaderArea').classList.remove('visible');
       document.getElementById('activities').style.display = 'block';
@@ -3682,7 +3684,7 @@ document.addEventListener('DOMContentLoaded', function() {
       let count = 0;
       Object.entries(grouped).forEach(([city, rows]) => {
         if (rows.length >= 5) {
-          _memCache[city] = { rows, ts: Date.now() };
+          _memCache[city] = { rows, ts: Date.now(), ranked: false };
           count++;
         }
       });
