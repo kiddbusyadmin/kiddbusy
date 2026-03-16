@@ -1,6 +1,3 @@
-const DEFAULT_SUPABASE_URL = 'https://wgwexzyqaiwosgraaczi.supabase.co';
-const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indnd2V4enlxYWl3b3NncmFhY3ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODEwNzUsImV4cCI6MjA4ODI1NzA3NX0.IS8u4SL1XeLh9KgD4c2Pl9BiGNg0zkiNauUzu_QtKH8';
-
 function isoDate(value) {
   try {
     const d = new Date(value);
@@ -19,8 +16,8 @@ function escXml(value) {
 }
 
 async function fetchPublishedPosts() {
-  const base = process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL;
-  const key = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
+  const base = process.env.KB_DB_URL || process.env.SUPABASE_URL;
+  const key = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!base || !key) return [];
 
   const endpoint =
