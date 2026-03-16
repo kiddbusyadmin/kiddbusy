@@ -1791,10 +1791,11 @@ async function upsertListing(activity, city, source = 'ai_generated') {
   // Check if listing already exists
   const probe = { name: activity.name, address: activity.addr };
   let existing = cityRows.find(r => isNearDuplicate(probe, r)) || null;
+  const website = normalizeWebsiteUrl(activity.website);
 
   if (existing) {
     // Update description + last_refreshed on existing listing
-    await sb.from('listings').update({
+    const updatePayload = {
       name: activity.name,
       category: activity.category,
       description: activity.desc,
@@ -1802,7 +1803,9 @@ async function upsertListing(activity, city, source = 'ai_generated') {
       is_open: activity.open ?? true,
       last_refreshed: now,
       source: source
-    }).eq('listing_id', existing.listing_id);
+    };
+    if (website) updatePayload.website = website;
+    await sb.from('listings').update(updatePayload).eq('listing_id', existing.listing_id);
     return existing.listing_id;
   }
 
@@ -1814,6 +1817,7 @@ async function upsertListing(activity, city, source = 'ai_generated') {
       category: activity.category,
       description: activity.desc,
       address: activity.addr,
+      website: website || null,
       city: cityName,
       state: stateName,
       emoji: activity.emoji,

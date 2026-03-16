@@ -41,6 +41,7 @@ Each object must have these exact keys:
 - emoji (single emoji matching category)
 - desc (string, 1-2 sentences, why kids love it, include cost hint like Free/$/$$ and age notes)
 - addr (string, short street address)
+- website (string URL to official business/location page; avoid aggregator/search links; null if unknown)
 - open (boolean, true if likely open on a typical weekday)
 - ages (array, subset of ["toddler","school","teens"])
 - tags (array, subset of ["indoor","outdoor","free","paid"])

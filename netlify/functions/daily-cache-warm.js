@@ -5,7 +5,7 @@ const SUPABASE_KEY = process.env.KB_DB_SERVICE_KEY;
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 const SUPPORTED_CITIES = require('./_supported-cities.json');
 const USE_WEB_SEARCH_CITIES = new Set(['Raleigh','Salt Lake City','Indianapolis','Kansas City','Buffalo','Jersey City','Louisville','Richmond','Boise','Tucson']);
-const ACTIVITIES_SYSTEM = 'You are KiddBusy. Return ONLY a JSON array of 20 kid-friendly activities. Each object: name(string), category(string), emoji(string), desc(string), addr(string), open(boolean), ages(array of strings), tags(array of strings), rating(number 4-5), reviewCount(number).';
+const ACTIVITIES_SYSTEM = 'You are KiddBusy. Return ONLY a JSON array of 20 kid-friendly activities. Each object: name(string), category(string), emoji(string), desc(string), addr(string), website(string official URL or null; avoid aggregators/search pages), open(boolean), ages(array of strings), tags(array of strings), rating(number 4-5), reviewCount(number).';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function normalizeCity(v) {
@@ -77,6 +77,14 @@ function canonicalName(v) {
     .trim();
 }
 
+function normalizeWebsiteUrl(raw) {
+  const v = String(raw || '').trim();
+  if (!v) return '';
+  if (/^https?:\/\//i.test(v)) return v;
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(v)) return 'https://' + v;
+  return '';
+}
+
 function isNearDuplicate(activity, row) {
   var aCanon = canonicalName(activity && activity.name);
   var bCanon = canonicalName(row && row.name);
@@ -114,8 +122,9 @@ async function upsertListings(sb, activities, city) {
     const ages = Array.isArray(a.ages) ? a.ages.join(',') : (a.ages || '');
     const tags = Array.isArray(a.tags) ? a.tags.join(',') : (a.tags || '');
     const existing = cacheRows.find(function(r) { return isNearDuplicate(a, r); }) || null;
+    const website = normalizeWebsiteUrl(a && a.website);
     if (existing) {
-      await sb.from('listings').update({
+      const updatePayload = {
         name: a.name,
         category: a.category,
         description: a.desc,
@@ -123,9 +132,11 @@ async function upsertListings(sb, activities, city) {
         is_open: a.open ?? true,
         last_refreshed: now,
         source: 'background_refresh'
-      }).eq('listing_id', existing.listing_id);
+      };
+      if (website) updatePayload.website = website;
+      await sb.from('listings').update(updatePayload).eq('listing_id', existing.listing_id);
     } else {
-      const out = await sb.from('listings').insert({ name: a.name, category: a.category, description: a.desc, address: a.addr, city, state: '', emoji: a.emoji, ages, tags, is_open: a.open ?? true, is_sponsored: false, rating: a.rating || 4.5, review_count: 0, status: 'active', last_refreshed: now, source: 'background_refresh' }).select('listing_id').single();
+      const out = await sb.from('listings').insert({ name: a.name, category: a.category, description: a.desc, address: a.addr, website: website || null, city, state: '', emoji: a.emoji, ages, tags, is_open: a.open ?? true, is_sponsored: false, rating: a.rating || 4.5, review_count: 0, status: 'active', last_refreshed: now, source: 'background_refresh' }).select('listing_id').single();
       if (out && out.data && out.data.listing_id) {
         cacheRows.push({
           listing_id: out.data.listing_id,
@@ -149,11 +160,17 @@ exports.handler = async function(event) {
   const totalBuckets = 3;
   const currentBucket = new Date().getUTCHours();
   const forceFull = !!(event && event.queryStringParameters && String(event.queryStringParameters.full || '') === '1');
-  const runCities = forceFull
+  const singleCity = normalizeCity(event && event.queryStringParameters && event.queryStringParameters.city);
+  let runCities = forceFull
     ? allCities
     : allCities.filter(function(city) { return hashCityToBucket(city, totalBuckets) === currentBucket; });
+  if (singleCity) {
+    runCities = allCities.filter(function(city) {
+      return String(city).toLowerCase() === String(singleCity).toLowerCase();
+    });
+  }
 
-  console.log('[WARM] supported cities=' + allCities.length + ', run bucket=' + currentBucket + '/' + totalBuckets + ', this run=' + runCities.length + ', forceFull=' + forceFull);
+  console.log('[WARM] supported cities=' + allCities.length + ', run bucket=' + currentBucket + '/' + totalBuckets + ', this run=' + runCities.length + ', forceFull=' + forceFull + ', city=' + (singleCity || 'none'));
   const results = {}; let succeeded = 0, failed = 0;
   for (let i = 0; i < runCities.length; i++) {
     const city = runCities[i];
@@ -178,6 +195,7 @@ exports.handler = async function(event) {
       buckets_total: totalBuckets,
       run_cities: runCities.length,
       force_full: forceFull,
+      city: singleCity || null,
       succeeded,
       failed,
       results
