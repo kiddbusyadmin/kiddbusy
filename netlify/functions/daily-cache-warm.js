@@ -145,7 +145,8 @@ exports.handler = async function(event) {
   console.log('[WARM] Starting');
   const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
   const allCities = getSupportedCities();
-  const totalBuckets = 24;
+  // 3 buckets on an hourly schedule -> each city is warmed about every 3 hours.
+  const totalBuckets = 3;
   const currentBucket = new Date().getUTCHours();
   const forceFull = !!(event && event.queryStringParameters && String(event.queryStringParameters.full || '') === '1');
   const runCities = forceFull

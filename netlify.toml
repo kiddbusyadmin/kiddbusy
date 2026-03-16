@@ -62,7 +62,7 @@
 [functions.sitemap]
   timeout = 30
 
-# Cache warm — runs hourly; each run handles a deterministic city bucket so all supported cities refresh within 24h
+# Cache warm — runs hourly; each run handles a deterministic city bucket so all supported cities refresh about every 3h
 [functions.daily-cache-warm]
   schedule = "0 * * * *"
   timeout = 900

@@ -3371,12 +3371,16 @@ async function loadEventsForCity(cityLabel) {
 const CACHE_TTL_MS = 3 * 60 * 60 * 1000; // 3 hours
 const _memCache = {}; // in-memory cache: cityName -> { rows, ts }
 
+function cityBaseName(v) {
+  return String(v || '').split(',')[0].trim();
+}
+
 async function onCitySelected(city, options) {
   if (!city) return;
   const opts = options || {};
   const isAutoDetected = !!opts.autoDetected;
 
-  const cityName = city.split(',')[0].trim();
+  const cityName = cityBaseName(city);
 
   // ── INSTANT RENDER from in-memory cache (zero network) ──
   if (_memCache[cityName] && _memCache[cityName].rows.length >= 5) {
@@ -3421,16 +3425,20 @@ async function onCitySelected(city, options) {
     const { data: cached } = await sb
       .from('listings')
       .select('*')
-      .ilike('city', cityName)
+      .ilike('city', cityName + '%')
       .eq('status', 'active')
       .order('is_sponsored', { ascending: false })
       .order('rating', { ascending: false })
-      .limit(20);
+      .limit(80);
 
-    console.log(`[KiddBusy] Cache check for "${cityName}": ${cached?.length ?? 0} rows found`);
+    const matchedCityCached = (cached || []).filter(function(r) {
+      return cityBaseName(r && r.city).toLowerCase() === cityName.toLowerCase();
+    }).slice(0, 20);
 
-    if (cached && cached.length >= 5) {
-      const hydratedCached = await hydrateListingsWithReviewStats(cached);
+    console.log(`[KiddBusy] Cache check for "${cityName}": ${matchedCityCached?.length ?? 0} rows found`);
+
+    if (matchedCityCached && matchedCityCached.length >= 5) {
+      const hydratedCached = await hydrateListingsWithReviewStats(matchedCityCached);
       const sortedCached = sortListingsForDisplay(hydratedCached);
       // Store in memory for instant repeat access
       _memCache[cityName] = { rows: sortedCached, ts: Date.now() };
@@ -3442,7 +3450,7 @@ async function onCitySelected(city, options) {
       track('cache_hit', city);
 
       // ── BACKGROUND REFRESH if stale ──
-      const oldest = cached.reduce((min, r) => {
+      const oldest = matchedCityCached.reduce((min, r) => {
         if (!r.last_refreshed) return min;
         return new Date(r.last_refreshed) < new Date(min) ? r.last_refreshed : min;
       }, new Date().toISOString());
@@ -3662,7 +3670,7 @@ document.addEventListener('DOMContentLoaded', function() {
       // Group by city into _memCache
       const grouped = {};
       data.forEach(row => {
-        const c = row.city;
+        const c = cityBaseName(row.city);
         if (!grouped[c]) grouped[c] = [];
         if (grouped[c].length < 20) grouped[c].push(row);
       });
