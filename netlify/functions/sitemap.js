@@ -38,6 +38,19 @@ async function fetchPublishedPosts() {
   return Array.isArray(data) ? data : [];
 }
 
+async function fetchPublishedPostsFallback() {
+  const res = await fetch('https://kiddbusy.com/api/blog-posts?limit=500');
+  if (!res.ok) return [];
+  const data = await res.json();
+  if (!data || !Array.isArray(data.posts)) return [];
+  return data.posts.map((p) => ({
+    slug: p.slug,
+    city_slug: p.city_slug,
+    updated_at: p.updated_at || p.published_at,
+    published_at: p.published_at
+  }));
+}
+
 exports.handler = async function handler() {
   const baseUrl = 'https://kiddbusy.com';
   const nowIso = new Date().toISOString();
@@ -49,7 +62,10 @@ exports.handler = async function handler() {
   ];
 
   try {
-    const posts = await fetchPublishedPosts();
+    let posts = await fetchPublishedPosts();
+    if (!posts.length) {
+      posts = await fetchPublishedPostsFallback();
+    }
     const citySeen = {};
     posts.forEach((row) => {
       const slug = String((row && row.slug) || '').trim();
