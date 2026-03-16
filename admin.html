@@ -1609,19 +1609,31 @@ async function loadFilterUsage() {
 
 // ===== SHARE CITY INSIGHTS =====
 function parseShareValue(value) {
-  if (!value) return { method: 'unknown', surface: 'unknown', listing_name: null, event_name: null };
+  if (!value) return { method: 'unknown', surface: 'unknown', listing_name: null, event_name: null, reason: null };
   try {
     var obj = JSON.parse(value);
     return {
       method: obj && obj.method ? String(obj.method) : 'unknown',
       surface: obj && obj.surface ? String(obj.surface) : 'unknown',
       listing_name: obj && obj.listing_name ? String(obj.listing_name) : null,
-      event_name: obj && obj.event_name ? String(obj.event_name) : null
+      event_name: obj && obj.event_name ? String(obj.event_name) : null,
+      reason: obj && obj.reason ? String(obj.reason) : null
     };
   } catch (_) {
     // Older events stored listing name directly in value.
-    return { method: 'legacy_unknown', surface: 'listing', listing_name: String(value), event_name: null };
+    return { method: 'legacy_unknown', surface: 'listing', listing_name: String(value), event_name: null, reason: null };
   }
+}
+
+function shareMethodLabel(method) {
+  var m = String(method || '').trim().toLowerCase();
+  if (m === 'native_share') return 'Native Share';
+  if (m === 'copy_clipboard') return 'Copy Link';
+  if (m === 'open_link_fallback') return 'Open Link Fallback';
+  if (m === 'fallback_failed') return 'Fallback Failed';
+  if (m === 'legacy_unknown') return 'Legacy';
+  if (!m || m === 'unknown') return 'Unknown';
+  return m.replace(/_/g, ' ');
 }
 
 async function loadShareCities() {
@@ -1637,21 +1649,27 @@ async function loadShareCities() {
   ]);
   var rows = filterAnalyticsRows(res.data || []);
   var scopedRows = rows.filter(function(r) { return isWithinRange(r.created_at, searchesRange); });
-  var scopedAttempts = scopedRows.filter(function(r) { return r.event === 'share_open' || r.event === 'share_click' || r.event === 'event_share_click'; });
-  var scopedNativeSent = scopedRows.filter(function(r) { return r.event === 'share_native_sent'; });
-  var scopedAbandon = scopedRows.filter(function(r) { return r.event === 'share_abandon'; });
-  var scopedFallback = scopedRows.filter(function(r) { return r.event === 'share_copy_ready' || r.event === 'share_link_opened'; });
+  var scopedListingRows = scopedRows.filter(function(r) {
+    var parsed = parseShareValue(r.value);
+    return parsed.surface === 'listing' || (r.event === 'share_click' && parsed.surface !== 'event');
+  });
+  var scopedAttempts = scopedListingRows.filter(function(r) { return r.event === 'share_open' || r.event === 'share_click'; });
+  var scopedNativeSent = scopedListingRows.filter(function(r) { return r.event === 'share_native_sent'; });
+  var scopedAbandon = scopedListingRows.filter(function(r) { return r.event === 'share_abandon'; });
+  var scopedFallback = scopedListingRows.filter(function(r) { return r.event === 'share_copy_ready' || r.event === 'share_link_opened'; });
+  var scopedCopyReady = scopedListingRows.filter(function(r) { return r.event === 'share_copy_ready'; });
+  var scopedOpenLink = scopedListingRows.filter(function(r) { return r.event === 'share_link_opened'; });
   var nativeRate = scopedAttempts.length > 0 ? Math.round((scopedNativeSent.length / scopedAttempts.length) * 100) : 0;
   var abandonRate = scopedAttempts.length > 0 ? Math.round((scopedAbandon.length / scopedAttempts.length) * 100) : 0;
 
   document.getElementById('sharekpi-event-scoped').textContent = scopedAttempts.length;
-  document.getElementById('sharekpi-event-scoped-sub').textContent = rangeBadgeLabel(searchesRange);
+  document.getElementById('sharekpi-event-scoped-sub').textContent = 'listing opens (' + rangeBadgeLabel(searchesRange) + ')';
   document.getElementById('sharekpi-event-all').textContent = scopedNativeSent.length;
-  document.getElementById('sharekpi-event-all-sub').textContent = scopedAttempts.length > 0 ? (nativeRate + '% of opens') : rangeBadgeLabel(searchesRange);
+  document.getElementById('sharekpi-event-all-sub').textContent = scopedAttempts.length > 0 ? (nativeRate + '% via native share') : rangeBadgeLabel(searchesRange);
   document.getElementById('sharekpi-event-native').textContent = scopedAbandon.length;
-  document.getElementById('sharekpi-event-native-sub').textContent = scopedAttempts.length > 0 ? (abandonRate + '% abandon') : 'events';
+  document.getElementById('sharekpi-event-native-sub').textContent = scopedAttempts.length > 0 ? (abandonRate + '% abandoned') : 'events';
   document.getElementById('sharekpi-event-copy').textContent = scopedFallback.length;
-  document.getElementById('sharekpi-event-copy-sub').textContent = scopedAttempts.length > 0 ? (Math.round((scopedFallback.length / scopedAttempts.length) * 100) + '% of opens') : 'events';
+  document.getElementById('sharekpi-event-copy-sub').textContent = scopedAttempts.length > 0 ? (Math.round((scopedFallback.length / scopedAttempts.length) * 100) + '% fallback path') : 'events';
 
   if (!rows.length) {
     document.getElementById('badge-share-cities').textContent = '0 events';
@@ -1660,7 +1678,8 @@ async function loadShareCities() {
   }
 
   var cityCounts = {};
-  var methods = {};
+  var methodCounts = {};
+  var methodOutcomeCounts = {};
   var eventTypeCounts = { listing: 0, event: 0, unknown: 0 };
   var outcomeCounts = { open: 0, native_sent: 0, abandon: 0, fallback: 0, legacy_click: 0 };
   rows.forEach(function(r) {
@@ -1669,9 +1688,13 @@ async function loadShareCities() {
     var city = (r.city && String(r.city).trim()) ? String(r.city).trim() : 'Unknown';
     cityCounts[city] = (cityCounts[city] || 0) + 1;
   });
-  rows.forEach(function(r) {
+  scopedListingRows.forEach(function(r) {
     var parsed = parseShareValue(r.value);
-    methods[parsed.method] = (methods[parsed.method] || 0) + 1;
+    var label = shareMethodLabel(parsed.method);
+    methodCounts[label] = (methodCounts[label] || 0) + 1;
+    if (r.event === 'share_native_sent' || r.event === 'share_copy_ready' || r.event === 'share_link_opened') {
+      methodOutcomeCounts[label] = (methodOutcomeCounts[label] || 0) + 1;
+    }
     if (parsed.surface === 'event') eventTypeCounts.event++;
     else if (parsed.surface === 'listing') eventTypeCounts.listing++;
     else eventTypeCounts.unknown++;
@@ -1685,15 +1708,20 @@ async function loadShareCities() {
 
   var sorted = Object.entries(cityCounts).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 10);
   var max = sorted[0] ? sorted[0][1] : 1;
-  var methodSummary = Object.entries(methods).sort(function(a, b) { return b[1] - a[1]; }).map(function(entry) {
+  var methodSummary = Object.entries(methodCounts).sort(function(a, b) { return b[1] - a[1]; }).map(function(entry) {
+    return entry[0] + ': ' + entry[1];
+  }).join(' | ');
+  var methodOutcomesSummary = Object.entries(methodOutcomeCounts).sort(function(a, b) { return b[1] - a[1]; }).map(function(entry) {
     return entry[0] + ': ' + entry[1];
   }).join(' | ');
 
   document.getElementById('badge-share-cities').textContent = scopedAttempts.length + ' opens (' + rangeBadgeLabel(searchesRange) + ')';
   document.getElementById('body-share-cities-content').innerHTML =
-    '<div style=\"font-size:.74rem;color:var(--muted);font-family:var(--mono);margin-bottom:12px\">Methods: ' + (methodSummary || '--') + '</div>' +
-    '<div style=\"font-size:.74rem;color:var(--muted);font-family:var(--mono);margin-bottom:12px\">Surfaces: listing=' + eventTypeCounts.listing + ' | event=' + eventTypeCounts.event + ' | unknown=' + eventTypeCounts.unknown + '</div>' +
-    '<div style=\"font-size:.74rem;color:var(--muted);font-family:var(--mono);margin-bottom:12px\">Outcomes: open=' + outcomeCounts.open + ' | native_sent=' + outcomeCounts.native_sent + ' | abandon=' + outcomeCounts.abandon + ' | fallback=' + outcomeCounts.fallback + ' | legacy_click=' + outcomeCounts.legacy_click + '</div>' +
+    '<div style=\"font-size:.74rem;color:var(--muted);font-family:var(--mono);margin-bottom:8px\"><strong style=\"color:var(--text)\">Listing share method (attempts):</strong> ' + (methodSummary || '--') + '</div>' +
+    '<div style=\"font-size:.74rem;color:var(--muted);font-family:var(--mono);margin-bottom:8px\"><strong style=\"color:var(--text)\">Listing share method (completed hand-off):</strong> ' + (methodOutcomesSummary || '--') + '</div>' +
+    '<div style=\"font-size:.74rem;color:var(--muted);font-family:var(--mono);margin-bottom:12px\">Fallback detail: copy_ready=' + scopedCopyReady.length + ' | open_link=' + scopedOpenLink.length + '</div>' +
+    '<div style=\"font-size:.74rem;color:var(--muted);font-family:var(--mono);margin-bottom:12px\">All-share surfaces (' + rangeBadgeLabel(searchesRange) + '): listing=' + eventTypeCounts.listing + ' | event=' + eventTypeCounts.event + ' | unknown=' + eventTypeCounts.unknown + '</div>' +
+    '<div style=\"font-size:.74rem;color:var(--muted);font-family:var(--mono);margin-bottom:12px\">All-share outcomes (' + rangeBadgeLabel(searchesRange) + '): open=' + outcomeCounts.open + ' | native_sent=' + outcomeCounts.native_sent + ' | abandon=' + outcomeCounts.abandon + ' | fallback=' + outcomeCounts.fallback + ' | legacy_click=' + outcomeCounts.legacy_click + '</div>' +
     sorted.map(function(entry) {
       var city = entry[0], count = entry[1];
       var pct = Math.round((count / max) * 100);
