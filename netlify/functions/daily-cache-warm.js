@@ -1,7 +1,7 @@
 // KiddBusy - Daily Cache Warm
 const { createClient } = require('@supabase/supabase-js');
-const SUPABASE_URL = process.env.KB_DB_URL;
-const SUPABASE_KEY = process.env.KB_DB_SERVICE_KEY;
+const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 const SUPPORTED_CITIES = require('./_supported-cities.json');
 const USE_WEB_SEARCH_CITIES = new Set(['Raleigh','Salt Lake City','Indianapolis','Kansas City','Buffalo','Jersey City','Louisville','Richmond','Boise','Tucson']);
@@ -154,6 +154,18 @@ async function upsertListings(sb, activities, city) {
 }
 exports.handler = async function(event) {
   console.log('[WARM] Starting');
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: 'missing_supabase_config' })
+    };
+  }
+  if (!ANTHROPIC_KEY) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: 'missing_anthropic_key' })
+    };
+  }
   const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
   const allCities = getSupportedCities();
   // 3 buckets on an hourly schedule -> each city is warmed about every 3 hours.
