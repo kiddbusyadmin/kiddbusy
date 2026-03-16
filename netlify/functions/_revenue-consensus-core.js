@@ -31,6 +31,12 @@ function daysAgoIso(days) {
   return d.toISOString();
 }
 
+function startOfUtcDayIso() {
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
 async function getOne(path) {
   const { response, data } = await sbFetch(path);
   if (!response.ok) return null;
@@ -414,7 +420,42 @@ async function sendConsensusEmail(report) {
   });
 }
 
+async function consensusAlreadySentToday() {
+  try {
+    const since = startOfUtcDayIso();
+    const to = encodeURIComponent(String(OWNER_SUMMARY_EMAIL || '').toLowerCase());
+    const path = [
+      'email_send_log?select=id,created_at',
+      `to_email=eq.${to}`,
+      'campaign_type=eq.agent_daily_consensus',
+      'status=eq.sent',
+      `created_at=gte.${encodeURIComponent(since)}`,
+      'limit=1',
+      'order=created_at.desc'
+    ].join('&');
+    const { response, data } = await sbFetch(path);
+    if (!response.ok || !Array.isArray(data)) return false;
+    return data.length > 0;
+  } catch (_) {
+    return false;
+  }
+}
+
 async function runRevenueConsensus() {
+  const alreadySent = await consensusAlreadySentToday();
+  if (alreadySent) {
+    await logAgentActivity({
+      agentKey: 'revenue_consensus_agent',
+      status: 'info',
+      summary: 'Skipped consensus email: already sent today.'
+    });
+    return {
+      success: true,
+      recipient: OWNER_SUMMARY_EMAIL,
+      skipped_duplicate_daily_send: true
+    };
+  }
+
   const input = await buildConsensusInput();
   const baseReport = await generateConsensusReport(input);
   const gatedReport = enforceTrafficGate(baseReport, input);
