@@ -90,6 +90,11 @@
   schedule = "*/5 * * * *"
   timeout = 30
 
+# Specialist task consumer
+[functions.agent-task-runner]
+  schedule = "*/5 * * * *"
+  timeout = 60
+
 # Accountant agent snapshot — runs nightly at 1am ET (6am UTC)
 [functions.accountant-scheduled]
   schedule = "0 6 * * *"
@@ -213,6 +218,11 @@
 [[redirects]]
   from = "/api/agent-progress-pulse"
   to = "/.netlify/functions/agent-progress-pulse"
+  status = 200
+
+[[redirects]]
+  from = "/api/agent-task-runner"
+  to = "/.netlify/functions/agent-task-runner"
   status = 200
 
 [[redirects]]

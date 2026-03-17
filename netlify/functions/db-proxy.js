@@ -101,6 +101,51 @@ function buildProgressText(subscription, orders, tasks) {
   return lines.join('\n');
 }
 
+function cleanCityName(value) {
+  return String(value || '').split(',')[0].trim();
+}
+
+function extractCityFromText(value) {
+  const text = String(value || '');
+  const direct = text.match(/\bfor\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})(?:,\s*[A-Z]{2})?\b/);
+  if (direct && direct[1]) return cleanCityName(direct[1]);
+  const atl = text.match(/\bAtlanta\b/i);
+  if (atl) return 'Atlanta';
+  return '';
+}
+
+async function callInternalJson(path, { method = 'GET', body = null, source = 'kiddbusy-hq' } = {}) {
+  const base = (process.env.URL || process.env.DEPLOY_PRIME_URL || 'https://kiddbusy.com').replace(/\/$/, '');
+  const response = await fetch(base + path, {
+    method,
+    headers: Object.assign(
+      { 'Content-Type': 'application/json' },
+      source ? { 'X-Requested-From': source } : {}
+    ),
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const text = await response.text();
+  let data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (_) {
+    data = { raw: text };
+  }
+  if (!response.ok) {
+    throw new Error(data.error || data.message || `Internal call failed (${response.status})`);
+  }
+  return data;
+}
+
+async function patchTask(taskId, patch) {
+  const out = await sbRequest(`agent_tasks?task_id=eq.${encodeURIComponent(String(taskId))}`, {
+    method: 'PATCH',
+    body: patch,
+    prefer: 'return=representation'
+  });
+  return Array.isArray(out.data) && out.data.length ? out.data[0] : null;
+}
+
 async function sbRequest(path, { method = 'GET', body = null, prefer = null } = {}) {
   const headers = {
     apikey: SUPABASE_SERVICE_KEY,
@@ -258,7 +303,7 @@ exports.handler = async (event) => {
 
   const { action, table, id, updates, match, status, limit, listing_id, is_sponsored, agent_key } = body;
 
-  if (method === 'GET' && action !== 'run_progress_pulse') {
+  if (method === 'GET' && !['run_progress_pulse', 'run_agent_tasks'].includes(String(action || ''))) {
     return json(405, { error: 'Method not allowed' });
   }
 
@@ -580,6 +625,170 @@ exports.handler = async (event) => {
         });
       } catch (_) {}
       return json(500, { error: err.message || 'Progress pulse failed' });
+    }
+  }
+
+  if (action === 'run_agent_tasks') {
+    try {
+      const tasksOut = await sbRequest('agent_tasks?select=*&status=in.(open,in_progress)&order=created_at.asc&limit=12', {
+        method: 'GET'
+      });
+      const tasks = Array.isArray(tasksOut.data) ? tasksOut.data : [];
+      const processed = [];
+      for (const task of tasks) {
+        const startedAt = nowIso();
+        const taskId = task.task_id;
+        const taskDetails = task.details || {};
+        const orderId = taskDetails.order_id || null;
+        const currentStatus = String(task.status || '').toLowerCase();
+        if (currentStatus === 'open') {
+          await patchTask(taskId, { status: 'in_progress', updated_at: startedAt });
+        }
+
+        let order = null;
+        if (orderId) {
+          const orderOut = await sbRequest(`agent_orders?order_id=eq.${encodeURIComponent(String(orderId))}&select=*&limit=1`, { method: 'GET' });
+          order = Array.isArray(orderOut.data) && orderOut.data.length ? orderOut.data[0] : null;
+        }
+
+        const taskContext = [
+          String(task.title || ''),
+          String(task.summary || ''),
+          String((order && order.request_text) || ''),
+          JSON.stringify(taskDetails || {})
+        ].join('\n').trim();
+
+        let resultSummary = '';
+        if (String(task.assigned_agent_key || '') === 'cmo_agent') {
+          const city = cleanCityName(taskDetails.city || extractCityFromText(taskContext) || '');
+          const articleCount = Math.min(Math.max(Number(taskDetails.article_count) || 5, 1), 25);
+          const result = await callInternalJson('/api/cmo-blog-run', {
+            method: 'POST',
+            body: {
+              target_city: city || '',
+              queue_target: articleCount,
+              max_generate_per_run: articleCount,
+              force_publish_generated: true,
+              publish_rate: articleCount,
+              distribution_enabled: true
+            },
+            source: 'kiddbusy-hq'
+          });
+          resultSummary = 'CMO executed blog run' +
+            (city ? (' for ' + city) : '') +
+            ': generated ' + String(result.generated_count || 0) +
+            ', published ' + String(result.published_count || 0) +
+            ', queue depth ' + String(result.queue_depth || 0) + '.';
+        } else if (String(task.assigned_agent_key || '') === 'operations_agent') {
+          const city = cleanCityName(taskDetails.city || extractCityFromText(taskContext) || '');
+          const articleCount = Math.min(Math.max(Number(taskDetails.article_count) || 5, 1), 25);
+          const result = await callInternalJson('/api/cmo-blog-run', {
+            method: 'POST',
+            body: {
+              target_city: city || '',
+              queue_target: articleCount,
+              max_generate_per_run: articleCount,
+              force_publish_generated: true,
+              publish_rate: articleCount,
+              distribution_enabled: true
+            },
+            source: 'kiddbusy-hq'
+          });
+          resultSummary = 'Operations coordinated publication' +
+            (city ? (' for ' + city) : '') +
+            ': generated ' + String(result.generated_count || 0) +
+            ', published ' + String(result.published_count || 0) + '.';
+        } else if (String(task.assigned_agent_key || '') === 'accountant_agent') {
+          const result = await callInternalJson('/api/accountant-agent', {
+            method: 'POST',
+            body: { action: 'run_snapshot' },
+            source: 'kiddbusy-hq'
+          });
+          const snap = result.snapshot || {};
+          resultSummary = 'Accountant refreshed finance snapshot. MRR $' + String(snap.mrr_active || 0) +
+            ', 30d net $' + String(snap.net_projection_30d || 0) + '.';
+        } else {
+          const result = await callInternalJson('/api/agent-router', {
+            method: 'POST',
+            body: {
+              role: task.assigned_agent_key,
+              message: 'Complete this delegated task from President. Task: ' + String(task.title || '') +
+                '\nSummary: ' + String(task.summary || '') +
+                '\nOwner request: ' + String((order && order.request_text) || '') +
+                '\nIf you cannot take external action, provide a concrete completion memo with findings and next steps.',
+              channel: 'dashboard',
+              thread_key: 'task:' + String(taskId),
+              owner_identity: 'harold'
+            },
+            source: 'kiddbusy-agent'
+          });
+          resultSummary = String(result.reply || '').slice(0, 1000) || ('Task ' + String(taskId) + ' completed.');
+        }
+
+        await patchTask(taskId, {
+          status: 'completed',
+          summary: resultSummary.slice(0, 1200),
+          details: Object.assign({}, taskDetails, {
+            auto_executor: 'db_proxy_task_runner',
+            last_run_at: nowIso(),
+            result_summary: resultSummary.slice(0, 600)
+          }),
+          updated_at: nowIso(),
+          completed_at: nowIso()
+        });
+
+        if (orderId) {
+          await sbRequest(`agent_orders?order_id=eq.${encodeURIComponent(String(orderId))}`, {
+            method: 'PATCH',
+            body: {
+              status: 'completed',
+              summary: resultSummary.slice(0, 1200),
+              updated_at: nowIso(),
+              completed_at: nowIso(),
+              details: Object.assign({}, (order && order.details) || {}, {
+                completed_by_agent_key: task.assigned_agent_key || null,
+                task_id: taskId
+              })
+            }
+          });
+        }
+
+        await sbRequest('agent_activity', {
+          method: 'POST',
+          body: {
+            agent_key: task.assigned_agent_key || 'unknown',
+            summary: resultSummary.slice(0, 1200),
+            status: 'success',
+            details: {
+              task_id: taskId,
+              order_id: orderId,
+              run_type: 'agent_task_runner',
+              task_title: task.title || ''
+            }
+          }
+        });
+
+        processed.push({
+          task_id: taskId,
+          assigned_agent_key: task.assigned_agent_key,
+          status: 'completed',
+          summary: resultSummary.slice(0, 240)
+        });
+      }
+      return json(200, { success: true, processed_count: processed.length, processed });
+    } catch (err) {
+      try {
+        await sbRequest('agent_activity', {
+          method: 'POST',
+          body: {
+            agent_key: 'president_agent',
+            summary: 'Agent task runner failed: ' + String(err.message || 'unknown error').slice(0, 800),
+            status: 'error',
+            details: { run_type: 'agent_task_runner' }
+          }
+        });
+      } catch (_) {}
+      return json(500, { error: err.message || 'Agent task runner failed' });
     }
   }
 
