@@ -238,6 +238,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
     <div class="tab" onclick="switchTab('cmo',this)" id="tab-cmo">CMO</div>
     <div class="tab" onclick="switchTab('finance',this)" id="tab-finance">Finance</div>
     <div class="tab" onclick="switchTab('agentsummary',this)" id="tab-agentsummary">Agent Summary</div>
+    <div class="tab" onclick="switchTab('agentoffice',this)" id="tab-agentoffice">Agent Office</div>
     <div class="tab" onclick="switchTab('cache',this)" id="tab-cache">Cache</div>
     <div class="tab" onclick="switchTab('activity',this)" id="tab-activity">Activity</div>
     <div class="tab" onclick="switchTab('integrity',this)" id="tab-integrity">Integrity</div>
@@ -1007,6 +1008,66 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 </div>
 </div><!-- /view-agentsummary -->
 
+<!-- AGENT OFFICE VIEW -->
+<div class="view" id="view-agentoffice">
+<div class="locations-inner">
+  <div class="date-banner">// AGENT OFFICE</div>
+  <div class="stats-row" style="margin-bottom:16px">
+    <div class="stat-card blue">
+      <div class="stat-label">Recent Exchanges (7d)</div>
+      <div class="stat-value" id="officekpi-exchanges">--</div>
+      <div class="stat-sub" id="officekpi-exchanges-sub">from agent activity</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-label">Agents Talking</div>
+      <div class="stat-value" id="officekpi-speakers">--</div>
+      <div class="stat-sub" id="officekpi-speakers-sub">distinct voices</div>
+    </div>
+    <div class="stat-card yellow">
+      <div class="stat-label">Open Tasks</div>
+      <div class="stat-value" id="officekpi-tasks">--</div>
+      <div class="stat-sub" id="officekpi-tasks-sub">delegated work</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Latest Topic</div>
+      <div class="stat-value" id="officekpi-topic" style="font-size:1.15rem">--</div>
+      <div class="stat-sub" id="officekpi-topic-sub">most recent office thread</div>
+    </div>
+  </div>
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Who Is Talking</div>
+        <div class="panel-badge">last 7 days</div>
+      </div>
+      <div class="panel-body" id="body-agent-office-by-agent">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Open Delegations</div>
+        <div class="panel-badge" id="badge-agent-office-tasks">loading</div>
+      </div>
+      <div class="panel-body" id="body-agent-office-tasks">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="panels full">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">What It Sounds Like In The Office</div>
+        <div class="panel-badge" id="badge-agent-office">recent conversation</div>
+      </div>
+      <div class="panel-body" id="body-agent-office">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div><!-- /view-agentoffice -->
+
 <!-- CACHE VIEW -->
 <div class="view" id="view-cache">
 <div class="locations-inner">
@@ -1245,6 +1306,9 @@ function switchTab(name, el) {
   if (name === 'agentsummary') {
     loadAgentSummary();
   }
+  if (name === 'agentoffice') {
+    loadAgentOffice();
+  }
 }
 
 // ===== HELPERS =====
@@ -1407,6 +1471,9 @@ async function loadAll() {
   }
   if (document.getElementById('view-agentsummary').classList.contains('active')) {
     loadAgentSummary();
+  }
+  if (document.getElementById('view-agentoffice').classList.contains('active')) {
+    loadAgentOffice();
   }
 
   document.getElementById('last-updated').textContent =
@@ -2735,6 +2802,17 @@ async function fetchAgentActivity(limit) {
   return out.activities || [];
 }
 
+async function fetchAgentTasks(status, limit) {
+  var res = await fetch('/.netlify/functions/db-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
+    body: JSON.stringify({ action: 'query_agent_tasks', status: status || 'open_or_in_progress', limit: limit || 80 })
+  });
+  var out = await res.json();
+  if (!res.ok) throw new Error(out.error || 'Failed to load agent tasks');
+  return out.tasks || [];
+}
+
 function formatLocalTimestamp(ts) {
   if (!ts) return '--';
   var d = new Date(ts);
@@ -2744,12 +2822,155 @@ function formatLocalTimestamp(ts) {
 
 function humanAgentName(key) {
   var k = String(key || '').trim();
+  if (k === 'president_agent') return 'President';
+  if (k === 'operations_agent') return 'Operations';
   if (k === 'admin_scheduled_agent') return 'Admin Agent';
   if (k === 'owner_leads_enrichment_agent') return 'Owner Leads Agent';
-  if (k === 'cmo_agent') return 'CMO Agent';
-  if (k === 'accountant_agent') return 'Accountant Agent';
+  if (k === 'cmo_agent') return 'CMO';
+  if (k === 'accountant_agent') return 'Accountant';
+  if (k === 'research_agent') return 'Research';
   if (!k) return 'Unknown Agent';
   return k.replace(/_/g, ' ');
+}
+
+function officeTopic(summary) {
+  var s = String(summary || '').trim();
+  if (!s) return 'General operations';
+  if (/traffic|seo|blog|content|newsletter|instagram/i.test(s)) return 'Traffic growth';
+  if (/revenue|mrr|p&l|finance|cost|projection/i.test(s)) return 'Revenue and finance';
+  if (/sponsor|payment|stripe/i.test(s)) return 'Sponsor lifecycle';
+  if (/submission|listing|review|event|moderation/i.test(s)) return 'Site operations';
+  if (/agent|registry|memory|task/i.test(s)) return 'Agent coordination';
+  return 'General operations';
+}
+
+function officeSay(agentKey, summary, status) {
+  var speaker = humanAgentName(agentKey);
+  var s = String(summary || '').trim();
+  var lowered = s.toLowerCase();
+  if (!s) return speaker + ': No update right now.';
+  if (speaker === 'President') {
+    if (/created:|custom agent created|agent created/i.test(s)) return 'President: I spun up a new specialist because the team needed extra coverage. ' + s;
+    if (/replied via/i.test(s)) return 'President: I answered the owner and kept the team aligned.';
+    return 'President: ' + s;
+  }
+  if (speaker === 'CMO') return 'CMO: ' + s;
+  if (speaker === 'Accountant') return 'Accountant: ' + s;
+  if (speaker === 'Operations') return 'Operations: ' + s;
+  if (speaker === 'Research') return 'Research: ' + s;
+  if (lowered.indexOf('error') >= 0 || String(status || '').toLowerCase() === 'error') return speaker + ': I hit a problem. ' + s;
+  return speaker + ': ' + s;
+}
+
+function renderOfficeTaskLine(task) {
+  var assigned = humanAgentName(task.assigned_agent_key);
+  var requester = humanAgentName(task.requested_by_agent_key || 'president_agent');
+  var status = String(task.status || 'open').toLowerCase();
+  var prefix = status === 'in_progress' ? 'is on it' : 'needs to pick this up';
+  return requester + ' to ' + assigned + ': ' + (task.title || 'Untitled task') + '. ' + assigned + ' ' + prefix + '.';
+}
+
+async function loadAgentOffice() {
+  var body = document.getElementById('body-agent-office');
+  var badge = document.getElementById('badge-agent-office');
+  var byAgentEl = document.getElementById('body-agent-office-by-agent');
+  var tasksEl = document.getElementById('body-agent-office-tasks');
+  var tasksBadge = document.getElementById('badge-agent-office-tasks');
+  if (!body) return;
+  body.innerHTML = loadingHTML();
+  if (byAgentEl) byAgentEl.innerHTML = loadingHTML();
+  if (tasksEl) tasksEl.innerHTML = loadingHTML();
+  try {
+    var results = await Promise.all([
+      fetchAgentActivity(120),
+      fetchAgentTasks('open_or_in_progress', 80)
+    ]);
+    var rows = results[0] || [];
+    var tasks = results[1] || [];
+    var rows7d = rows.filter(function(r) { return isWithinRange(r.created_at, '7d'); });
+    var speakers = {};
+    rows7d.forEach(function(r) {
+      var key = String(r.agent_key || 'unknown');
+      speakers[key] = (speakers[key] || 0) + 1;
+    });
+    var sortedSpeakers = Object.entries(speakers).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 8);
+    var maxSpeaker = sortedSpeakers[0] ? sortedSpeakers[0][1] : 1;
+    if (byAgentEl) {
+      byAgentEl.innerHTML = sortedSpeakers.length
+        ? sortedSpeakers.map(function(entry) {
+            var pct = Math.round((entry[1] / maxSpeaker) * 100);
+            return '<div class="city-bar-wrap">' +
+              '<div class="city-bar-label">' + humanAgentName(entry[0]) + '<span>' + entry[1] + '</span></div>' +
+              '<div class="city-bar-bg"><div class="city-bar-fill" style="width:' + pct + '%"></div></div>' +
+              '</div>';
+          }).join('')
+        : emptyHTML('No agent conversations yet');
+    }
+
+    if (tasksBadge) tasksBadge.textContent = tasks.length + ' open';
+    if (tasksEl) {
+      tasksEl.innerHTML = tasks.length
+        ? tasks.slice(0, 8).map(function(task) {
+            return '<div style="padding:10px 0;border-bottom:1px solid var(--border)">' +
+              '<div style="font-size:.8rem;color:var(--text);line-height:1.45">' + renderOfficeTaskLine(task) + '</div>' +
+              '<div style="margin-top:4px;font-family:var(--mono);font-size:.7rem;color:var(--muted)">' + formatLocalTimestamp(task.updated_at || task.created_at) + '</div>' +
+              '</div>';
+          }).join('')
+        : emptyHTML('No open delegations');
+    }
+
+    document.getElementById('officekpi-exchanges').textContent = rows7d.length;
+    document.getElementById('officekpi-exchanges-sub').textContent = 'all time: ' + rows.length;
+    document.getElementById('officekpi-speakers').textContent = Object.keys(speakers).length;
+    document.getElementById('officekpi-speakers-sub').textContent = sortedSpeakers.length ? ('most active: ' + humanAgentName(sortedSpeakers[0][0])) : 'distinct voices';
+    document.getElementById('officekpi-tasks').textContent = tasks.length;
+    document.getElementById('officekpi-tasks-sub').textContent = tasks.filter(function(t) { return String(t.status || '') === 'in_progress'; }).length + ' in progress';
+    var latestTopic = rows.length ? officeTopic(rows[0].summary) : 'No topic yet';
+    document.getElementById('officekpi-topic').textContent = latestTopic;
+    document.getElementById('officekpi-topic-sub').textContent = rows.length ? formatLocalTimestamp(rows[0].created_at) : 'most recent office thread';
+
+    badge.textContent = rows.length + ' moments';
+    if (!rows.length && !tasks.length) {
+      body.innerHTML = emptyHTML('No office conversation yet');
+      return;
+    }
+
+    var officeLines = [];
+    tasks.slice(0, 4).forEach(function(task) {
+      officeLines.push({
+        created_at: task.updated_at || task.created_at,
+        speaker: humanAgentName(task.requested_by_agent_key || 'president_agent'),
+        line: renderOfficeTaskLine(task),
+        type: 'task'
+      });
+    });
+    rows.slice(0, 24).forEach(function(r) {
+      officeLines.push({
+        created_at: r.created_at,
+        speaker: humanAgentName(r.agent_key),
+        line: officeSay(r.agent_key, r.summary, r.status),
+        type: 'activity',
+        status: r.status
+      });
+    });
+    officeLines.sort(function(a, b) { return new Date(b.created_at).getTime() - new Date(a.created_at).getTime(); });
+
+    body.innerHTML = officeLines.map(function(item) {
+      var accent = item.type === 'task' ? 'var(--yellow)' : (String(item.status || '').toLowerCase() === 'error' ? 'var(--accent)' : 'var(--blue)');
+      return '<div style="display:flex;gap:12px;padding:14px 0;border-bottom:1px solid var(--border)">' +
+        '<div style="min-width:118px;font-family:var(--mono);font-size:.7rem;color:var(--muted);white-space:nowrap">' + formatLocalTimestamp(item.created_at) + '</div>' +
+        '<div style="width:10px;height:10px;border-radius:50%;background:' + accent + ';margin-top:6px;flex:0 0 auto"></div>' +
+        '<div style="flex:1">' +
+          '<div style="font-size:.83rem;font-weight:600;color:var(--text);margin-bottom:4px">' + item.speaker + '</div>' +
+          '<div style="font-size:.84rem;line-height:1.55;color:var(--text)">' + item.line + '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } catch (e) {
+    body.innerHTML = '<div class="empty" style="color:var(--accent)">Agent office unavailable: ' + e.message + '</div>';
+    if (byAgentEl) byAgentEl.innerHTML = emptyHTML('Could not load speakers');
+    if (tasksEl) tasksEl.innerHTML = emptyHTML('Could not load tasks');
+  }
 }
 
 async function loadAgentSummary() {

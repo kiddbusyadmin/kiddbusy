@@ -292,6 +292,43 @@ exports.handler = async (event) => {
     }
   }
 
+  if (action === 'query_agent_tasks') {
+    const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
+    const statusFilter = String(status || '').trim().toLowerCase();
+    const filters = ['select=*', 'order=updated_at.desc', `limit=${safeLimit}`];
+    if (statusFilter) {
+      if (statusFilter === 'open_or_in_progress') {
+        filters.push('status=in.(open,in_progress)');
+      } else {
+        filters.push(`status=eq.${encodeURIComponent(statusFilter)}`);
+      }
+    }
+    const queryUrl = `${SUPABASE_URL}/rest/v1/agent_tasks?${filters.join('&')}`;
+    try {
+      const response = await fetch(queryUrl, {
+        method: 'GET',
+        headers: {
+          apikey: SUPABASE_SERVICE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const text = await response.text();
+      let data = [];
+      try {
+        data = text ? JSON.parse(text) : [];
+      } catch {
+        data = [];
+      }
+      if (!response.ok) {
+        return json(response.status, { error: 'Supabase query failed', details: data });
+      }
+      return json(200, { count: Array.isArray(data) ? data.length : 0, tasks: data });
+    } catch (err) {
+      return json(500, { error: err.message || 'Unexpected error' });
+    }
+  }
+
   if (action === 'query_owner_contacts') {
     const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
     const filters = ['select=*', 'order=created_at.desc', `limit=${safeLimit}`];
