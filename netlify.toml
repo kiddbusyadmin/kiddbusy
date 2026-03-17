@@ -11,6 +11,9 @@
 [functions.send-email]
   timeout = 30
 
+[functions.submit-listing]
+  timeout = 30
+
 [functions.db-proxy]
   timeout = 30
 
@@ -119,6 +122,11 @@
 [[redirects]]
   from = "/api/search"
   to = "/.netlify/functions/search"
+  status = 200
+
+[[redirects]]
+  from = "/api/submit-listing"
+  to = "/.netlify/functions/submit-listing"
   status = 200
 
 [[redirects]]

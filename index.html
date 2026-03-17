@@ -2465,21 +2465,27 @@ async function submitPlace() {
   if (!name || !type || !city) { alert('Please fill in Name, Type, and City!'); return; }
 
   try {
-    const { error } = await sb.from('submissions').insert({
-      business_name: name,
-      type,
-      city,
-      address: document.getElementById('sb-addr').value.trim() || null,
-      url: document.getElementById('sb-url').value.trim() || null,
-      description: document.getElementById('sb-desc').value.trim() || null,
-      submitter_name: submitterName,
-      submitter_email: submitterEmail,
-      age_range: document.getElementById('sb-age').value || null,
-      is_owner: isOwner,
-      wants_sponsorship: false,
-      status: 'pending'
+    const response = await fetch('/.netlify/functions/submit-listing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        business_name: name,
+        type,
+        city,
+        address: document.getElementById('sb-addr').value.trim() || null,
+        url: document.getElementById('sb-url').value.trim() || null,
+        description: document.getElementById('sb-desc').value.trim() || null,
+        submitter_name: submitterName,
+        submitter_email: submitterEmail,
+        age_range: document.getElementById('sb-age').value || null,
+        is_owner: isOwner,
+        wants_sponsorship: false
+      })
     });
-    if (error) console.warn('Submission DB error:', error);
+    const payload = await response.json();
+    if (!response.ok || !payload.success) {
+      console.warn('Submission API error:', payload);
+    }
   } catch(e) {
     console.warn('Submission exception:', e);
   }
