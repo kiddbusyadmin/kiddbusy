@@ -3,9 +3,11 @@
 
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUBMISSION_ALERT_EMAIL = process.env.SUBMISSION_ALERT_EMAIL || 'admin@kiddbusy.com';
 const { triggerSponsorshipPaymentRequestEmail, verifySponsorshipOwnerClaim } = require('./_sponsorship-payment-email');
 const { enrollClaimNurture } = require('./_sponsorship-claim-nurture');
 const { buildFinanceSnapshot, upsertFinanceSnapshot } = require('./_accounting-core');
+const { sendCompliantEmail } = require('./_email-compliance');
 
 const ALLOWED_TABLES = {
   submissions: new Set(['pending', 'approved', 'rejected']),
@@ -77,6 +79,29 @@ async function purgePlaceholderReviewsOnFirstOrganicApprove(reviewId) {
     listing_id: review.listing_id,
     placeholder_deleted_count: Array.isArray(delData) ? delData.length : 0
   };
+}
+
+function buildSubmissionApprovedAlertHtml(row) {
+  const safe = row || {};
+  const submittedBy = safe.submitter_name || safe.submitter_email || 'Anonymous';
+  return [
+    '<div style="font-family:Arial,sans-serif;max-width:720px;margin:0 auto;padding:8px 0">',
+    '<p style="font-size:12px;letter-spacing:.4px;color:#6b7280;text-transform:uppercase;margin:0 0 10px">KiddBusy Approval Alert</p>',
+    '<h2 style="font-size:22px;margin:0 0 12px">Listing submission approved</h2>',
+    '<p style="margin:0 0 12px">A public listing submission was approved in Command Center.</p>',
+    '<table style="width:100%;border-collapse:collapse;font-size:14px">',
+    `<tr><td style="padding:6px 0;font-weight:700;width:170px">Business</td><td style="padding:6px 0">${safe.business_name || '--'}</td></tr>`,
+    `<tr><td style="padding:6px 0;font-weight:700">Type</td><td style="padding:6px 0">${safe.type || '--'}</td></tr>`,
+    `<tr><td style="padding:6px 0;font-weight:700">City</td><td style="padding:6px 0">${safe.city || '--'}</td></tr>`,
+    `<tr><td style="padding:6px 0;font-weight:700">Address</td><td style="padding:6px 0">${safe.address || '--'}</td></tr>`,
+    `<tr><td style="padding:6px 0;font-weight:700">Website</td><td style="padding:6px 0">${safe.url || '--'}</td></tr>`,
+    `<tr><td style="padding:6px 0;font-weight:700">Submitter</td><td style="padding:6px 0">${submittedBy}</td></tr>`,
+    `<tr><td style="padding:6px 0;font-weight:700">Is owner</td><td style="padding:6px 0">${safe.is_owner ? 'yes' : 'no'}</td></tr>`,
+    `<tr><td style="padding:6px 0;font-weight:700">Description</td><td style="padding:6px 0">${safe.description || '--'}</td></tr>`,
+    '</table>',
+    '<p style="margin:16px 0 0"><a href="https://kiddbusy.com/admin.html" style="display:inline-block;background:#6c3fc5;color:#fff;text-decoration:none;padding:10px 16px;border-radius:999px;font-weight:700">Open Command Center</a></p>',
+    '</div>'
+  ].join('');
 }
 
 function parseListingId(value) {
@@ -478,10 +503,17 @@ exports.handler = async (event) => {
     let sponsorshipBefore = null;
     let sponsorshipLinking = null;
     let claimNurture = null;
+    let submissionBefore = null;
     if (table === 'sponsorships' && id) {
       const before = await sbRequest(`sponsorships?id=eq.${encodeURIComponent(String(id))}&select=*&limit=1`);
       if (before.response.ok && Array.isArray(before.data) && before.data.length) {
         sponsorshipBefore = before.data[0];
+      }
+    }
+    if (table === 'submissions' && id) {
+      const before = await sbRequest(`submissions?id=eq.${encodeURIComponent(String(id))}&select=*&limit=1`);
+      if (before.response.ok && Array.isArray(before.data) && before.data.length) {
+        submissionBefore = before.data[0];
       }
     }
 
@@ -598,8 +630,29 @@ exports.handler = async (event) => {
     let cleanup = null;
     let paymentEmail = null;
     let financeSnapshot = null;
+    let submissionApprovalEmail = null;
     if (table === 'reviews' && nextStatus === 'approved') {
       cleanup = await purgePlaceholderReviewsOnFirstOrganicApprove(id);
+    }
+    if (table === 'submissions' && nextStatus === 'approved') {
+      const prev = String((submissionBefore && submissionBefore.status) || '').toLowerCase();
+      const approvedRow = Array.isArray(data) && data.length ? data[0] : (submissionBefore || {});
+      if (prev !== 'approved') {
+        try {
+          submissionApprovalEmail = await sendCompliantEmail({
+            to: SUBMISSION_ALERT_EMAIL,
+            subject: `Submission approved: ${approvedRow.business_name || 'Listing'} (${approvedRow.city || 'Unknown city'})`,
+            body: buildSubmissionApprovedAlertHtml(approvedRow),
+            fromName: 'KiddBusy Alerts',
+            campaignType: 'submission_approval_alert',
+            allowSuppressedBypass: true
+          });
+        } catch (emailErr) {
+          submissionApprovalEmail = { sent: false, error: emailErr.message || 'Approval email failed' };
+        }
+      } else {
+        submissionApprovalEmail = { sent: false, skipped: true, reason: 'already_approved' };
+      }
     }
     if (table === 'sponsorships' && nextStatus === 'approved_awaiting_payment') {
       const prev = String((sponsorshipBefore && sponsorshipBefore.status) || '').toLowerCase();
@@ -640,6 +693,7 @@ exports.handler = async (event) => {
       updates: { status: nextStatus },
       data,
       cleanup,
+      submission_approval_email: submissionApprovalEmail,
       sponsorship_linking: sponsorshipLinking,
       payment_email: paymentEmail,
       finance_snapshot: financeSnapshot
