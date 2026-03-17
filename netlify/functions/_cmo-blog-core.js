@@ -265,6 +265,17 @@ function isLikelyFreePublicListing(row) {
   if (!hay) return false;
 
   var blocked = [
+    'cemetery',
+    'graveyard',
+    'burial',
+    'memorial',
+    'mausoleum',
+    'funeral',
+    'historic site',
+    'battlefield',
+    'adult nightlife',
+    'bar',
+    'cocktail',
     'museum',
     'zoo',
     'aquarium',
@@ -353,6 +364,14 @@ function hasCommercialSignals(text) {
   var hay = safeLower(text);
   if (!hay) return false;
   var blocked = [
+    'cemetery',
+    'graveyard',
+    'burial',
+    'memorial',
+    'mausoleum',
+    'funeral',
+    'historic cemetery',
+    'adult nightlife',
     'museum',
     'zoo',
     'aquarium',
@@ -371,6 +390,58 @@ function hasCommercialSignals(text) {
   return false;
 }
 
+function hasToddlerUnsafeSignals(text) {
+  var hay = safeLower(text);
+  if (!hay) return false;
+  var blocked = [
+    'cemetery',
+    'graveyard',
+    'burial ground',
+    'mausoleum',
+    'funeral',
+    'memorial park',
+    'historic cemetery',
+    'nightlife',
+    'bar crawl',
+    'cocktail',
+    'haunted',
+    'ghost tour'
+  ];
+  for (var i = 0; i < blocked.length; i += 1) {
+    if (hay.indexOf(blocked[i]) >= 0) return true;
+  }
+  return false;
+}
+
+function hasToddlerFriendlySignals(text) {
+  var hay = safeLower(text);
+  if (!hay) return 0;
+  var positive = [
+    'toddler',
+    'playground',
+    'stroller',
+    'splash pad',
+    'library',
+    'park',
+    'nature walk',
+    'open lawn',
+    'sandbox',
+    'climb',
+    'slide',
+    'run',
+    'shade',
+    'bathroom',
+    'family',
+    'kid-friendly',
+    'young children'
+  ];
+  var hits = 0;
+  for (var i = 0; i < positive.length; i += 1) {
+    if (hay.indexOf(positive[i]) >= 0) hits += 1;
+  }
+  return hits;
+}
+
 function hasStrongLocalSignals(post, targetCity, localListingNames) {
   var city = String(targetCity || '').trim().toLowerCase();
   var body = String((post && post.body_html) || '').toLowerCase();
@@ -382,6 +453,8 @@ function hasStrongLocalSignals(post, targetCity, localListingNames) {
   if (wordCount(stripTags(body)) < 220) return false;
   if (!hasCurrentTimeAnchor(combined)) return false;
   if (hasCommercialSignals(combined)) return false;
+  if (hasToddlerUnsafeSignals(combined)) return false;
+  if (hasToddlerFriendlySignals(combined) < 3) return false;
 
   var mentions = countNameMentions(combined, localListingNames || []);
   if (localListingNames && localListingNames.length) {
@@ -513,6 +586,8 @@ async function generateBatch(cities, existingTitles, batchSize, preferredCity, k
     '- Each post must target one keyword phrase and include that exact phrase in the title and first paragraph.',
     '- Include at least 3 specific free/public spaces by exact name from the Known local listings block.',
     '- Do not mention businesses, private venues, museums, zoos, ticketed attractions, classes, or paid admissions.',
+    '- Never recommend cemeteries, memorial grounds, graveyards, nightlife, or any place that would feel inappropriate for toddlers.',
+    '- Every recommendation must feel toddler-appropriate, family-safe, stroller-friendly, and obviously defensible to a parent.',
     '- Include a <h2>Local Picks</h2> section with a <ul> and at least 3 <li> entries.',
     '- Include official site links when available in context.',
     '- Use full names as provided in context. Do not invent place names.',
@@ -556,6 +631,7 @@ async function generateBatch(cities, existingTitles, batchSize, preferredCity, k
     var n = normalizePost(arr[i], cities);
     if (!n) continue;
     if (n.city !== targetCity) continue;
+    if (hasToddlerUnsafeSignals([n.title, n.excerpt, n.body_html].join(' '))) continue;
     fallback.push(n);
     if (!hasStrongLocalSignals(n, targetCity, localNames)) continue;
     out.push(n);
