@@ -379,7 +379,7 @@ exports.handler = async (event) => {
     return json(405, { error: 'Method not allowed' });
   }
 
-  const { action, table, id, updates, match, status, limit, listing_id, is_sponsored, agent_key } = body;
+  const { action, table, id, updates, match, status, limit, listing_id, is_sponsored, agent_key, city, title_q } = body;
 
   if (method === 'GET' && !['run_progress_pulse', 'run_agent_tasks'].includes(String(action || ''))) {
     return json(405, { error: 'Method not allowed' });
