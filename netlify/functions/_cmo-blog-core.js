@@ -205,13 +205,13 @@ function buildLocalSeoKeywordPlan(city) {
   var c = String(city || '').trim();
   if (!c) return [];
   return [
-    'toddler activities ' + c + ' nc',
+    'toddler activities ' + c,
     'things to do with toddlers in ' + c,
-    'free toddler activities ' + c + ' nc',
-    'indoor toddler activities ' + c + ' nc',
-    'outdoor toddler activities ' + c + ' nc',
-    'weekend toddler activities ' + c + ' nc',
-    'rainy day toddler activities ' + c + ' nc',
+    'free toddler activities ' + c,
+    'indoor toddler activities ' + c,
+    'outdoor toddler activities ' + c,
+    'weekend toddler activities ' + c,
+    'rainy day toddler activities ' + c,
     c + ' toddler parks and playgrounds',
     c + ' library activities for toddlers',
     c + ' family activities this weekend',
