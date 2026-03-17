@@ -689,9 +689,19 @@ function inferCityFromRequest(text) {
   return '';
 }
 
+function isLowSignalFollowUp(text) {
+  var raw = String(text || '').trim().toLowerCase();
+  if (!raw) return true;
+  if (raw.length <= 6) return true;
+  if (/^(yes|yeah|yep|no|nope|ok|okay|sure|proceed|continue|do it|done|thanks)\.?$/.test(raw)) return true;
+  if (/^(is this done|what did [a-z ]+ say|how will i receive these confirmations of completed work)\??$/.test(raw)) return true;
+  return false;
+}
+
 function shouldAutoDelegateExecutionRequest(text) {
   var raw = String(text || '').trim().toLowerCase();
   if (!raw) return false;
+  if (isLowSignalFollowUp(raw)) return false;
   return /\b(publish|write|create|generate|draft|post|launch|build|fix|review|approve|queue)\b/.test(raw);
 }
 
@@ -709,6 +719,7 @@ function collectClaimedAgents(text) {
 function buildAutoDelegationPlan(text, reply) {
   var raw = String(text || '').trim();
   var lower = raw.toLowerCase();
+  if (isLowSignalFollowUp(lower)) return [];
   var replyText = String(reply || '').trim();
   var combinedClaimed = collectClaimedAgents(raw + '\n' + replyText);
   var isExecution = shouldAutoDelegateExecutionRequest(lower);

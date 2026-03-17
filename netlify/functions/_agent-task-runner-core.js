@@ -158,6 +158,19 @@ async function runDelegatedAgentTask(task, order) {
   });
 }
 
+function isContentWorkflowTask(task, order) {
+  const details = Object.assign({}, (task && task.details) || {});
+  if (Number(details.article_count) > 0 || Number(details.target_count) > 0) return true;
+  if (String(details.seo_keyword_theme || '').trim()) return true;
+  if (String(details.dependent_on_agent_key || '').trim() === 'cmo_agent') return true;
+  const hay = [
+    String((task && task.title) || ''),
+    String((task && task.summary) || ''),
+    String((order && order.request_text) || '')
+  ].join(' ').toLowerCase();
+  return /\b(blog|blogs|post|posts|article|articles|seo|publish|publishing|title formatting|title capitalization)\b/.test(hay);
+}
+
 async function syncResearchArtifactForTask(task, order, nextStatus, resultSummary, delegatedResult) {
   if (String(task.assigned_agent_key || '') !== 'research_agent') return null;
   const details = task.details || {};
@@ -417,7 +430,7 @@ async function runAgentTasks() {
       last_run_at: finalizedAt
     });
 
-    if (String(task.assigned_agent_key || '') === 'cmo_agent') {
+    if (String(task.assigned_agent_key || '') === 'cmo_agent' && isContentWorkflowTask(task, order)) {
       const city = cleanCityName(taskDetails.city || extractCityFromText(taskContext) || '');
       const articleCount = inferTaskTargetCount(task, taskDetails);
       const seoKeywordTheme = String(taskDetails.seo_keyword_theme || '').trim().toLowerCase();
@@ -468,7 +481,7 @@ async function runAgentTasks() {
           resultSummary += ' Remaining: ' + String(remainingAfter) + '.';
         }
       }
-    } else if (String(task.assigned_agent_key || '') === 'operations_agent') {
+    } else if (String(task.assigned_agent_key || '') === 'operations_agent' && isContentWorkflowTask(task, order)) {
       const city = cleanCityName(taskDetails.city || extractCityFromText(taskContext) || '');
       const articleCount = inferTaskTargetCount(task, taskDetails);
       const seoKeywordTheme = String(taskDetails.seo_keyword_theme || '').trim().toLowerCase();
