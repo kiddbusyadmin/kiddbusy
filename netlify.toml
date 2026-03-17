@@ -85,9 +85,9 @@
 [functions.cmo-blog-run]
   timeout = 30
 
-# CMO blog writer — scheduled queue builder/distributor
+# CMO blog writer + President progress pulse
 [functions.cmo-blog-scheduled]
-  schedule = "*/20 * * * *"
+  schedule = "*/5 * * * *"
   timeout = 30
 
 # Accountant agent snapshot — runs nightly at 1am ET (6am UTC)
@@ -99,11 +99,6 @@
 [functions.revenue-consensus-scheduled]
   schedule = "30 14 * * *"
   timeout = 60
-
-# President progress pulse for Telegram status updates
-[functions.progresspulse]
-  schedule = "*/5 * * * *"
-  timeout = 30
 
 # Sponsorship claim nurture — runs hourly to follow up blocked sponsorships
 [functions.sponsorship-claim-nurture]
@@ -217,7 +212,7 @@
 
 [[redirects]]
   from = "/api/agent-progress-pulse"
-  to = "/.netlify/functions/progresspulse"
+  to = "/.netlify/functions/cmo-blog-scheduled?progress_only=1"
   status = 200
 
 [[redirects]]
