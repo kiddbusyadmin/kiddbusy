@@ -443,6 +443,17 @@ function normalizePost(rawPost, cities) {
   if (!title || !excerpt || !seoDescription || !bodyHtml) return null;
 
   var city = post.city == null ? null : String(post.city).trim();
+  if (city && cities.indexOf(city) === -1) {
+    var normalizedCity = cityBase(city).toLowerCase();
+    var matchedCity = null;
+    for (var c = 0; c < cities.length; c += 1) {
+      if (cityBase(cities[c]).toLowerCase() === normalizedCity) {
+        matchedCity = cities[c];
+        break;
+      }
+    }
+    city = matchedCity;
+  }
   if (city && cities.indexOf(city) === -1) city = null;
 
   var tags = [];
@@ -540,13 +551,18 @@ async function generateBatch(cities, existingTitles, batchSize, preferredCity, k
   var arr = parseAnthropicArray(raw);
 
   var out = [];
+  var fallback = [];
   for (var i = 0; i < arr.length; i += 1) {
     var n = normalizePost(arr[i], cities);
     if (!n) continue;
     if (n.city !== targetCity) continue;
+    fallback.push(n);
     if (!hasStrongLocalSignals(n, targetCity, localNames)) continue;
     out.push(n);
     if (out.length >= batchSize) break;
+  }
+  if (!out.length && fallback.length) {
+    return fallback.slice(0, batchSize);
   }
   return out;
 }
