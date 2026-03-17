@@ -17,7 +17,8 @@ const {
   createProgressSubscription,
   updateProgressSubscription,
   getProgressSubscriptions,
-  getProgressReports
+  getProgressReports,
+  getResearchArchive
 } = require('./_agent-memory');
 
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
@@ -270,6 +271,16 @@ async function executeTool(name, input = {}, context = {}) {
       });
       return { count: rows.length, reports: rows };
     }
+    case 'query_research_artifacts': {
+      const rows = await getResearchArchive({
+        ownerIdentity: input.owner_identity || 'harold',
+        agentKey: input.agent_key || '',
+        status: input.status || '',
+        city: input.city || '',
+        limit: input.limit || 20
+      });
+      return { count: rows.length, artifacts: rows };
+    }
     case 'store_agent_memory': {
       const row = await upsertMemory({
         ownerIdentity: input.owner_identity || 'harold',
@@ -414,6 +425,9 @@ function toolDefinitions() {
     }, required: ['subscription_id'] } },
     { name: 'query_progress_reports', description: 'Read recent progress reports already delivered to the owner.', input_schema: { type: 'object', properties: {
       owner_identity: { type: 'string' }, limit: { type: 'number' }
+    }, required: [] } },
+    { name: 'query_research_artifacts', description: 'Read stored Research findings so past research can be reused instead of rediscovered.', input_schema: { type: 'object', properties: {
+      owner_identity: { type: 'string' }, agent_key: { type: 'string' }, status: { type: 'string' }, city: { type: 'string' }, limit: { type: 'number' }
     }, required: [] } },
     { name: 'store_agent_memory', description: 'Persist a durable memory, preference, decision, or standing directive for an agent.', input_schema: { type: 'object', properties: {
       owner_identity: { type: 'string' }, agent_key: { type: 'string' }, memory_kind: { type: 'string' }, key: { type: 'string' }, value: { type: 'object' }, pinned: { type: 'boolean' }
@@ -699,10 +713,12 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
   const storedMemories = await getAgentMemories({ ownerIdentity, agentKey: 'president_agent', limit: 40 });
   const openTasks = await getOpenTasks({ ownerIdentity, limit: 20 });
   const openOrders = await getOwnerOrders({ ownerIdentity, limit: 20, status: 'open_funnel' });
+  const researchArchive = await getResearchArchive({ ownerIdentity, limit: 8 });
   const threadSummary = summarizeThreadContext(storedMessages);
   const memorySummary = (storedMemories || []).map((m) => `- ${m.memory_kind}/${m.key}: ${JSON.stringify(m.value)}`).join('\n');
   const taskSummary = (openTasks || []).map((t) => `- ${t.assigned_agent_key}: ${t.title} [${t.status}]`).join('\n');
   const orderSummary = (openOrders || []).map((o) => `- #${o.order_id} ${o.status}: ${o.title}`).join('\n');
+  const researchSummary = (researchArchive || []).map((a) => `- ${a.question} [${a.status}]${a.city ? ' city=' + a.city : ''}`).join('\n');
   var currentOrder = null;
   if (agent.key === 'president_agent' && text) {
     currentOrder = await createOwnerOrder({
@@ -724,6 +740,8 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
     orderSummary || '- none recorded',
     'Open delegated tasks:',
     taskSummary || '- none recorded',
+    'Recent research archive:',
+    researchSummary || '- no stored research findings yet',
     'Recent thread context:',
     threadSummary || '- no prior thread history',
     currentOrder ? ('Current owner order id: ' + currentOrder.order_id) : 'Current owner order id: none'

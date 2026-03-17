@@ -529,6 +529,41 @@ exports.handler = async (event) => {
     }
   }
 
+  if (action === 'query_research_artifacts') {
+    const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
+    const filters = ['select=*', 'order=updated_at.desc', `limit=${safeLimit}`];
+    const statusFilter = String(status || '').trim().toLowerCase();
+    const key = String(agent_key || '').trim();
+    const cityFilter = String(city || '').trim();
+    if (statusFilter) filters.push(`status=eq.${encodeURIComponent(statusFilter)}`);
+    if (key) filters.push(`agent_key=eq.${encodeURIComponent(key)}`);
+    if (cityFilter) filters.push(`city=ilike.*${encodeURIComponent(cityFilter)}*`);
+    const queryUrl = `${SUPABASE_URL}/rest/v1/research_artifacts?${filters.join('&')}`;
+    try {
+      const response = await fetch(queryUrl, {
+        method: 'GET',
+        headers: {
+          apikey: SUPABASE_SERVICE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const text = await response.text();
+      let data = [];
+      try {
+        data = text ? JSON.parse(text) : [];
+      } catch {
+        data = [];
+      }
+      if (!response.ok) {
+        return json(response.status, { error: 'Supabase query failed', details: data });
+      }
+      return json(200, { count: Array.isArray(data) ? data.length : 0, artifacts: data });
+    } catch (err) {
+      return json(500, { error: err.message || 'Unexpected error' });
+    }
+  }
+
   if (action === 'update_agent_task_status') {
     const taskId = Number(body.task_id);
     const nextTaskStatus = String(body.status || '').trim().toLowerCase();

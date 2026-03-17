@@ -1,4 +1,5 @@
 const { sbFetch } = require('./_accounting-core');
+const { seedResearchArtifactFromTask, getResearchArtifacts } = require('./_research-memory');
 
 function nowIso() {
   return new Date().toISOString();
@@ -100,7 +101,15 @@ async function createTask({ ownerIdentity = 'harold', requestedByAgentKey = 'pre
     prefer: 'return=representation'
   });
   if (!out.response.ok) throw new Error('Failed to create agent task');
-  return Array.isArray(out.data) && out.data.length ? out.data[0] : null;
+  const task = Array.isArray(out.data) && out.data.length ? out.data[0] : null;
+  if (task && String(task.assigned_agent_key || '') === 'research_agent') {
+    try {
+      await seedResearchArtifactFromTask(task);
+    } catch (_) {
+      // Keep task creation resilient even if research artifact persistence fails.
+    }
+  }
+  return task;
 }
 
 async function getOpenTasks({ ownerIdentity = 'harold', limit = 30 }) {
@@ -218,6 +227,10 @@ async function getProgressSubscriptions({ ownerIdentity = 'harold', status = 'ac
   return out.data;
 }
 
+async function getResearchArchive({ ownerIdentity = 'harold', agentKey = '', status = '', city = '', limit = 25 }) {
+  return getResearchArtifacts({ ownerIdentity, agentKey, status, city, limit });
+}
+
 async function createProgressReport({ subscriptionId, ownerIdentity = 'harold', agentKey = 'president_agent', channel = 'telegram', targetChatId = null, reportText, reportMeta = {} }) {
   const out = await sbFetch('agent_progress_reports', {
     method: 'POST',
@@ -257,6 +270,7 @@ module.exports = {
   createProgressSubscription,
   updateProgressSubscription,
   getProgressSubscriptions,
+  getResearchArchive,
   createProgressReport,
   getProgressReports
 };

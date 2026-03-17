@@ -2,6 +2,7 @@ const { runCmoBlog } = require('./_cmo-blog-core');
 const { runAgentConversation } = require('./_agent-router-core');
 const accountantAgent = require('./accountant-agent');
 const { logAgentActivity } = require('./_agent-activity');
+const { upsertResearchArtifact, inferQuestion, inferCity } = require('./_research-memory');
 
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -154,6 +155,36 @@ async function runDelegatedAgentTask(task, order) {
     channel: 'dashboard',
     threadKey: 'task:' + String(task.task_id),
     ownerIdentity: 'harold'
+  });
+}
+
+async function syncResearchArtifactForTask(task, order, nextStatus, resultSummary, delegatedResult) {
+  if (String(task.assigned_agent_key || '') !== 'research_agent') return null;
+  const details = task.details || {};
+  const notes = delegatedResult && delegatedResult.reply ? String(delegatedResult.reply || '').slice(0, 20000) : '';
+  const city = details.city || inferCity(task, order) || '';
+  const tags = []
+    .concat(Array.isArray(details.tags) ? details.tags : [])
+    .concat(details.research_request ? ['research'] : [])
+    .concat(city ? ['city:' + String(city).toLowerCase().replace(/\s+/g, '_')] : []);
+  return upsertResearchArtifact({
+    ownerIdentity: task.owner_identity || 'harold',
+    taskId: task.task_id,
+    orderId: details.order_id || (order && order.order_id) || null,
+    agentKey: 'research_agent',
+    question: inferQuestion(task, order),
+    summary: String(resultSummary || '').slice(0, 2000),
+    fullNotes: notes,
+    status: nextStatus,
+    city,
+    tags,
+    metadata: {
+      source: 'agent_task_runner',
+      provider: delegatedResult && delegatedResult.provider ? delegatedResult.provider : null,
+      task_title: String(task.title || '').slice(0, 240),
+      task_summary: String(task.summary || '').slice(0, 1200),
+      thread_key: delegatedResult && delegatedResult.thread_key ? delegatedResult.thread_key : null
+    }
   });
 }
 
@@ -500,6 +531,13 @@ async function runAgentTasks() {
     } else {
       const result = await runDelegatedAgentTask(task, order);
       resultSummary = String(result.reply || '').slice(0, 1000) || ('Task ' + String(taskId) + ' completed.');
+      if (String(task.assigned_agent_key || '') === 'research_agent') {
+        const artifact = await syncResearchArtifactForTask(task, order, nextStatus, resultSummary, result);
+        if (artifact && artifact.artifact_id) {
+          nextTaskDetails.research_artifact_id = artifact.artifact_id;
+          nextTaskDetails.research_question = artifact.question || nextTaskDetails.research_question || null;
+        }
+      }
     }
 
     const taskPatch = {
