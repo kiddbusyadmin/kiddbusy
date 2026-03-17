@@ -109,9 +109,9 @@ function buildActivitySummary(rows, options = {}) {
   const cityCounts = {};
   scoped.forEach((row) => {
     const evt = String(row.event || 'unknown');
-    const city = String(row.city || 'Unknown');
+    const city = String(row.city || '').trim();
     eventCounts[evt] = (eventCounts[evt] || 0) + 1;
-    cityCounts[city] = (cityCounts[city] || 0) + 1;
+    if (city) cityCounts[city] = (cityCounts[city] || 0) + 1;
   });
   const topEvent = Object.entries(eventCounts).sort((a, b) => b[1] - a[1])[0] || ['--', 0];
   const topCity = Object.entries(cityCounts).sort((a, b) => b[1] - a[1])[0] || ['--', 0];

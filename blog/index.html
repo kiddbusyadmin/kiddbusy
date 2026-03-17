@@ -154,12 +154,29 @@ function referrerType() {
   return 'referral';
 }
 
-function track(event, value) {
+function analyticsSource() {
+  try {
+    if (navigator.webdriver) return 'internal';
+    var host = String(window.location.hostname || '').toLowerCase();
+    if (host.endsWith('.netlify.app') || host === 'localhost' || host === '127.0.0.1') return 'internal';
+  } catch (_) {}
+  return 'public';
+}
+
+function isInternalTraffic() {
+  return analyticsSource() === 'internal';
+}
+
+function track(event, city, value) {
   sb.from('analytics').insert({
     event: event,
-    city: null,
+    city: city || null,
     value: value == null ? null : JSON.stringify(value),
-    session_id: SESSION_ID
+    session_id: SESSION_ID,
+    is_internal: isInternalTraffic(),
+    source: analyticsSource(),
+    user_agent: navigator.userAgent || null,
+    path: window.location.pathname || null
   }).then(function(){}).catch(function(){});
 }
 
@@ -206,7 +223,7 @@ function render(posts) {
     return [
       '<article class="card">',
       '  <div class="meta">' + formatDate(p.published_at) + metaCity + ' - ' + (Number(p.read_minutes) || 4) + ' min read</div>',
-      '  <a href="/blog/' + encodeURIComponent(p.slug) + '"><h2 class="title">' + esc(p.title) + '</h2></a>',
+      '  <a href="/blog/' + encodeURIComponent(p.slug) + '" data-city="' + esc(cityLabel) + '"><h2 class="title">' + esc(p.title) + '</h2></a>',
       '  <p class="excerpt">' + esc(p.excerpt) + '</p>',
       '  <div class="tags">' + tags.map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('') + '</div>',
       '</article>'
@@ -217,7 +234,7 @@ function render(posts) {
     a.addEventListener('click', function() {
       var href = a.getAttribute('href') || '';
       var slug = href.split('/').filter(Boolean).pop() || '';
-      track('blog_post_click', { slug: decodeURIComponent(slug), from: 'blog_index' });
+      track('blog_post_click', a.getAttribute('data-city') || null, { slug: decodeURIComponent(slug), from: 'blog_index' });
     });
   });
 }
@@ -238,7 +255,7 @@ function renderHubs(hubs, refreshedDate) {
     var display = String(h.city_display || h.city || '').trim();
     var url = String(h.url || ('/blog/city/' + encodeURIComponent(h.city_slug || ''))).trim();
     return [
-      '<a class=\"city-chip\" href=\"' + esc(url) + '\">',
+      '<a class=\"city-chip\" href=\"' + esc(url) + '\" data-city=\"' + esc(display) + '\">',
       '  <div>' + esc(display) + '</div>',
       '</a>'
     ].join('');
@@ -248,7 +265,7 @@ function renderHubs(hubs, refreshedDate) {
       var href = a.getAttribute('href') || '';
       var parts = href.split('/');
       var slug = parts[parts.length - 1] || '';
-      track('blog_city_hub_click', { city_slug: decodeURIComponent(slug || '') });
+      track('blog_city_hub_click', a.getAttribute('data-city') || null, { city_slug: decodeURIComponent(slug || '') });
     });
   });
 }
@@ -270,7 +287,7 @@ async function load() {
     } else {
       renderHubs([], '');
     }
-    track('blog_index_view', {
+    track('blog_index_view', null, {
       referrer_type: referrerType(),
       post_count: (out.posts || []).length
     });
