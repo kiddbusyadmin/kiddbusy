@@ -1,7 +1,7 @@
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const OWNER_LEADS_MODEL = process.env.OWNER_LEADS_MODEL || 'claude-sonnet-4-20250514';
+const OWNER_LEADS_MODEL = process.env.OWNER_LEADS_MODEL || 'claude-haiku-4-5-20251001';
 const { logAgentActivity } = require('./_agent-activity');
 
 function json(statusCode, payload) {
@@ -45,6 +45,35 @@ function parseJsonFromText(raw) {
   const objMatch = fenced.match(/\{[\s\S]*\}/);
   if (!objMatch) throw new Error('No JSON object found in model output');
   return JSON.parse(objMatch[0]);
+}
+
+function parseJsonArrayFromText(raw) {
+  const text = String(raw || '');
+  const fenced = text.replace(/```json\s*/gi, '').replace(/```/g, '');
+  const arrMatch = fenced.match(/\[[\s\S]*\]/);
+  if (!arrMatch) throw new Error('No JSON array found in model output');
+  return JSON.parse(arrMatch[0]);
+}
+
+function normalizeLead(parsed, fallbackWebsite) {
+  const lead = {
+    owner_name: parsed && parsed.owner_name ? String(parsed.owner_name).trim().slice(0, 200) : null,
+    contact_email: parsed && parsed.contact_email ? String(parsed.contact_email).trim().toLowerCase() : null,
+    contact_phone: parsed && parsed.contact_phone ? String(parsed.contact_phone).trim().slice(0, 80) : null,
+    business_website: normalizeWebsiteUrl((parsed && parsed.business_website) || fallbackWebsite),
+    confidence: Number(parsed && parsed.confidence),
+    notes: parsed && parsed.notes ? String(parsed.notes).trim().slice(0, 1200) : null,
+    evidence_urls: uniqueStrings(parsed && parsed.evidence_urls, 6),
+    raw_response: parsed && parsed.raw_response ? parsed.raw_response : null
+  };
+
+  if (!Number.isFinite(lead.confidence)) lead.confidence = 0;
+  lead.confidence = Math.max(0, Math.min(1, lead.confidence));
+  if (lead.contact_email && !isValidEmail(lead.contact_email)) {
+    lead.notes = (lead.notes ? `${lead.notes} ` : '') + '[Invalid email discarded]';
+    lead.contact_email = null;
+  }
+  return lead;
 }
 
 async function sbFetch(path, { method = 'GET', body = null, prefer = null } = {}) {
@@ -154,26 +183,90 @@ If uncertain, lower confidence and explain briefly in notes.`;
   const textBlocks = (raw.content || []).filter((b) => b.type === 'text');
   const text = textBlocks.length ? textBlocks[textBlocks.length - 1].text : '';
   const parsed = parseJsonFromText(text);
+  const lead = normalizeLead(parsed, website);
+  lead.raw_response = raw;
+  return lead;
+}
 
-  const lead = {
-    owner_name: parsed.owner_name ? String(parsed.owner_name).trim().slice(0, 200) : null,
-    contact_email: parsed.contact_email ? String(parsed.contact_email).trim().toLowerCase() : null,
-    contact_phone: parsed.contact_phone ? String(parsed.contact_phone).trim().slice(0, 80) : null,
-    business_website: normalizeWebsiteUrl(parsed.business_website || website),
-    confidence: Number(parsed.confidence),
-    notes: parsed.notes ? String(parsed.notes).trim().slice(0, 1200) : null,
-    evidence_urls: uniqueStrings(parsed.evidence_urls, 6),
-    raw_response: raw
-  };
+async function enrichListingBatch(listings) {
+  const batch = Array.isArray(listings) ? listings : [];
+  if (!batch.length) return {};
 
-  if (!Number.isFinite(lead.confidence)) lead.confidence = 0;
-  lead.confidence = Math.max(0, Math.min(1, lead.confidence));
-  if (lead.contact_email && !isValidEmail(lead.contact_email)) {
-    lead.notes = (lead.notes ? `${lead.notes} ` : '') + '[Invalid email discarded]';
-    lead.contact_email = null;
+  const system = `You are a business lead researcher.
+Return ONLY one JSON array.
+Each item must use this exact schema:
+{
+  "listing_id": number,
+  "owner_name": string | null,
+  "contact_email": string | null,
+  "contact_phone": string | null,
+  "business_website": string | null,
+  "confidence": number,
+  "notes": string,
+  "evidence_urls": string[]
+}
+Rules:
+- One output item per input listing_id.
+- Prioritize official website contact pages and trustworthy business directories.
+- If you cannot find a reliable email, set contact_email to null.
+- confidence must be between 0 and 1.
+- evidence_urls max 6.
+- No markdown. JSON only.`;
+
+  const lines = batch.map((listing) => {
+    return [
+      `listing_id: ${Number(listing.listing_id) || 0}`,
+      `name: ${String(listing.name || '').trim()}`,
+      `category: ${String(listing.category || '').trim()}`,
+      `city: ${String(listing.city || '').trim()}`,
+      `state: ${String(listing.state || '').trim()}`,
+      `address: ${String(listing.address || '').trim() || 'unknown'}`,
+      `website: ${String(listing.website || '').trim() || 'unknown'}`
+    ].join(' | ');
+  }).join('\n');
+
+  const user = `Find likely owner/contact lead details for each listing below:
+${lines}
+
+Goal: suspected owner name and best contact email for outreach inviting business claim on KiddBusy.
+If uncertain, lower confidence and explain briefly in notes.`;
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: OWNER_LEADS_MODEL,
+      max_tokens: 3600,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      system,
+      messages: [{ role: 'user', content: user }]
+    })
+  });
+
+  const raw = await response.json();
+  if (!response.ok) {
+    throw new Error(raw && raw.error && raw.error.message ? raw.error.message : 'Anthropic API error');
   }
 
-  return lead;
+  const textBlocks = (raw.content || []).filter((b) => b.type === 'text');
+  const text = textBlocks.length ? textBlocks[textBlocks.length - 1].text : '';
+  const parsed = parseJsonArrayFromText(text);
+  if (!Array.isArray(parsed)) {
+    throw new Error('Batch enrichment returned non-array payload');
+  }
+
+  const byId = {};
+  for (const item of parsed) {
+    const id = Number(item && item.listing_id);
+    if (!Number.isFinite(id) || id <= 0) continue;
+    byId[id] = normalizeLead(item, null);
+    byId[id].raw_response = raw;
+  }
+  return byId;
 }
 
 async function maybeBackfillListingWebsite(listing, lead) {
@@ -267,6 +360,7 @@ exports.handler = async (event) => {
   const minConfidence = Math.max(0, Math.min(1, Number(body.min_confidence) || 0.65));
   const autoWrite = body.auto_write === undefined ? true : !!body.auto_write;
   const dryRun = body.dry_run === undefined ? !autoWrite : !!body.dry_run;
+  const batchSize = Math.min(Math.max(Number(body.batch_size) || 6, 2), 15);
 
   try {
     const listings = await fetchPreseedListings({ city, limit });
@@ -277,39 +371,50 @@ exports.handler = async (event) => {
     let skippedLowConfidence = 0;
     let failed = 0;
 
-    for (const listing of listings) {
+    for (let i = 0; i < listings.length; i += batchSize) {
+      const chunk = listings.slice(i, i + batchSize);
+      let chunkLeadMap = {};
       try {
-        const lead = await enrichOneListing(listing);
-        const siteUpdate = await maybeBackfillListingWebsite(listing, lead);
-        if (siteUpdate.updated) websiteBackfilled += 1;
+        chunkLeadMap = await enrichListingBatch(chunk);
+      } catch (batchErr) {
+        // Fallback keeps pipeline resilient if one batch response is malformed.
+        chunkLeadMap = {};
+      }
 
-        if (!lead.contact_email) {
-          skippedNoEmail += 1;
-          results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'skipped_no_email', confidence: lead.confidence, notes: lead.notes || null, website_backfilled: !!siteUpdate.updated, website: siteUpdate.website || lead.business_website || null });
-          continue;
-        }
+      for (const listing of chunk) {
+        try {
+          const lead = chunkLeadMap[listing.listing_id] || await enrichOneListing(listing);
+          const siteUpdate = await maybeBackfillListingWebsite(listing, lead);
+          if (siteUpdate.updated) websiteBackfilled += 1;
 
-        if (lead.confidence < minConfidence) {
-          skippedLowConfidence += 1;
-          results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'skipped_low_confidence', email: lead.contact_email, confidence: lead.confidence, website_backfilled: !!siteUpdate.updated, website: siteUpdate.website || lead.business_website || null });
-          continue;
-        }
+          if (!lead.contact_email) {
+            skippedNoEmail += 1;
+            results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'skipped_no_email', confidence: lead.confidence, notes: lead.notes || null, website_backfilled: !!siteUpdate.updated, website: siteUpdate.website || lead.business_website || null });
+            continue;
+          }
 
-        if (dryRun) {
-          results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'dry_run_candidate', email: lead.contact_email, lead_name: lead.owner_name, confidence: lead.confidence, evidence_urls: lead.evidence_urls, website_backfilled: !!siteUpdate.updated, website: siteUpdate.website || lead.business_website || null });
-          continue;
-        }
+          if (lead.confidence < minConfidence) {
+            skippedLowConfidence += 1;
+            results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'skipped_low_confidence', email: lead.contact_email, confidence: lead.confidence, website_backfilled: !!siteUpdate.updated, website: siteUpdate.website || lead.business_website || null });
+            continue;
+          }
 
-        const upsert = await upsertLead({ listing, lead });
-        if (upsert.stored) {
-          stored += 1;
-          results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'stored', email: lead.contact_email, lead_name: lead.owner_name, confidence: lead.confidence, website_backfilled: !!siteUpdate.updated, website: siteUpdate.website || lead.business_website || null });
-        } else {
-          results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'skipped', reason: upsert.reason || 'unknown' });
+          if (dryRun) {
+            results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'dry_run_candidate', email: lead.contact_email, lead_name: lead.owner_name, confidence: lead.confidence, evidence_urls: lead.evidence_urls, website_backfilled: !!siteUpdate.updated, website: siteUpdate.website || lead.business_website || null });
+            continue;
+          }
+
+          const upsert = await upsertLead({ listing, lead });
+          if (upsert.stored) {
+            stored += 1;
+            results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'stored', email: lead.contact_email, lead_name: lead.owner_name, confidence: lead.confidence, website_backfilled: !!siteUpdate.updated, website: siteUpdate.website || lead.business_website || null });
+          } else {
+            results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'skipped', reason: upsert.reason || 'unknown' });
+          }
+        } catch (err) {
+          failed += 1;
+          results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'failed', error: err.message || 'unknown_error' });
         }
-      } catch (err) {
-        failed += 1;
-        results.push({ listing_id: listing.listing_id, listing_name: listing.name, status: 'failed', error: err.message || 'unknown_error' });
       }
     }
 

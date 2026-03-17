@@ -4,6 +4,7 @@
 const SUPABASE_URL = process.env.KB_DB_URL || 'https://wgwexzyqaiwosgraaczi.supabase.co';
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const TELEGRAM_AGENT_MODEL = process.env.TELEGRAM_AGENT_MODEL || 'claude-haiku-4-5-20251001';
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_ALLOWED_CHAT_ID = process.env.TELEGRAM_CHAT_ID; // your personal chat ID
@@ -403,7 +404,7 @@ Be concise — this is a chat interface. Use plain text, not HTML. When Harold a
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: TELEGRAM_AGENT_MODEL,
         max_tokens: 1024,
         system: systemPrompt,
         tools,
