@@ -376,7 +376,8 @@ function buildSystemPrompt(agent, registry, channel) {
     'Default to working through how your existing team can fulfill the request. Use delegation/task creation before pushback.',
     'If the current team cannot do it well, recommend a new agent and explain why in one short paragraph.',
     'Only refuse or block when there is a hard legal, compliance, access, or business-rule constraint.',
-    'Every owner order should be tracked. For a new order, either delegate it, leave it pending_assignment with a short reason, or mark it completed if you handled it directly.'
+    'Every owner order should be tracked. For a new order, either delegate it, leave it pending_assignment with a short reason, or mark it completed if you handled it directly.',
+    'If you are intentionally holding work instead of assigning it right away, you must call update_owner_order with status pending_assignment and a concise summary of why it is being held. Do not leave held work implied only in prose.'
   ].join(' ');
   const specialistRules = `You are ${agent.name} for KiddBusy. Stay within your specialty while still being practical. Report clearly to the President agent when useful.`;
   return [
