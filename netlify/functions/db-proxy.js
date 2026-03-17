@@ -565,6 +565,66 @@ exports.handler = async (event) => {
     }
   }
 
+  if (action === 'query_cmo_posts') {
+    const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
+    const filters = ['select=id,slug,title,city,status,published_at,created_at,updated_at', 'source=eq.cmo_agent', 'order=created_at.desc', `limit=${safeLimit}`];
+    if (city) filters.push(`city=ilike.*${encodeURIComponent(String(city).trim())}*`);
+    if (title_q) filters.push(`title=ilike.*${encodeURIComponent(String(title_q).trim())}*`);
+    const queryUrl = `${SUPABASE_URL}/rest/v1/blog_posts?${filters.join('&')}`;
+    try {
+      const response = await fetch(queryUrl, {
+        method: 'GET',
+        headers: {
+          apikey: SUPABASE_SERVICE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const text = await response.text();
+      let data = [];
+      try {
+        data = text ? JSON.parse(text) : [];
+      } catch {
+        data = [];
+      }
+      if (!response.ok) return json(response.status, { error: 'Supabase query failed', details: data });
+      return json(200, { count: Array.isArray(data) ? data.length : 0, posts: data });
+    } catch (err) {
+      return json(500, { error: err.message || 'Unexpected error' });
+    }
+  }
+
+  if (action === 'archive_blog_post') {
+    const idNum = Number(listing_id || body.id || body.post_id || body.blog_post_id);
+    if (!Number.isFinite(idNum) || idNum <= 0) return json(400, { error: 'Valid post id required' });
+    try {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/blog_posts?id=eq.${encodeURIComponent(String(idNum))}`, {
+        method: 'PATCH',
+        headers: {
+          apikey: SUPABASE_SERVICE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation'
+        },
+        body: JSON.stringify({
+          status: 'archived',
+          updated_at: nowIso()
+        })
+      });
+      const text = await response.text();
+      let data = [];
+      try {
+        data = text ? JSON.parse(text) : [];
+      } catch {
+        data = [];
+      }
+      if (!response.ok) return json(response.status, { error: 'Supabase update failed', details: data });
+      return json(200, { success: true, post: Array.isArray(data) && data.length ? data[0] : null });
+    } catch (err) {
+      return json(500, { error: err.message || 'Unexpected error' });
+    }
+  }
+
   if (action === 'query_progress_subscriptions') {
     const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
     const statusFilter = String(status || '').trim().toLowerCase();
