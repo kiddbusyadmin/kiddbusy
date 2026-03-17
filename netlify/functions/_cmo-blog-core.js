@@ -437,6 +437,24 @@ function hasAlignedCurrentTiming(text) {
     if (!allowedMonthIndexes[monthNum - 1]) return false;
   }
 
+  var timing = buildCurrentTimingGuidance();
+  if (/\bthis weekend\b/.test(hay)) {
+    var explicitMonthRange = hay.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(?:\s*-\s*(\d{1,2}))?/);
+    if (explicitMonthRange) {
+      var mentionedMonth = explicitMonthRange[1];
+      var startDay = Number(explicitMonthRange[2]);
+      var endDay = explicitMonthRange[3] ? Number(explicitMonthRange[3]) : startDay;
+      var weekendLower = timing.weekend_label.toLowerCase();
+      if (weekendLower.indexOf(mentionedMonth) < 0) return false;
+      var weekendDays = weekendLower.match(/\d{1,2}/g) || [];
+      if (weekendDays.length) {
+        var expectedStart = Number(weekendDays[0]);
+        var expectedEnd = Number(weekendDays[weekendDays.length - 1]);
+        if (startDay !== expectedStart || endDay !== expectedEnd) return false;
+      }
+    }
+  }
+
   if (/\bthis weekend\b/.test(hay) || /\bthis week\b/.test(hay) || /\bthis month\b/.test(hay) || /\btoday\b/.test(hay) || /\btomorrow\b/.test(hay)) {
     return true;
   }
@@ -720,19 +738,14 @@ async function generateBatch(cities, existingTitles, batchSize, preferredCity, k
   var arr = parseAnthropicArray(raw);
 
   var out = [];
-  var fallback = [];
   for (var i = 0; i < arr.length; i += 1) {
     var n = normalizePost(arr[i], cities);
     if (!n) continue;
     if (n.city !== targetCity) continue;
     if (hasToddlerUnsafeSignals([n.title, n.excerpt, n.body_html].join(' '))) continue;
-    fallback.push(n);
     if (!hasStrongLocalSignals(n, targetCity, localNames)) continue;
     out.push(n);
     if (out.length >= batchSize) break;
-  }
-  if (!out.length && fallback.length) {
-    return fallback.slice(0, batchSize);
   }
   return out;
 }
