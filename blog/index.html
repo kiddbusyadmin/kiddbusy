@@ -239,20 +239,11 @@ function renderHubs(hubs, refreshedDate) {
   hubsList.innerHTML = rows.map(function(h) {
     var display = String(h.city_display || h.city || '').trim();
     var url = String(h.url || ('/blog/city/' + encodeURIComponent(h.city_slug || ''))).trim();
-    var listingLinks = (Array.isArray(h.top_listings) ? h.top_listings : [])
-      .map(function(r) {
-        var site = normalizeExternalUrl(r && r.website);
-        if (!site) return '';
-        return '<a href=\"' + esc(site) + '\" target=\"_blank\" rel=\"noopener noreferrer\">' + esc((r && r.name) || '') + '</a>';
-      })
-      .filter(Boolean)
-      .slice(0, 3)
-      .join('');
     return [
       '<a class=\"city-chip\" href=\"' + esc(url) + '\">',
       '  <div>' + esc(display) + '</div>',
       '</a>'
-    ].join('') + (listingLinks ? '<div class=\"city-chip-listings\">' + listingLinks + '</div>' : '');
+    ].join('');
   }).join('');
   Array.from(hubsList.querySelectorAll('a.city-chip')).forEach(function(a) {
     a.addEventListener('click', function() {

@@ -32,6 +32,50 @@ const TOP_25_CITIES_BY_POPULATION = [
   'Oklahoma City'
 ];
 
+const STATE_NAME_TO_CODE = {
+  alabama: 'AL', alaska: 'AK', arizona: 'AZ', arkansas: 'AR', california: 'CA',
+  colorado: 'CO', connecticut: 'CT', delaware: 'DE', florida: 'FL', georgia: 'GA',
+  hawaii: 'HI', idaho: 'ID', illinois: 'IL', indiana: 'IN', iowa: 'IA',
+  kansas: 'KS', kentucky: 'KY', louisiana: 'LA', maine: 'ME', maryland: 'MD',
+  massachusetts: 'MA', michigan: 'MI', minnesota: 'MN', mississippi: 'MS', missouri: 'MO',
+  montana: 'MT', nebraska: 'NE', nevada: 'NV', 'new hampshire': 'NH', 'new jersey': 'NJ',
+  'new mexico': 'NM', 'new york': 'NY', 'north carolina': 'NC', 'north dakota': 'ND', ohio: 'OH',
+  oklahoma: 'OK', oregon: 'OR', pennsylvania: 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
+  'south dakota': 'SD', tennessee: 'TN', texas: 'TX', utah: 'UT', vermont: 'VT',
+  virginia: 'VA', washington: 'WA', 'west virginia': 'WV', wisconsin: 'WI', wyoming: 'WY',
+  'district of columbia': 'DC'
+};
+
+const CITY_STATE_OVERRIDES = {
+  'new york': 'NY',
+  'los angeles': 'CA',
+  'chicago': 'IL',
+  'houston': 'TX',
+  'phoenix': 'AZ',
+  'philadelphia': 'PA',
+  'san antonio': 'TX',
+  'san diego': 'CA',
+  'dallas': 'TX',
+  'jacksonville': 'FL',
+  'austin': 'TX',
+  'fort worth': 'TX',
+  'san jose': 'CA',
+  'columbus': 'OH',
+  'charlotte': 'NC',
+  'indianapolis': 'IN',
+  'san francisco': 'CA',
+  'seattle': 'WA',
+  'denver': 'CO',
+  'washington': 'DC',
+  'boston': 'MA',
+  'el paso': 'TX',
+  'nashville': 'TN',
+  'detroit': 'MI',
+  'oklahoma city': 'OK',
+  'denton': 'TX',
+  'concord': 'NC'
+};
+
 let cityStateCache = { at: 0, map: {} };
 
 function json(statusCode, payload) {
@@ -71,8 +115,12 @@ async function sbGet(path) {
 }
 
 function normalizeState(value) {
-  const v = String(value || '').trim().toUpperCase();
-  return /^[A-Z]{2}$/.test(v) ? v : '';
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const upper = raw.toUpperCase();
+  if (/^[A-Z]{2}$/.test(upper)) return upper;
+  const code = STATE_NAME_TO_CODE[raw.toLowerCase()];
+  return code || '';
 }
 
 function normalizeCityBase(value) {
@@ -100,7 +148,7 @@ function withCityState(cityRaw, cityStateMap) {
   const city = parts[0] || '';
   const explicitState = normalizeState(parts[1] || '');
   if (city && explicitState) return `${city}, ${explicitState}`;
-  const inferred = cityStateMap[String(city || '').toLowerCase()] || '';
+  const inferred = cityStateMap[String(city || '').toLowerCase()] || CITY_STATE_OVERRIDES[String(city || '').toLowerCase()] || '';
   return inferred ? `${city}, ${inferred}` : city;
 }
 
@@ -111,7 +159,7 @@ async function loadCityStateMap() {
   }
 
   const out = await sbGet('listings?select=city,state&status=eq.active&limit=8000');
-  const map = {};
+  const map = Object.assign({}, CITY_STATE_OVERRIDES);
   if (out.response.ok && Array.isArray(out.data)) {
     for (let i = 0; i < out.data.length; i += 1) {
       const row = out.data[i] || {};
