@@ -14,7 +14,9 @@ const { runCmoBlog } = require('./_cmo-blog-core');
 const { runAgentConversation } = require('./_agent-router-core');
 const accountantAgent = require('./accountant-agent');
 const { runAgentTasks, runDelegationWatchdog } = require('./_agent-task-runner-core');
+const { runWorkflowEngine } = require('./_workflow-runner-core');
 const { getTrafficSummary, getActivitySummary } = require('./_analytics-core');
+const { getWorkflows, projectWorkflowAsTask } = require('./_workflow-core');
 
 const ALLOWED_TABLES = {
   submissions: new Set(['pending', 'approved', 'rejected']),
@@ -107,19 +109,34 @@ function buildProgressText(subscription, orders, tasks) {
   return lines.join('\n');
 }
 
+async function getProjectedActiveWorkflows(ownerIdentity, limit) {
+  const rows = await getWorkflows({
+    ownerIdentity: ownerIdentity || 'harold',
+    status: 'active',
+    limit: limit || 30
+  });
+  return rows.map(projectWorkflowAsTask).filter(Boolean);
+}
+
 function filterProgressScope(subscription, orders, tasks) {
   const meta = subscription && subscription.metadata && typeof subscription.metadata === 'object'
     ? subscription.metadata
     : {};
   const orderId = meta.order_id != null ? String(meta.order_id) : '';
   const taskIds = Array.isArray(meta.task_ids) ? meta.task_ids.map((v) => String(v)) : [];
+  const workflowIds = Array.isArray(meta.workflow_ids) ? meta.workflow_ids.map((v) => String(v)) : [];
   let scopedOrders = Array.isArray(orders) ? orders.slice() : [];
   let scopedTasks = Array.isArray(tasks) ? tasks.slice() : [];
   if (orderId) {
     scopedOrders = scopedOrders.filter((o) => String(o.order_id || '') === orderId);
-    scopedTasks = scopedTasks.filter((t) => String(((t.details || {}).order_id || '')) === orderId || taskIds.includes(String(t.task_id || '')));
-  } else if (taskIds.length) {
-    scopedTasks = scopedTasks.filter((t) => taskIds.includes(String(t.task_id || '')));
+    scopedTasks = scopedTasks.filter((t) => {
+      const details = t.details || {};
+      return String(details.order_id || '') === orderId ||
+        taskIds.includes(String(t.task_id || '')) ||
+        workflowIds.includes(String(t.workflow_id || details.workflow_id || ''));
+    });
+  } else if (taskIds.length || workflowIds.length) {
+    scopedTasks = scopedTasks.filter((t) => taskIds.includes(String(t.task_id || '')) || workflowIds.includes(String(t.workflow_id || ((t.details || {}).workflow_id || ''))));
   }
   return { orders: scopedOrders, tasks: scopedTasks, orderId, stopWhenOrderComplete: !!meta.stop_when_order_complete };
 }
@@ -569,7 +586,25 @@ exports.handler = async (event) => {
       if (!response.ok) {
         return json(response.status, { error: 'Supabase query failed', details: data });
       }
-      return json(200, { count: Array.isArray(data) ? data.length : 0, tasks: data });
+      const workflowStatus = statusFilter === 'open_or_in_progress' ? 'open_or_in_progress' : (statusFilter || 'active');
+      const workflowRows = await getProjectedActiveWorkflows('', safeLimit);
+      const merged = workflowStatus === 'open_or_in_progress'
+        ? workflowRows.filter((row) => ['open', 'in_progress'].includes(String(row.status || '')))
+        : workflowRows;
+      return json(200, { count: merged.length + (Array.isArray(data) ? data.length : 0), tasks: merged.concat(Array.isArray(data) ? data : []) });
+    } catch (err) {
+      return json(500, { error: err.message || 'Unexpected error' });
+    }
+  }
+
+  if (action === 'query_workflows') {
+    try {
+      const rows = await getWorkflows({
+        ownerIdentity: '',
+        status: String(status || 'active'),
+        limit: Math.min(Math.max(Number(limit) || 100, 1), 500)
+      });
+      return json(200, { count: rows.length, workflows: rows });
     } catch (err) {
       return json(500, { error: err.message || 'Unexpected error' });
     }
@@ -818,11 +853,11 @@ exports.handler = async (event) => {
         const ordersOut = await sbRequest(`agent_orders?owner_identity=eq.${encodeURIComponent(ownerIdentity)}&status=in.(pending_assignment,delegated,in_progress,blocked)&select=*&order=updated_at.desc&limit=30`, {
           method: 'GET'
         });
-        const tasksOut = await sbRequest(`agent_tasks?owner_identity=eq.${encodeURIComponent(ownerIdentity)}&status=in.(open,in_progress)&select=*&order=updated_at.desc&limit=30`, {
+        const orders = Array.isArray(ordersOut.data) ? ordersOut.data : [];
+        const legacyTasksOut = await sbRequest(`agent_tasks?owner_identity=eq.${encodeURIComponent(ownerIdentity)}&status=in.(open,in_progress)&select=*&order=updated_at.desc&limit=30`, {
           method: 'GET'
         });
-        const orders = Array.isArray(ordersOut.data) ? ordersOut.data : [];
-        const tasks = Array.isArray(tasksOut.data) ? tasksOut.data : [];
+        const tasks = (await getProjectedActiveWorkflows(ownerIdentity, 30)).concat(Array.isArray(legacyTasksOut.data) ? legacyTasksOut.data : []);
         const scoped = filterProgressScope(sub, orders, tasks);
         if (scoped.stopWhenOrderComplete && scoped.orderId && scoped.orders.length === 0 && scoped.tasks.length === 0) {
           await sbRequest(`agent_progress_subscriptions?subscription_id=eq.${encodeURIComponent(String(sub.subscription_id))}`, {
@@ -914,9 +949,15 @@ exports.handler = async (event) => {
 
   if (action === 'run_agent_tasks') {
     try {
+      const workflows = await runWorkflowEngine(12);
       const result = await runAgentTasks();
       const watchdog = await runDelegationWatchdog();
-      return json(200, { success: !!(result && result.success && watchdog && watchdog.success), tasks: result, watchdog: watchdog });
+      return json(200, {
+        success: !!(workflows && workflows.success && result && result.success && watchdog && watchdog.success),
+        workflows,
+        tasks: result,
+        watchdog: watchdog
+      });
     } catch (err) {
       try {
         await sbRequest('agent_activity', {

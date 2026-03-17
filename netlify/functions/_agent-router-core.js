@@ -21,6 +21,11 @@ const {
   getProgressReports,
   getResearchArchive
 } = require('./_agent-memory');
+const {
+  createWorkflow,
+  getWorkflows,
+  projectWorkflowAsTask
+} = require('./_workflow-core');
 
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -160,9 +165,28 @@ async function executeTool(name, input = {}, context = {}) {
       return { success: true, agent: created.agent, registry: created.registry };
     }
     case 'create_agent_task': {
+      const requestedBy = input.requested_by_agent_key || 'president_agent';
+      if (String(requestedBy) === 'president_agent' && !input.force_legacy_task) {
+        const guessedWorkflowKey = String((input.details || {}).workflow_key || '').trim() ||
+          (String(input.assigned_agent_key || '') === 'research_agent' ? 'research_request' :
+            /\b(blog|post|article|seo|title)\b/i.test(String(input.title || '') + ' ' + String(input.summary || '')) ? 'publish_city_blog_batch' :
+              'ops_investigation');
+        return executeTool('create_workflow', {
+          owner_identity: input.owner_identity || 'harold',
+          requested_by_agent_key: requestedBy,
+          assigned_agent_key: input.assigned_agent_key,
+          workflow_key: guessedWorkflowKey,
+          title: input.title,
+          summary: input.summary || '',
+          priority: input.priority || 'normal',
+          input: Object.assign({}, input.details || {}),
+          details: Object.assign({}, input.details || {}),
+          order_id: input.order_id || context.currentOrderId || null
+        }, context);
+      }
       const task = await createTask({
         ownerIdentity: input.owner_identity || 'harold',
-        requestedByAgentKey: input.requested_by_agent_key || 'president_agent',
+        requestedByAgentKey: requestedBy,
         assignedAgentKey: input.assigned_agent_key,
         title: input.title,
         summary: input.summary || '',
@@ -202,6 +226,49 @@ async function executeTool(name, input = {}, context = {}) {
       }
       return { success: true, task };
     }
+    case 'create_workflow': {
+      const workflow = await createWorkflow({
+        ownerIdentity: input.owner_identity || 'harold',
+        orderId: input.order_id || context.currentOrderId || null,
+        threadId: input.thread_id || null,
+        workflowKey: input.workflow_key,
+        requestedByAgentKey: input.requested_by_agent_key || 'president_agent',
+        assignedAgentKey: input.assigned_agent_key,
+        title: input.title,
+        summary: input.summary || '',
+        payload: input.input || {},
+        details: Object.assign({}, input.details || {}, {
+          order_id: input.order_id || context.currentOrderId || null
+        }),
+        priority: input.priority || 'normal'
+      });
+      context.createdWorkflowCount = (context.createdWorkflowCount || 0) + 1;
+      context.createdWorkflows = Array.isArray(context.createdWorkflows) ? context.createdWorkflows : [];
+      context.createdWorkflows.push(workflow);
+      if ((input.order_id || context.currentOrderId) && !context.orderUpdated) {
+        await updateOwnerOrder({
+          orderId: input.order_id || context.currentOrderId,
+          status: 'delegated',
+          summary: input.summary || workflow.title,
+          details: { workflow_id: workflow.workflow_id, workflow_key: workflow.workflow_key, delegated_to: input.assigned_agent_key }
+        });
+        context.orderUpdated = true;
+      }
+      try {
+        await logAgentActivity({
+          agentKey: input.assigned_agent_key || 'unknown',
+          status: 'info',
+          summary: `New typed workflow from President: ${String(workflow.title || 'Untitled workflow').slice(0, 240)}`,
+          details: {
+            workflow_id: workflow.workflow_id,
+            workflow_key: workflow.workflow_key,
+            order_id: (input.order_id || context.currentOrderId || null),
+            assigned_agent_key: input.assigned_agent_key || null
+          }
+        });
+      } catch (_) {}
+      return { success: true, workflow };
+    }
     case 'query_owner_orders': {
       const rows = await getOwnerOrders({
         ownerIdentity: input.owner_identity || 'harold',
@@ -223,7 +290,21 @@ async function executeTool(name, input = {}, context = {}) {
     }
     case 'query_agent_tasks': {
       const tasks = await getOpenTasks({ ownerIdentity: input.owner_identity || 'harold', limit: input.limit || 30 });
-      return { count: tasks.length, tasks };
+      const workflows = await getWorkflows({
+        ownerIdentity: input.owner_identity || 'harold',
+        status: 'open_or_in_progress',
+        limit: input.limit || 30
+      });
+      const projected = workflows.map(projectWorkflowAsTask).filter(Boolean);
+      return { count: projected.length + tasks.length, tasks: projected.concat(tasks) };
+    }
+    case 'query_workflows': {
+      const workflows = await getWorkflows({
+        ownerIdentity: input.owner_identity || 'harold',
+        status: input.status || 'active',
+        limit: input.limit || 30
+      });
+      return { count: workflows.length, workflows };
     }
     case 'create_progress_subscription': {
       const row = await createProgressSubscription({
@@ -406,7 +487,10 @@ function toolDefinitions() {
     { name: 'create_agent', description: 'Create a new direct-access specialist agent that reports to the President.', input_schema: { type: 'object', properties: {
       key: { type: 'string' }, name: { type: 'string' }, role: { type: 'string' }, report_to: { type: 'string' }, description: { type: 'string' }, system_prompt: { type: 'string' }
     }, required: ['name', 'description'] } },
-    { name: 'create_agent_task', description: 'Create a task for a specialist agent when the owner request should be delegated or tracked.', input_schema: { type: 'object', properties: {
+    { name: 'create_workflow', description: 'Create a typed workflow for execution work. Prefer this over generic task creation when the owner request requires real follow-through.', input_schema: { type: 'object', properties: {
+      owner_identity: { type: 'string' }, requested_by_agent_key: { type: 'string' }, assigned_agent_key: { type: 'string' }, workflow_key: { type: 'string' }, title: { type: 'string' }, summary: { type: 'string' }, priority: { type: 'string' }, input: { type: 'object' }, details: { type: 'object' }, order_id: { type: 'number' }
+    }, required: ['assigned_agent_key', 'workflow_key', 'title'] } },
+    { name: 'create_agent_task', description: 'Legacy generic task creation. Use only if a typed workflow genuinely does not fit.', input_schema: { type: 'object', properties: {
       owner_identity: { type: 'string' }, requested_by_agent_key: { type: 'string' }, assigned_agent_key: { type: 'string' }, title: { type: 'string' }, summary: { type: 'string' }, priority: { type: 'string' }, details: { type: 'object' }, order_id: { type: 'number' }
     }, required: ['assigned_agent_key', 'title'] } },
     { name: 'query_owner_orders', description: 'Query owner orders assigned to President so you can track held, delegated, and completed work.', input_schema: { type: 'object', properties: {
@@ -417,6 +501,9 @@ function toolDefinitions() {
     }, required: ['status'] } },
     { name: 'query_agent_tasks', description: 'List open and in-progress agent tasks for continuity and delegation tracking.', input_schema: { type: 'object', properties: {
       owner_identity: { type: 'string' }, limit: { type: 'number' }
+    }, required: [] } },
+    { name: 'query_workflows', description: 'List typed workflows and their live statuses. Prefer this for execution tracking.', input_schema: { type: 'object', properties: {
+      owner_identity: { type: 'string' }, status: { type: 'string' }, limit: { type: 'number' }
     }, required: [] } },
     { name: 'create_progress_subscription', description: 'Create a recurring owner progress update feed, especially for Telegram updates every N minutes.', input_schema: { type: 'object', properties: {
       owner_identity: { type: 'string' }, agent_key: { type: 'string' }, channel: { type: 'string' }, target_chat_id: { type: 'string' }, interval_minutes: { type: 'number' }, scope: { type: 'string' }, summary: { type: 'string' }, thread_key: { type: 'string' }, metadata: { type: 'object' }
@@ -471,12 +558,14 @@ function buildSystemPrompt(agent, registry, channel) {
     'When responding as President, synthesize across CMO, Accountant, and Operations perspectives.',
     'When asked about traffic, sessions, searches, or activity, use query_dashboard_stats and query_activity_summary instead of reasoning from raw analytics rows or memory.',
     'Traffic growth is the first gate for monetization. Do not forget that low traffic weakens owner-claim and sponsorship monetization.',
-    'Default to working through how your existing team can fulfill the request. Use delegation/task creation before pushback.',
+    'Default to working through how your existing team can fulfill the request. Use typed workflows before pushback.',
     'If the current team cannot do it well, recommend a new agent and explain why in one short paragraph.',
     'Only refuse or block when there is a hard legal, compliance, access, or business-rule constraint.',
-    'Every owner order should be tracked. For a new order, either delegate it, leave it pending_assignment with a short reason, or mark it completed if you handled it directly.',
+    'Every owner order should be tracked. For a new order, either create a typed workflow, leave it pending_assignment with a short reason, or mark it completed if you handled it directly.',
     'If you are intentionally holding work instead of assigning it right away, you must call update_owner_order with status pending_assignment and a concise summary of why it is being held. Do not leave held work implied only in prose.',
-    'If the owner asks for recurring progress updates, especially on Telegram, create a real progress subscription using create_progress_subscription. Do not just promise future updates in prose.'
+    'If the owner asks for recurring progress updates, especially on Telegram, create a real progress subscription using create_progress_subscription. Do not just promise future updates in prose.',
+    'Do not create generic tasks for conversational follow-ups or questions that can be answered directly from tools. Use tools to answer directly whenever possible.',
+    'Use create_workflow for execution. Reserve create_agent_task for unusual legacy cases only.'
   ].join(' ');
   const specialistRules = `You are ${agent.name} for KiddBusy. Stay within your specialty while still being practical. Report clearly to the President agent when useful.`;
   return [
@@ -727,9 +816,14 @@ function buildAutoDelegationPlan(text, reply) {
   var isResearchIntent = /\b(research|analyze|analysis|audit|investigate|identify|rank)\b/.test(lower);
   if (isResearchIntent) {
     return [{
+      workflow_key: 'research_request',
       assigned_agent_key: 'research_agent',
       title: raw.slice(0, 180),
       summary: 'Auto-delegated by President because this request needs specialist research and a real deliverable.',
+      input: {
+        research_request: true,
+        city: inferCityFromRequest(raw) || ''
+      },
       details: {
         auto_delegated: true,
         research_request: true
@@ -739,30 +833,39 @@ function buildAutoDelegationPlan(text, reply) {
   }
   if (/\b(blog|post|article|seo)\b/.test(lower)) {
     var city = inferCityFromRequest(raw);
-    var isTeen = /\bteen|teens|older kids|high school|middle school\b/.test(lower);
+    var isTitleFix = /\btitle|titles|capitalization|lowercase|formatting|style guide|style\b/.test(lower);
     var blogPlan = [{
+      workflow_key: isTitleFix ? 'blog_title_qc' : 'publish_city_blog_batch',
       assigned_agent_key: 'cmo_agent',
       title: raw.slice(0, 180),
       summary: 'Auto-delegated by President because this was an execution request that needs real subagent work.',
-      details: {
+      input: {
         city: city || '',
         article_count: 1,
         target_count: 1,
-        seo_keyword_theme: isTeen ? 'local_teen' : 'local_toddler',
+        seo_keyword_theme: /\bteen|teens|older kids|high school|middle school\b/.test(lower) ? 'local_teen' : 'local_toddler',
+        title_qc: !!isTitleFix
+      },
+      details: {
         auto_delegated: true
       },
       priority: 'high'
     }];
     if (combinedClaimed.indexOf('operations_agent') >= 0) {
       blogPlan.push({
+        workflow_key: isTitleFix ? 'blog_title_qc' : 'publish_city_blog_batch',
         assigned_agent_key: 'operations_agent',
         title: 'Publish handoff for ' + raw.slice(0, 150),
         summary: 'President promised Operations follow-through on this content request.',
-        details: {
+        input: {
           city: city || '',
           article_count: 1,
           target_count: 1,
-          seo_keyword_theme: isTeen ? 'local_teen' : 'local_toddler',
+          seo_keyword_theme: /\bteen|teens|older kids|high school|middle school\b/.test(lower) ? 'local_teen' : 'local_toddler',
+          title_qc: !!isTitleFix,
+          dependent_on_agent_key: 'cmo_agent'
+        },
+        details: {
           auto_delegated: true,
           dependent_on_agent_key: 'cmo_agent'
         },
@@ -773,9 +876,13 @@ function buildAutoDelegationPlan(text, reply) {
   }
 
   return [{
+    workflow_key: 'ops_investigation',
     assigned_agent_key: combinedClaimed[0] || 'operations_agent',
     title: raw.slice(0, 180),
-    summary: 'Auto-delegated by President because this request needs execution follow-through.',
+    summary: 'Auto-delegated by President because this request needs typed execution follow-through.',
+    input: {
+      city: inferCityFromRequest(raw) || ''
+    },
     details: {
       auto_delegated: true
     },
@@ -788,42 +895,45 @@ async function ensurePresidentDelegation(text, reply, execContext) {
   if (!Array.isArray(plan) || !plan.length) return [];
   var created = [];
   var existingAgents = {};
-  var current = Array.isArray(execContext.createdTasks) ? execContext.createdTasks : [];
+  var current = Array.isArray(execContext.createdWorkflows) ? execContext.createdWorkflows : [];
   for (var i = 0; i < current.length; i += 1) {
-    var key = String((current[i] && current[i].assigned_agent_key) || '').trim();
+    var key = String((current[i] && current[i].assigned_agent_key) || '').trim() + ':' + String((current[i] && current[i].workflow_key) || '').trim();
     if (key) existingAgents[key] = true;
   }
   for (var p = 0; p < plan.length; p += 1) {
     var item = plan[p] || {};
     var assigned = String(item.assigned_agent_key || '').trim();
-    if (!assigned || existingAgents[assigned]) continue;
-    var result = await executeTool('create_agent_task', {
+    var dedupeKey = assigned + ':' + String(item.workflow_key || '').trim();
+    if (!assigned || existingAgents[dedupeKey]) continue;
+    var result = await executeTool('create_workflow', {
       owner_identity: 'harold',
       requested_by_agent_key: 'president_agent',
       assigned_agent_key: assigned,
+      workflow_key: item.workflow_key || 'ops_investigation',
       title: item.title || String(text || '').slice(0, 180),
       summary: item.summary || 'Auto-delegated by President.',
+      input: Object.assign({}, item.input || {}),
       details: Object.assign({}, item.details || {}),
       priority: item.priority || 'high',
       order_id: execContext.currentOrderId || null
     }, execContext);
     created.push(result);
-    existingAgents[assigned] = true;
+    existingAgents[dedupeKey] = true;
   }
   return created;
 }
 
-function appendTrackedDelegationSummary(reply, createdTasks) {
-  var tasks = Array.isArray(createdTasks) ? createdTasks.filter(Boolean) : [];
+function appendTrackedDelegationSummary(reply, createdWorkflows) {
+  var tasks = Array.isArray(createdWorkflows) ? createdWorkflows.filter(Boolean) : [];
   if (!tasks.length) return String(reply || '');
   var lines = [];
   var seen = {};
   for (var i = 0; i < tasks.length; i += 1) {
-    var task = tasks[i] || {};
-    var key = String(task.assigned_agent_key || '') + ':' + String(task.task_id || '');
+    var task = tasks[i] && tasks[i].workflow ? tasks[i].workflow : tasks[i];
+    var key = String(task.assigned_agent_key || '') + ':' + String(task.workflow_id || '');
     if (seen[key]) continue;
     seen[key] = true;
-    lines.push('- ' + String(task.assigned_agent_key || 'agent').replace(/_agent$/, '') + ' task #' + String(task.task_id || ''));
+    lines.push('- ' + String(task.assigned_agent_key || 'agent').replace(/_agent$/, '') + ' workflow #' + String(task.workflow_id || ''));
   }
   if (!lines.length) return String(reply || '');
   var footer = 'Tracked delegation:\n' + lines.join('\n');
@@ -857,7 +967,7 @@ async function ensureProgressFollowUp(reply, execContext) {
   if (execContext.progressSubscriptionId) return execContext.progressSubscriptionId;
   if (execContext.channel !== 'telegram') return null;
   if (!execContext.currentOrderId) return null;
-  if (!Array.isArray(execContext.createdTasks) || !execContext.createdTasks.length) return null;
+  if (!Array.isArray(execContext.createdWorkflows) || !execContext.createdWorkflows.length) return null;
   var subResult = await executeTool('create_progress_subscription', {
     owner_identity: 'harold',
     agent_key: 'president_agent',
@@ -870,7 +980,10 @@ async function ensureProgressFollowUp(reply, execContext) {
     metadata: {
       auto_created_from_reply: true,
       order_id: execContext.currentOrderId,
-      task_ids: execContext.createdTasks.map(function(t) { return t && t.task_id; }).filter(Boolean),
+      workflow_ids: execContext.createdWorkflows.map(function(t) {
+        var row = t && t.workflow ? t.workflow : t;
+        return row && row.workflow_id;
+      }).filter(Boolean),
       stop_when_order_complete: true
     }
   }, execContext);
@@ -921,11 +1034,13 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
   const storedMessages = await getRecentMessages(thread.thread_id, 24);
   const storedMemories = await getAgentMemories({ ownerIdentity, agentKey: 'president_agent', limit: 40 });
   const openTasks = await getOpenTasks({ ownerIdentity, limit: 20 });
+  const openWorkflows = await getWorkflows({ ownerIdentity, status: 'active', limit: 20 });
   const openOrders = await getOwnerOrders({ ownerIdentity, limit: 20, status: 'open_funnel' });
   const researchArchive = await getResearchArchive({ ownerIdentity, limit: 8 });
   const threadSummary = summarizeThreadContext(storedMessages);
   const memorySummary = (storedMemories || []).map((m) => `- ${m.memory_kind}/${m.key}: ${JSON.stringify(m.value)}`).join('\n');
   const taskSummary = (openTasks || []).map((t) => `- ${t.assigned_agent_key}: ${t.title} [${t.status}]`).join('\n');
+  const workflowSummary = (openWorkflows || []).map((w) => `- ${w.assigned_agent_key}: ${w.workflow_key} :: ${w.title} [${w.status}]`).join('\n');
   const orderSummary = (openOrders || []).map((o) => `- #${o.order_id} ${o.status}: ${o.title}`).join('\n');
   const researchSummary = (researchArchive || []).map((a) => `- ${a.question} [${a.status}]${a.city ? ' city=' + a.city : ''}`).join('\n');
   var currentOrder = null;
@@ -949,6 +1064,8 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
     orderSummary || '- none recorded',
     'Open delegated tasks:',
     taskSummary || '- none recorded',
+    'Open typed workflows:',
+    workflowSummary || '- none recorded',
     'Recent research archive:',
     researchSummary || '- no stored research findings yet',
     'Recent thread context:',
@@ -961,6 +1078,8 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
     currentOrderId: currentOrder ? currentOrder.order_id : null,
     createdTaskCount: 0,
     createdTasks: [],
+    createdWorkflowCount: 0,
+    createdWorkflows: [],
     orderUpdated: false,
     channel,
     threadKey: resolvedThreadKey,
@@ -1044,7 +1163,7 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
       } catch (_) {}
     }
     reply = sanitizeDelegationText(reply);
-    if (execContext.createdTaskCount > 0) {
+    if (execContext.createdWorkflowCount > 0 || execContext.createdTaskCount > 0) {
       try {
         var followUpId = await ensureProgressFollowUp(reply, execContext);
         if (followUpId) reply = appendTrackedFollowUp(reply, followUpId);
@@ -1062,15 +1181,22 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
           });
         } catch (_) {}
       }
-      reply = appendTrackedDelegationSummary(reply, execContext.createdTasks);
+      reply = appendTrackedDelegationSummary(reply, execContext.createdWorkflows.length ? execContext.createdWorkflows : execContext.createdTasks);
       await updateOwnerOrder({
         orderId: currentOrder.order_id,
         status: 'delegated',
         summary: String(reply || '').slice(0, 600),
         details: {
-          auto_status: 'delegated_from_task_creation',
+          auto_status: execContext.createdWorkflows.length ? 'delegated_from_workflow_creation' : 'delegated_from_task_creation',
+          workflow_ids: (execContext.createdWorkflows || []).map(function(t) {
+            var row = t && t.workflow ? t.workflow : t;
+            return row && row.workflow_id;
+          }).filter(Boolean),
           task_ids: (execContext.createdTasks || []).map(function(t) { return t && t.task_id; }).filter(Boolean),
-          delegated_agents: (execContext.createdTasks || []).map(function(t) { return t && t.assigned_agent_key; }).filter(Boolean)
+          delegated_agents: (execContext.createdWorkflows || []).map(function(t) {
+            var row = t && t.workflow ? t.workflow : t;
+            return row && row.assigned_agent_key;
+          }).concat((execContext.createdTasks || []).map(function(t) { return t && t.assigned_agent_key; })).filter(Boolean)
         }
       });
     } else {
