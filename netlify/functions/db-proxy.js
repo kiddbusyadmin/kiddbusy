@@ -106,6 +106,23 @@ function buildProgressText(subscription, orders, tasks) {
   return lines.join('\n');
 }
 
+function filterProgressScope(subscription, orders, tasks) {
+  const meta = subscription && subscription.metadata && typeof subscription.metadata === 'object'
+    ? subscription.metadata
+    : {};
+  const orderId = meta.order_id != null ? String(meta.order_id) : '';
+  const taskIds = Array.isArray(meta.task_ids) ? meta.task_ids.map((v) => String(v)) : [];
+  let scopedOrders = Array.isArray(orders) ? orders.slice() : [];
+  let scopedTasks = Array.isArray(tasks) ? tasks.slice() : [];
+  if (orderId) {
+    scopedOrders = scopedOrders.filter((o) => String(o.order_id || '') === orderId);
+    scopedTasks = scopedTasks.filter((t) => String(((t.details || {}).order_id || '')) === orderId || taskIds.includes(String(t.task_id || '')));
+  } else if (taskIds.length) {
+    scopedTasks = scopedTasks.filter((t) => taskIds.includes(String(t.task_id || '')));
+  }
+  return { orders: scopedOrders, tasks: scopedTasks, orderId, stopWhenOrderComplete: !!meta.stop_when_order_complete };
+}
+
 function cleanCityName(value) {
   return String(value || '').split(',')[0].trim();
 }
@@ -777,7 +794,32 @@ exports.handler = async (event) => {
         });
         const orders = Array.isArray(ordersOut.data) ? ordersOut.data : [];
         const tasks = Array.isArray(tasksOut.data) ? tasksOut.data : [];
-        const reportText = buildProgressText(sub, orders, tasks);
+        const scoped = filterProgressScope(sub, orders, tasks);
+        if (scoped.stopWhenOrderComplete && scoped.orderId && scoped.orders.length === 0 && scoped.tasks.length === 0) {
+          await sbRequest(`agent_progress_subscriptions?subscription_id=eq.${encodeURIComponent(String(sub.subscription_id))}`, {
+            method: 'PATCH',
+            body: {
+              status: 'completed',
+              summary: 'Auto-stopped after tracked order reached completion.',
+              updated_at: nowIso()
+            }
+          });
+          await sbRequest('agent_activity', {
+            method: 'POST',
+            body: {
+              agent_key: sub.agent_key || 'president_agent',
+              summary: 'Progress subscription ' + String(sub.subscription_id) + ' auto-completed after tracked order finished.',
+              status: 'success',
+              details: {
+                subscription_id: sub.subscription_id,
+                channel: 'telegram',
+                scope: sub.scope || 'all_open_orders'
+              }
+            }
+          });
+          continue;
+        }
+        const reportText = buildProgressText(sub, scoped.orders, scoped.tasks);
         await sendTelegramMessage(chatId, reportText);
         await sbRequest('agent_progress_reports', {
           method: 'POST',
@@ -789,13 +831,14 @@ exports.handler = async (event) => {
             target_chat_id: chatId,
             report_text: reportText,
             report_meta: {
-              open_orders: orders.length,
-              held_orders: orders.filter((o) => String(o.status || '') === 'pending_assignment').length,
-              delegated_orders: orders.filter((o) => {
+              open_orders: scoped.orders.length,
+              held_orders: scoped.orders.filter((o) => String(o.status || '') === 'pending_assignment').length,
+              delegated_orders: scoped.orders.filter((o) => {
                 const rowStatus = String(o.status || '');
                 return rowStatus === 'delegated' || rowStatus === 'in_progress';
               }).length,
-              open_tasks: tasks.length
+              open_tasks: scoped.tasks.length,
+              tracked_order_id: scoped.orderId || null
             }
           }
         });
@@ -804,7 +847,7 @@ exports.handler = async (event) => {
           body: {
             last_sent_at: nowIso(),
             next_due_at: isoAfterMinutes(sub.interval_minutes || 5),
-            summary: 'Last sent with ' + String(orders.length) + ' open orders and ' + String(tasks.length) + ' open tasks.',
+            summary: 'Last sent with ' + String(scoped.orders.length) + ' open orders and ' + String(scoped.tasks.length) + ' open tasks.',
             updated_at: nowIso()
           }
         });

@@ -715,6 +715,54 @@ function appendTrackedDelegationSummary(reply, createdTasks) {
   return (base ? (base + '\n\n') : '') + footer;
 }
 
+function replyImpliesFollowUp(reply) {
+  var text = String(reply || '').toLowerCase();
+  if (!text) return false;
+  return (
+    /\bi(?:'|’)ll\s+(track|update|follow up|get back|report back|let you know)\b/.test(text) ||
+    /\byou(?:'|’)ll hear from me\b/.test(text) ||
+    /\bonce [^.]{0,120}\b(delivers|finishes|completes)\b/.test(text)
+  );
+}
+
+async function ensureProgressFollowUp(reply, execContext) {
+  if (!replyImpliesFollowUp(reply)) return null;
+  if (execContext.progressSubscriptionId) return execContext.progressSubscriptionId;
+  if (execContext.channel !== 'telegram') return null;
+  if (!execContext.currentOrderId) return null;
+  if (!Array.isArray(execContext.createdTasks) || !execContext.createdTasks.length) return null;
+  var subResult = await executeTool('create_progress_subscription', {
+    owner_identity: 'harold',
+    agent_key: 'president_agent',
+    channel: 'telegram',
+    target_chat_id: execContext.targetChatId || null,
+    interval_minutes: 15,
+    scope: 'order_follow_up',
+    summary: 'Auto-created because President promised a Telegram follow-up on delegated work.',
+    thread_key: execContext.threadKey || null,
+    metadata: {
+      auto_created_from_reply: true,
+      order_id: execContext.currentOrderId,
+      task_ids: execContext.createdTasks.map(function(t) { return t && t.task_id; }).filter(Boolean),
+      stop_when_order_complete: true
+    }
+  }, execContext);
+  var sub = subResult && subResult.subscription;
+  if (sub && sub.subscription_id) {
+    execContext.progressSubscriptionId = sub.subscription_id;
+    return sub.subscription_id;
+  }
+  return null;
+}
+
+function appendTrackedFollowUp(reply, subscriptionId) {
+  if (!subscriptionId) return String(reply || '');
+  var footer = 'Tracked follow-up: Telegram subscription #' + String(subscriptionId);
+  var base = String(reply || '').trim();
+  if (base.indexOf(footer) >= 0) return base;
+  return (base ? (base + '\n\n') : '') + footer;
+}
+
 async function runAgentConversation({ role = '', userMessage = '', history = [], channel = 'dashboard', threadKey = '', ownerIdentity = 'harold' } = {}) {
   const registry = await getAgentRegistry();
   const hinted = parseRoleHint(userMessage, registry);
@@ -835,6 +883,10 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
       } catch (_) {}
     }
     if (execContext.createdTaskCount > 0) {
+      try {
+        var followUpId = await ensureProgressFollowUp(reply, execContext);
+        if (followUpId) reply = appendTrackedFollowUp(reply, followUpId);
+      } catch (_) {}
       reply = appendTrackedDelegationSummary(reply, execContext.createdTasks);
       await updateOwnerOrder({
         orderId: currentOrder.order_id,
