@@ -361,6 +361,7 @@ async function runAgentTasks() {
     if (String(task.assigned_agent_key || '') === 'cmo_agent') {
       const city = cleanCityName(taskDetails.city || extractCityFromText(taskContext) || '');
       const articleCount = Math.min(Math.max(Number(taskDetails.article_count) || Number(taskDetails.target_count) || 5, 1), 25);
+      const seoKeywordTheme = String(taskDetails.seo_keyword_theme || '').trim().toLowerCase();
       const beforePosts = await listCityCmoPosts(city, ['draft', 'published']);
       const beforePublished = beforePosts.filter((row) => String(row.status || '') === 'published').length;
       const remainingBefore = Math.max(articleCount - beforePublished, 0);
@@ -376,6 +377,7 @@ async function runAgentTasks() {
         const batchSize = Math.min(1, remainingBefore);
         const result = await runCmoBlogTask({
           target_city: city || '',
+          seo_keyword_theme: seoKeywordTheme || undefined,
           queue_target: batchSize,
           max_generate_per_run: batchSize,
           force_publish_generated: true,
@@ -387,6 +389,7 @@ async function runAgentTasks() {
         const remainingAfter = Math.max(articleCount - afterPublished, 0);
         nextTaskDetails = Object.assign({}, nextTaskDetails, {
           city: city || taskDetails.city || '',
+          seo_keyword_theme: seoKeywordTheme || '',
           target_count: articleCount,
           published_count: afterPublished,
           draft_count: afterPosts.filter((row) => String(row.status || '') === 'draft').length,
@@ -409,6 +412,7 @@ async function runAgentTasks() {
     } else if (String(task.assigned_agent_key || '') === 'operations_agent') {
       const city = cleanCityName(taskDetails.city || extractCityFromText(taskContext) || '');
       const articleCount = Math.min(Math.max(Number(taskDetails.article_count) || Number(taskDetails.target_count) || 5, 1), 25);
+      const seoKeywordTheme = String(taskDetails.seo_keyword_theme || '').trim().toLowerCase();
       const cityPosts = await listCityCmoPosts(city, ['draft', 'published']);
       const publishedCount = cityPosts.filter((row) => String(row.status || '') === 'published').length;
       const draftCount = cityPosts.filter((row) => String(row.status || '') === 'draft').length;
@@ -425,6 +429,7 @@ async function runAgentTasks() {
         const publishBatch = Math.min(1, draftCount, articleCount - publishedCount);
         const result = await runCmoBlogTask({
           target_city: city || '',
+          seo_keyword_theme: seoKeywordTheme || undefined,
           queue_target: 1,
           max_generate_per_run: 0,
           force_publish_generated: false,

@@ -560,6 +560,59 @@ function summarizeThreadContext(messages) {
   return recent.map((m) => `${m.role}${m.agent_key ? ':' + m.agent_key : ''}: ${String(m.content || '').slice(0, 240)}`).join('\n');
 }
 
+function inferCityFromRequest(text) {
+  var raw = String(text || '').trim();
+  var m = raw.match(/\b(?:for|in)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})(?:,\s*[A-Z]{2})?\b/);
+  if (m && m[1]) return String(m[1]).trim();
+  return '';
+}
+
+function shouldAutoDelegateExecutionRequest(text) {
+  var raw = String(text || '').trim().toLowerCase();
+  if (!raw) return false;
+  return /\b(publish|write|create|generate|draft|post|launch|build|fix|review|approve|queue)\b/.test(raw);
+}
+
+async function maybeAutoDelegatePresidentRequest(text, execContext) {
+  var raw = String(text || '').trim();
+  var lower = raw.toLowerCase();
+  if (!shouldAutoDelegateExecutionRequest(lower)) return null;
+
+  if (/\b(blog|post|article|seo)\b/.test(lower)) {
+    var city = inferCityFromRequest(raw);
+    var isTeen = /\bteen|teens|older kids|high school|middle school\b/.test(lower);
+    return executeTool('create_agent_task', {
+      owner_identity: 'harold',
+      requested_by_agent_key: 'president_agent',
+      assigned_agent_key: 'cmo_agent',
+      title: raw.slice(0, 180),
+      summary: 'Auto-delegated by President because this was an execution request that needs real subagent work.',
+      details: {
+        city: city || '',
+        article_count: 1,
+        target_count: 1,
+        seo_keyword_theme: isTeen ? 'local_teen' : 'local_toddler',
+        auto_delegated: true
+      },
+      priority: 'high',
+      order_id: execContext.currentOrderId || null
+    }, execContext);
+  }
+
+  return executeTool('create_agent_task', {
+    owner_identity: 'harold',
+    requested_by_agent_key: 'president_agent',
+    assigned_agent_key: 'operations_agent',
+    title: raw.slice(0, 180),
+    summary: 'Auto-delegated by President because this request needs execution follow-through.',
+    details: {
+      auto_delegated: true
+    },
+    priority: 'high',
+    order_id: execContext.currentOrderId || null
+  }, execContext);
+}
+
 async function runAgentConversation({ role = '', userMessage = '', history = [], channel = 'dashboard', threadKey = '', ownerIdentity = 'harold' } = {}) {
   const registry = await getAgentRegistry();
   const hinted = parseRoleHint(userMessage, registry);
@@ -669,6 +722,11 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
     provider = 'openai';
   }
   if (currentOrder && !execContext.orderUpdated) {
+    if (agent.key === 'president_agent' && execContext.createdTaskCount === 0) {
+      try {
+        await maybeAutoDelegatePresidentRequest(text, execContext);
+      } catch (_) {}
+    }
     if (execContext.createdTaskCount > 0) {
       await updateOwnerOrder({
         orderId: currentOrder.order_id,

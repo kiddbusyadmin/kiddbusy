@@ -228,6 +228,23 @@ function buildLocalSeoKeywordPlan(city) {
   ];
 }
 
+function buildLocalTeenKeywordPlan(city) {
+  var c = String(city || '').trim();
+  if (!c) return [];
+  return [
+    'teen activities ' + c,
+    'things to do with teens in ' + c,
+    'free teen activities ' + c,
+    'indoor teen activities ' + c,
+    'outdoor teen activities ' + c,
+    'weekend activities for teens in ' + c,
+    c + ' teen hangout spots',
+    c + ' parks and public spaces for teens',
+    c + ' creative activities for teens',
+    c + ' free things to do with older kids'
+  ];
+}
+
 function countNameMentions(text, names) {
   var hay = String(text || '').toLowerCase();
   if (!hay) return 0;
@@ -547,6 +564,33 @@ function hasToddlerFriendlySignals(text) {
   return hits;
 }
 
+function hasTeenFriendlySignals(text) {
+  var hay = String(text || '').toLowerCase();
+  if (!hay) return 0;
+  var positive = [
+    'teen',
+    'teens',
+    'older kids',
+    'middle school',
+    'high school',
+    'skate',
+    'sports',
+    'basketball',
+    'bike',
+    'hangout',
+    'creative',
+    'music',
+    'art',
+    'independent',
+    'friends'
+  ];
+  var hits = 0;
+  for (var i = 0; i < positive.length; i += 1) {
+    if (hay.indexOf(positive[i]) >= 0) hits += 1;
+  }
+  return hits;
+}
+
 function hasStrongLocalSignals(post, targetCity, localListingNames) {
   var city = String(targetCity || '').trim().toLowerCase();
   var body = String((post && post.body_html) || '').toLowerCase();
@@ -576,6 +620,32 @@ function hasStrongLocalSignals(post, targetCity, localListingNames) {
     if (combined.indexOf(anchors[i]) >= 0) anchorHits += 1;
   }
   return anchorHits >= 3;
+}
+
+function hasStrongAudienceSignals(post, targetCity, localListingNames, theme) {
+  var safeTheme = String(theme || 'local_toddler').trim().toLowerCase();
+  if (safeTheme !== 'local_teen') return hasStrongLocalSignals(post, targetCity, localListingNames);
+
+  var city = String(targetCity || '').trim().toLowerCase();
+  var body = String((post && post.body_html) || '').toLowerCase();
+  var title = String((post && post.title) || '').toLowerCase();
+  var excerpt = String((post && post.excerpt) || '').toLowerCase();
+  var combined = title + ' ' + excerpt + ' ' + body;
+
+  if (!city || combined.indexOf(city) < 0) return false;
+  if (wordCount(stripTags(body)) < 220) return false;
+  if (!hasCurrentTimeAnchor(combined)) return false;
+  if (!hasAlignedCurrentTiming(combined)) return false;
+  if (hasCommercialSignals(combined)) return false;
+  if (hasToddlerUnsafeSignals(combined)) return false;
+  if (hasTeenFriendlySignals(combined) < 3) return false;
+
+  var mentions = countNameMentions(combined, localListingNames || []);
+  if (localListingNames && localListingNames.length) {
+    var minimumMentions = localListingNames.length >= 5 ? 3 : 2;
+    return mentions >= minimumMentions;
+  }
+  return true;
 }
 
 async function getIdentitySets() {
@@ -657,7 +727,9 @@ function normalizePost(rawPost, cities) {
   };
 }
 
-async function generateBatch(cities, existingTitles, batchSize, preferredCity, keywordTargets) {
+async function generateBatch(cities, existingTitles, batchSize, preferredCity, keywordTargets, options) {
+  var opts = options || {};
+  var audienceTheme = String(opts.audience_theme || 'local_toddler').trim().toLowerCase();
   var targetCity = pickTargetCity(cities, preferredCity);
   var localRows = await getCityListingContext(targetCity, 8);
   var localNames = localRows.map(function (r) { return String((r && r.name) || '').trim(); }).filter(Boolean);
@@ -673,6 +745,15 @@ async function generateBatch(cities, existingTitles, batchSize, preferredCity, k
     'Each object keys: title, excerpt, seo_description, city, tags, read_minutes, body_html.',
     'Content must be locally grounded with real place names and specifics.'
   ].join(' ');
+
+  var audienceRules = audienceTheme === 'local_teen'
+    ? [
+        '- Audience: families planning with teens or older kids.',
+        '- Recommendations must feel credible for teens, parent-safe, and locally realistic.',
+        '- Avoid toddler framing, stroller references, and preschool language.',
+        '- Include at least 3 specific free or public spaces that plausibly suit teens.'
+      ].join('\n')
+    : '- Every recommendation must feel toddler-appropriate, family-safe, stroller-friendly, and obviously defensible to a parent.';
 
   var avoidTitles = Array.from(existingTitles).slice(-80).join(' | ') || 'none';
   var timing = buildCurrentTimingGuidance();
@@ -698,8 +779,8 @@ async function generateBatch(cities, existingTitles, batchSize, preferredCity, k
     '- Each post must target one keyword phrase and include that exact phrase in the title and first paragraph.',
     '- Include at least 3 specific free/public spaces by exact name from the Known local listings block.',
     '- Do not mention businesses, private venues, museums, zoos, ticketed attractions, classes, or paid admissions.',
-    '- Never recommend cemeteries, memorial grounds, graveyards, nightlife, or any place that would feel inappropriate for toddlers.',
-    '- Every recommendation must feel toddler-appropriate, family-safe, stroller-friendly, and obviously defensible to a parent.',
+    '- Never recommend cemeteries, memorial grounds, graveyards, nightlife, or any place that would feel obviously inappropriate for families.',
+    audienceRules,
     '- Include a <h2>Local Picks</h2> section with a <ul> and at least 3 <li> entries.',
     '- Include official site links when available in context.',
     '- Use full names as provided in context. Do not invent place names.',
@@ -743,7 +824,7 @@ async function generateBatch(cities, existingTitles, batchSize, preferredCity, k
     if (!n) continue;
     if (n.city !== targetCity) continue;
     if (hasToddlerUnsafeSignals([n.title, n.excerpt, n.body_html].join(' '))) continue;
-    if (!hasStrongLocalSignals(n, targetCity, localNames)) continue;
+    if (!hasStrongAudienceSignals(n, targetCity, localNames, audienceTheme)) continue;
     out.push(n);
     if (out.length >= batchSize) break;
   }
@@ -1081,6 +1162,8 @@ async function runCmoBlog(event) {
     var keywordPlan = [];
     if (targetCity && (!seoKeywordTheme || seoKeywordTheme === 'local_toddler')) {
       keywordPlan = buildLocalSeoKeywordPlan(targetCity);
+    } else if (targetCity && seoKeywordTheme === 'local_teen') {
+      keywordPlan = buildLocalTeenKeywordPlan(targetCity);
     }
     while (remaining > 0) {
       var preferredCity = targetCity;
@@ -1096,7 +1179,9 @@ async function runCmoBlog(event) {
         keywordCursor += batchKeywords.length;
       }
       try {
-        batch = await generateBatch(cities, identity.titles, batchSize, preferredCity, batchKeywords);
+        batch = await generateBatch(cities, identity.titles, batchSize, preferredCity, batchKeywords, {
+          audience_theme: seoKeywordTheme || 'local_toddler'
+        });
       } catch (e) {
         generationErrors.push('generate: ' + String(e.message || e));
         break;
