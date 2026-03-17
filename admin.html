@@ -266,9 +266,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
   <!-- STAT CARDS - all 8 from original -->
   <div class="stats-row">
     <div class="stat-card red">
-      <div class="stat-label" id="stat-searches-label">Searches (24h)</div>
-      <div class="stat-value" id="stat-searches-today">--</div>
-      <div class="stat-sub" id="stat-searches-sub">all time: --</div>
+      <div class="stat-label" id="stat-traffic-label">Traffic Sessions (24h)</div>
+      <div class="stat-value" id="stat-traffic">--</div>
+      <div class="stat-sub" id="stat-traffic-sub">all time: --</div>
       <div style="margin-top:8px">
         <select id="searches-range" onchange="onSearchRangeChange()" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-family:var(--mono);font-size:.68rem;outline:none">
           <option value="24h" selected>Last 24 hrs</option>
@@ -279,14 +279,19 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
       </div>
     </div>
     <div class="stat-card blue">
-      <div class="stat-label">Unique Cities</div>
-      <div class="stat-value" id="stat-cities">--</div>
-      <div class="stat-sub" id="stat-cities-sub">searched ever</div>
+      <div class="stat-label" id="stat-searches-label">Manual Searches (24h)</div>
+      <div class="stat-value" id="stat-searches-today">--</div>
+      <div class="stat-sub" id="stat-searches-sub">all time: --</div>
     </div>
     <div class="stat-card purple">
-      <div class="stat-label">Multi-City Sessions</div>
-      <div class="stat-value" id="stat-multi">--</div>
-      <div class="stat-sub" id="stat-multi-sub">high-intent users</div>
+      <div class="stat-label" id="stat-auto-label">Auto Geo Searches (24h)</div>
+      <div class="stat-value" id="stat-auto">--</div>
+      <div class="stat-sub" id="stat-auto-sub">all time: --</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Search Conversion</div>
+      <div class="stat-value" id="stat-search-conv">--</div>
+      <div class="stat-sub" id="stat-search-conv-sub">manual of traffic</div>
     </div>
     <div class="stat-card green">
       <div class="stat-label">Email Leads</div>
@@ -1271,11 +1276,11 @@ function isWithinRange(ts, rangeKey) {
   return true;
 }
 
-function searchesRangeLabel(rangeKey) {
-  if (rangeKey === '7d') return 'Searches (7d)';
-  if (rangeKey === '30d') return 'Searches (30d)';
-  if (rangeKey === 'all') return 'Searches (All)';
-  return 'Searches (24h)';
+function rangeMetricLabel(base, rangeKey) {
+  if (rangeKey === '7d') return base + ' (7d)';
+  if (rangeKey === '30d') return base + ' (30d)';
+  if (rangeKey === 'all') return base + ' (All)';
+  return base + ' (24h)';
 }
 
 function rangeBadgeLabel(rangeKey) {
@@ -1424,23 +1429,28 @@ async function loadStats() {
 
   var events = filterAnalyticsRows(results[0].data || []);
   var windowEvents = events.filter(function(e) { return isWithinRange(e.created_at, searchesRange); });
+  var allSessionsSet = new Set(events.map(function(e) { return String(e.session_id || '').trim(); }).filter(Boolean));
+  var scopedSessionsSet = new Set(windowEvents.map(function(e) { return String(e.session_id || '').trim(); }).filter(Boolean));
   var allSearches = events.filter(function(e) { return e.event === 'city_search'; });
   var scopedSearches = windowEvents.filter(function(e) { return e.event === 'city_search'; });
-  var rangeLbl = rangeBadgeLabel(searchesRange);
+  var allAutoSearches = events.filter(function(e) { return e.event === 'city_search_auto'; });
+  var scopedAutoSearches = windowEvents.filter(function(e) { return e.event === 'city_search_auto'; });
 
-  document.getElementById('stat-searches-label').textContent = searchesRangeLabel(searchesRange);
+  document.getElementById('stat-traffic-label').textContent = rangeMetricLabel('Traffic Sessions', searchesRange);
+  document.getElementById('stat-traffic').textContent = scopedSessionsSet.size;
+  document.getElementById('stat-traffic-sub').textContent = 'all time: ' + allSessionsSet.size;
+
+  document.getElementById('stat-searches-label').textContent = rangeMetricLabel('Manual Searches', searchesRange);
   document.getElementById('stat-searches-today').textContent = scopedSearches.length;
   document.getElementById('stat-searches-sub').textContent = 'all time: ' + allSearches.length;
 
-  var uniqueCitiesAll = new Set(allSearches.map(function(e) { return e.city; }).filter(Boolean));
-  var uniqueCitiesScoped = new Set(scopedSearches.map(function(e) { return e.city; }).filter(Boolean));
-  document.getElementById('stat-cities').textContent = uniqueCitiesScoped.size;
-  document.getElementById('stat-cities-sub').textContent = 'all time: ' + uniqueCitiesAll.size;
+  document.getElementById('stat-auto-label').textContent = rangeMetricLabel('Auto Geo Searches', searchesRange);
+  document.getElementById('stat-auto').textContent = scopedAutoSearches.length;
+  document.getElementById('stat-auto-sub').textContent = 'all time: ' + allAutoSearches.length;
 
-  var multiCityAll = events.filter(function(e) { return e.event === 'multi_city_session'; });
-  var multiCityScoped = windowEvents.filter(function(e) { return e.event === 'multi_city_session'; });
-  document.getElementById('stat-multi').textContent = multiCityScoped.length;
-  document.getElementById('stat-multi-sub').textContent = 'all time: ' + multiCityAll.length;
+  var searchConv = scopedSessionsSet.size > 0 ? Math.round((scopedSearches.length / scopedSessionsSet.size) * 100) : 0;
+  document.getElementById('stat-search-conv').textContent = searchConv + '%';
+  document.getElementById('stat-search-conv-sub').textContent = 'auto: ' + scopedAutoSearches.length + ' | manual: ' + scopedSearches.length;
 
   var emailData = results[2].data || [];
   var emailScoped = emailData.filter(function(e) { return isWithinRange(e.created_at, searchesRange); });
