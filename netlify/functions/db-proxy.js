@@ -497,19 +497,22 @@ exports.handler = async (event) => {
 
   if (action === 'run_progress_pulse') {
     try {
-      const subs = await sbRequest(`agent_progress_subscriptions?select=*&status=eq.active&next_due_at=lte.${encodeURIComponent(nowIso())}&order=updated_at.desc&limit=50`, {
+      const subsOut = await sbRequest(`agent_progress_subscriptions?select=*&status=eq.active&next_due_at=lte.${encodeURIComponent(nowIso())}&order=updated_at.desc&limit=50`, {
         method: 'GET'
       });
+      const subs = Array.isArray(subsOut.data) ? subsOut.data : [];
       const sent = [];
       for (const sub of subs) {
         const ownerIdentity = String(sub.owner_identity || 'harold');
         const chatId = sub.target_chat_id || TELEGRAM_CHAT_ID;
-        const orders = await sbRequest(`agent_orders?owner_identity=eq.${encodeURIComponent(ownerIdentity)}&status=in.(pending_assignment,delegated,in_progress)&select=*&order=updated_at.desc&limit=30`, {
+        const ordersOut = await sbRequest(`agent_orders?owner_identity=eq.${encodeURIComponent(ownerIdentity)}&status=in.(pending_assignment,delegated,in_progress)&select=*&order=updated_at.desc&limit=30`, {
           method: 'GET'
         });
-        const tasks = await sbRequest(`agent_tasks?owner_identity=eq.${encodeURIComponent(ownerIdentity)}&status=in.(open,in_progress)&select=*&order=updated_at.desc&limit=30`, {
+        const tasksOut = await sbRequest(`agent_tasks?owner_identity=eq.${encodeURIComponent(ownerIdentity)}&status=in.(open,in_progress)&select=*&order=updated_at.desc&limit=30`, {
           method: 'GET'
         });
+        const orders = Array.isArray(ordersOut.data) ? ordersOut.data : [];
+        const tasks = Array.isArray(tasksOut.data) ? tasksOut.data : [];
         const reportText = buildProgressText(sub, orders, tasks);
         await sendTelegramMessage(chatId, reportText);
         await sbRequest('agent_progress_reports', {
