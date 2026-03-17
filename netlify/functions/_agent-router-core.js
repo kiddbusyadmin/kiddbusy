@@ -696,6 +696,25 @@ async function ensurePresidentDelegation(text, reply, execContext) {
   return created;
 }
 
+function appendTrackedDelegationSummary(reply, createdTasks) {
+  var tasks = Array.isArray(createdTasks) ? createdTasks.filter(Boolean) : [];
+  if (!tasks.length) return String(reply || '');
+  var lines = [];
+  var seen = {};
+  for (var i = 0; i < tasks.length; i += 1) {
+    var task = tasks[i] || {};
+    var key = String(task.assigned_agent_key || '') + ':' + String(task.task_id || '');
+    if (seen[key]) continue;
+    seen[key] = true;
+    lines.push('- ' + String(task.assigned_agent_key || 'agent').replace(/_agent$/, '') + ' task #' + String(task.task_id || ''));
+  }
+  if (!lines.length) return String(reply || '');
+  var footer = 'Tracked delegation:\n' + lines.join('\n');
+  var base = String(reply || '').trim();
+  if (base && base.indexOf(footer) >= 0) return base;
+  return (base ? (base + '\n\n') : '') + footer;
+}
+
 async function runAgentConversation({ role = '', userMessage = '', history = [], channel = 'dashboard', threadKey = '', ownerIdentity = 'harold' } = {}) {
   const registry = await getAgentRegistry();
   const hinted = parseRoleHint(userMessage, registry);
@@ -816,6 +835,7 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
       } catch (_) {}
     }
     if (execContext.createdTaskCount > 0) {
+      reply = appendTrackedDelegationSummary(reply, execContext.createdTasks);
       await updateOwnerOrder({
         orderId: currentOrder.order_id,
         status: 'delegated',
