@@ -1465,6 +1465,40 @@ async function fetchAdminSubmissions(status, limit) {
   return payload.submissions || [];
 }
 
+async function fetchTrafficSummary(range, includeInternal, includeBots) {
+  var res = await fetch('/.netlify/functions/db-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
+    body: JSON.stringify({
+      action: 'query_traffic_summary',
+      range: range || '24h',
+      include_internal: !!includeInternal,
+      include_bots: !!includeBots,
+      limit: 5000
+    })
+  });
+  var payload = await res.json();
+  if (!res.ok) throw new Error(payload.error || 'Failed to load traffic summary');
+  return payload || {};
+}
+
+async function fetchActivitySummary(range, includeInternal, includeBots) {
+  var res = await fetch('/.netlify/functions/db-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
+    body: JSON.stringify({
+      action: 'query_activity_summary',
+      range: range || '24h',
+      include_internal: !!includeInternal,
+      include_bots: !!includeBots,
+      limit: 5000
+    })
+  });
+  var payload = await res.json();
+  if (!res.ok) throw new Error(payload.error || 'Failed to load activity summary');
+  return payload || {};
+}
+
 async function photoAdmin(action, payload) {
   var body = Object.assign({ action: action }, payload || {});
   var res = await fetch('/api/photo-admin', {
@@ -1543,9 +1577,9 @@ async function loadAll() {
 // ===== STATS (8 cards) =====
 async function loadStats() {
   var results = await Promise.all([
-    sb.from('analytics').select('*').order('created_at', { ascending: false }),
     sb.from('reviews').select('status, created_at'),
-    sb.from('email_leads').select('created_at')
+    sb.from('email_leads').select('created_at'),
+    fetchTrafficSummary(searchesRange, includeInternalTraffic, false)
   ]);
   var submissionRows = [];
   try {
@@ -1554,37 +1588,29 @@ async function loadStats() {
     submissionRows = [];
   }
 
-  var events = filterAnalyticsRows(results[0].data || []);
-  var windowEvents = events.filter(function(e) { return isWithinRange(e.created_at, searchesRange); });
-  var allSessionsSet = new Set(events.map(function(e) { return String(e.session_id || '').trim(); }).filter(Boolean));
-  var scopedSessionsSet = new Set(windowEvents.map(function(e) { return String(e.session_id || '').trim(); }).filter(Boolean));
-  var allSearches = events.filter(function(e) { return e.event === 'city_search'; });
-  var scopedSearches = windowEvents.filter(function(e) { return e.event === 'city_search'; });
-  var allAutoSearches = events.filter(function(e) { return e.event === 'city_search_auto'; });
-  var scopedAutoSearches = windowEvents.filter(function(e) { return e.event === 'city_search_auto'; });
+  var trafficSummary = results[2] || {};
 
   document.getElementById('stat-traffic-label').textContent = rangeMetricLabel('Traffic Sessions', searchesRange);
-  document.getElementById('stat-traffic').textContent = scopedSessionsSet.size;
-  document.getElementById('stat-traffic-sub').textContent = 'all time: ' + allSessionsSet.size;
+  document.getElementById('stat-traffic').textContent = trafficSummary.sessions || 0;
+  document.getElementById('stat-traffic-sub').textContent = 'all time: ' + (trafficSummary.all_time_sessions || 0) + ' | bots filtered: ' + (trafficSummary.excluded_bots_in_range || 0);
 
   document.getElementById('stat-searches-label').textContent = rangeMetricLabel('Manual Searches', searchesRange);
-  document.getElementById('stat-searches-today').textContent = scopedSearches.length;
-  document.getElementById('stat-searches-sub').textContent = 'all time: ' + allSearches.length;
+  document.getElementById('stat-searches-today').textContent = trafficSummary.manual_searches || 0;
+  document.getElementById('stat-searches-sub').textContent = 'all time: ' + (trafficSummary.all_time_manual_searches || 0);
 
   document.getElementById('stat-auto-label').textContent = rangeMetricLabel('Auto Geo Searches', searchesRange);
-  document.getElementById('stat-auto').textContent = scopedAutoSearches.length;
-  document.getElementById('stat-auto-sub').textContent = 'all time: ' + allAutoSearches.length;
+  document.getElementById('stat-auto').textContent = trafficSummary.auto_searches || 0;
+  document.getElementById('stat-auto-sub').textContent = 'all time: ' + (trafficSummary.all_time_auto_searches || 0);
 
-  var searchConv = scopedSessionsSet.size > 0 ? Math.round((scopedSearches.length / scopedSessionsSet.size) * 100) : 0;
-  document.getElementById('stat-search-conv').textContent = searchConv + '%';
-  document.getElementById('stat-search-conv-sub').textContent = 'auto: ' + scopedAutoSearches.length + ' | manual: ' + scopedSearches.length;
+  document.getElementById('stat-search-conv').textContent = String(trafficSummary.search_conversion_pct || 0) + '%';
+  document.getElementById('stat-search-conv-sub').textContent = 'auto: ' + (trafficSummary.auto_searches || 0) + ' | manual: ' + (trafficSummary.manual_searches || 0);
 
-  var emailData = results[2].data || [];
+  var emailData = results[1].data || [];
   var emailScoped = emailData.filter(function(e) { return isWithinRange(e.created_at, searchesRange); });
   document.getElementById('stat-emails').textContent = emailScoped.length;
   document.getElementById('stat-emails-sub').textContent = 'all time: ' + emailData.length;
 
-  var reviewData = results[1].data || [];
+  var reviewData = results[0].data || [];
   var reviewScoped = reviewData.filter(function(r) { return isWithinRange(r.created_at, searchesRange); });
   var pendingRevsAll = reviewData.filter(function(r) { return r.status === 'pending'; });
   document.getElementById('stat-reviews').textContent = reviewScoped.length;
@@ -2030,8 +2056,8 @@ async function loadCacheHealth() {
 
 // ===== LIVE ACTIVITY FEED =====
 async function loadActivityFeed() {
-  var res = await sb.from('analytics').select('*').order('created_at', { ascending: false }).limit(1500);
-  var rows = filterAnalyticsRows(res.data || []);
+  var summary = await fetchActivitySummary('24h', includeInternalTraffic, false);
+  var rows = summary.rows || [];
   if (!rows.length) {
     document.getElementById('activitykpi-events').textContent = '0';
     document.getElementById('activitykpi-events-sub').textContent = 'all time: 0';
@@ -2046,36 +2072,22 @@ async function loadActivityFeed() {
     return;
   }
 
-  var rows24h = rows.filter(function(e) { return isWithinRange(e.created_at, '24h'); });
-  var sessionSet = new Set(rows24h.map(function(e) { return String(e.session_id || '').trim(); }).filter(Boolean));
-  var eventCounts = {};
-  var cityCounts = {};
-  rows24h.forEach(function(e) {
-    var evt = String(e.event || 'unknown');
-    var city = String(e.city || 'Unknown');
-    eventCounts[evt] = (eventCounts[evt] || 0) + 1;
-    cityCounts[city] = (cityCounts[city] || 0) + 1;
-  });
+  document.getElementById('activitykpi-events').textContent = summary.events || 0;
+  document.getElementById('activitykpi-events-sub').textContent = 'all time: ' + (summary.all_time_events || 0);
+  document.getElementById('activitykpi-sessions').textContent = summary.sessions || 0;
+  document.getElementById('activitykpi-top-event').textContent = ((summary.top_event || {}).name) || '--';
+  document.getElementById('activitykpi-top-event-sub').textContent = 'count: ' + (((summary.top_event || {}).count) || 0);
+  document.getElementById('activitykpi-top-city').textContent = ((summary.top_city || {}).name) || '--';
+  document.getElementById('activitykpi-top-city-sub').textContent = 'count: ' + (((summary.top_city || {}).count) || 0);
 
-  var topEvent = Object.entries(eventCounts).sort(function(a, b) { return b[1] - a[1]; })[0] || ['--', 0];
-  var topCity = Object.entries(cityCounts).sort(function(a, b) { return b[1] - a[1]; })[0] || ['--', 0];
-
-  document.getElementById('activitykpi-events').textContent = rows24h.length;
-  document.getElementById('activitykpi-events-sub').textContent = 'all time: ' + rows.length;
-  document.getElementById('activitykpi-sessions').textContent = sessionSet.size;
-  document.getElementById('activitykpi-top-event').textContent = topEvent[0];
-  document.getElementById('activitykpi-top-event-sub').textContent = 'count: ' + topEvent[1];
-  document.getElementById('activitykpi-top-city').textContent = topCity[0];
-  document.getElementById('activitykpi-top-city-sub').textContent = 'count: ' + topCity[1];
-
-  var eventSorted = Object.entries(eventCounts).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 8);
-  var citySorted = Object.entries(cityCounts).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 8);
-  var maxEvent = eventSorted[0] ? eventSorted[0][1] : 1;
-  var maxCity = citySorted[0] ? citySorted[0][1] : 1;
+  var eventSorted = summary.event_mix || [];
+  var citySorted = summary.city_mix || [];
+  var maxEvent = eventSorted[0] ? eventSorted[0].count : 1;
+  var maxCity = citySorted[0] ? citySorted[0].count : 1;
 
   document.getElementById('body-activity-event-mix').innerHTML = eventSorted.length
     ? eventSorted.map(function(entry) {
-        var label = entry[0], count = entry[1];
+        var label = entry.name, count = entry.count;
         var pct = Math.round((count / maxEvent) * 100);
         return '<div class="city-bar-wrap">' +
           '<div class="city-bar-label">' + label + '<span>' + count + '</span></div>' +
@@ -2086,7 +2098,7 @@ async function loadActivityFeed() {
 
   document.getElementById('body-activity-city-mix').innerHTML = citySorted.length
     ? citySorted.map(function(entry) {
-        var label = entry[0], count = entry[1];
+        var label = entry.name, count = entry.count;
         var pct = Math.round((count / maxCity) * 100);
         return '<div class="city-bar-wrap">' +
           '<div class="city-bar-label">' + label + '<span>' + count + '</span></div>' +

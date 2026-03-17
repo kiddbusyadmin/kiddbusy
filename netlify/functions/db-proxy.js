@@ -14,6 +14,7 @@ const { runCmoBlog } = require('./_cmo-blog-core');
 const { runAgentConversation } = require('./_agent-router-core');
 const accountantAgent = require('./accountant-agent');
 const { runAgentTasks, runDelegationWatchdog } = require('./_agent-task-runner-core');
+const { getTrafficSummary, getActivitySummary } = require('./_analytics-core');
 
 const ALLOWED_TABLES = {
   submissions: new Set(['pending', 'approved', 'rejected']),
@@ -504,6 +505,34 @@ exports.handler = async (event) => {
         return json(response.status, { error: 'Supabase query failed', details: data });
       }
       return json(200, { count: Array.isArray(data) ? data.length : 0, activities: data });
+    } catch (err) {
+      return json(500, { error: err.message || 'Unexpected error' });
+    }
+  }
+
+  if (action === 'query_traffic_summary') {
+    try {
+      const summary = await getTrafficSummary({
+        range: String(body.range || '24h'),
+        includeInternal: !!body.include_internal,
+        includeBots: !!body.include_bots,
+        limit: Number(body.limit) || 5000
+      });
+      return json(200, summary);
+    } catch (err) {
+      return json(500, { error: err.message || 'Unexpected error' });
+    }
+  }
+
+  if (action === 'query_activity_summary') {
+    try {
+      const summary = await getActivitySummary({
+        range: String(body.range || '24h'),
+        includeInternal: !!body.include_internal,
+        includeBots: !!body.include_bots,
+        limit: Number(body.limit) || 5000
+      });
+      return json(200, summary);
     } catch (err) {
       return json(500, { error: err.message || 'Unexpected error' });
     }

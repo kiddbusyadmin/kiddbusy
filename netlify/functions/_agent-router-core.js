@@ -1,6 +1,7 @@
 const { sendCompliantEmail } = require('./_email-compliance');
 const { triggerSponsorshipPaymentRequestEmail } = require('./_sponsorship-payment-email');
 const { buildFinanceSnapshot, upsertFinanceSnapshot, addManualEntry, sbFetch } = require('./_accounting-core');
+const { getTrafficSummary, getActivitySummary } = require('./_analytics-core');
 const { getAgentRegistry, createAgentDefinition, findAgent, normalizeKey } = require('./_agent-org');
 const { logAgentActivity } = require('./_agent-activity');
 const {
@@ -133,22 +134,16 @@ async function sendEmail(to, subject, body, fromName = 'KiddBusy') {
   });
 }
 
-async function queryDashboardStats(range = '24h') {
+async function queryDashboardStats(range = '24h', options = {}) {
   const safeRange = ['24h', '7d', '30d', 'all'].includes(String(range)) ? String(range) : '24h';
-  const events = await dbQuery('analytics', { select: 'event,city,created_at,session_id,source,is_internal', limit: 4000, order: { by: 'created_at', asc: false } });
   const reviews = await dbQuery('reviews', { select: 'status,created_at', limit: 2000, order: { by: 'created_at', asc: false } });
   const submissions = await dbQuery('submissions', { select: 'status,created_at,city', limit: 2000, order: { by: 'created_at', asc: false } });
-  const now = Date.now();
-  const ranges = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
-  const scoped = safeRange === 'all' ? events : events.filter((row) => {
-    const ms = new Date(row.created_at).getTime();
-    return Number.isFinite(ms) && (now - ms) <= ranges[safeRange] * 60 * 60 * 1000;
-  });
-  const searchScoped = scoped.filter((e) => e.event === 'city_search');
   return {
-    range: safeRange,
-    searches: searchScoped.length,
-    unique_cities: new Set(searchScoped.map((e) => e.city).filter(Boolean)).size,
+    ...(await getTrafficSummary({
+      range: safeRange,
+      includeInternal: !!options.includeInternal,
+      includeBots: !!options.includeBots
+    })),
     submissions_pending: submissions.filter((s) => s.status === 'pending').length,
     reviews_pending: reviews.filter((r) => r.status === 'pending').length
   };
@@ -339,7 +334,16 @@ async function executeTool(name, input = {}, context = {}) {
       return { count: rows.length, activities: rows };
     }
     case 'query_dashboard_stats':
-      return queryDashboardStats(input.range || '24h');
+      return queryDashboardStats(input.range || '24h', {
+        includeInternal: !!input.include_internal,
+        includeBots: !!input.include_bots
+      });
+    case 'query_activity_summary':
+      return getActivitySummary({
+        range: input.range || '24h',
+        includeInternal: !!input.include_internal,
+        includeBots: !!input.include_bots
+      });
     case 'query_finance_snapshot':
       return { snapshot: await buildFinanceSnapshot() };
     case 'run_accountant_snapshot': {
@@ -435,7 +439,8 @@ function toolDefinitions() {
     { name: 'query_agent_memory', description: 'Read durable memory entries for an agent, including owner preferences and prior decisions.', input_schema: { type: 'object', properties: {
       owner_identity: { type: 'string' }, agent_key: { type: 'string' }, limit: { type: 'number' }
     }, required: [] } },
-    { name: 'query_dashboard_stats', description: 'Get top dashboard metrics for the requested time range.', input_schema: { type: 'object', properties: { range: { type: 'string', enum: ['24h', '7d', '30d', 'all'] } }, required: [] } },
+    { name: 'query_dashboard_stats', description: 'Get the dashboard traffic source-of-truth metrics for the requested time range. Returns sessions, manual searches, auto searches, search conversion, and excluded internal/bot counts. Prefer this over raw analytics when answering traffic questions.', input_schema: { type: 'object', properties: { range: { type: 'string', enum: ['24h', '7d', '30d', 'all'] }, include_internal: { type: 'boolean' }, include_bots: { type: 'boolean' } }, required: [] } },
+    { name: 'query_activity_summary', description: 'Get the dashboard activity source-of-truth summary for the requested time range. Returns event totals, sessions, top events, top cities, and filtered rows. Prefer this over raw analytics when answering activity questions.', input_schema: { type: 'object', properties: { range: { type: 'string', enum: ['24h', '7d', '30d', 'all'] }, include_internal: { type: 'boolean' }, include_bots: { type: 'boolean' } }, required: [] } },
     { name: 'query_submissions', description: 'Query listing submissions.', input_schema: { type: 'object', properties: { status: { type: 'string' }, limit: { type: 'number' } }, required: [] } },
     { name: 'query_reviews', description: 'Query reviews.', input_schema: { type: 'object', properties: { status: { type: 'string' }, limit: { type: 'number' } }, required: [] } },
     { name: 'query_sponsorships', description: 'Query sponsorship records.', input_schema: { type: 'object', properties: { status: { type: 'string' }, limit: { type: 'number' } }, required: [] } },
@@ -464,6 +469,7 @@ function buildSystemPrompt(agent, registry, channel) {
     'You are the default managing agent and the owner can also talk to specialists directly.',
     'When the user asks for a new agent, create it with the create_agent tool instead of just describing it.',
     'When responding as President, synthesize across CMO, Accountant, and Operations perspectives.',
+    'When asked about traffic, sessions, searches, or activity, use query_dashboard_stats and query_activity_summary instead of reasoning from raw analytics rows or memory.',
     'Traffic growth is the first gate for monetization. Do not forget that low traffic weakens owner-claim and sponsorship monetization.',
     'Default to working through how your existing team can fulfill the request. Use delegation/task creation before pushback.',
     'If the current team cannot do it well, recommend a new agent and explain why in one short paragraph.',
@@ -538,7 +544,6 @@ async function runAnthropicLoop({ systemPrompt, history, userMessage }) {
 }
 
 async function runOpenAiFallback({ systemPrompt, history, userMessage }) {
-  const input = normalizeHistory(history).concat([{ role: 'user', content: userMessage }]).map((m) => ({ role: m.role, content: m.content }));
   const res = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: {
@@ -547,7 +552,9 @@ async function runOpenAiFallback({ systemPrompt, history, userMessage }) {
     },
     body: JSON.stringify({
       model: OPENAI_AGENT_MODEL,
-      input: [{ role: 'system', content: systemPrompt }].concat(input),
+      input: [{ role: 'system', content: systemPrompt }].concat(
+        normalizeHistory(history).concat([{ role: 'user', content: userMessage }]).map((m) => ({ role: m.role, content: m.content }))
+      ),
       temperature: 0.2,
       max_output_tokens: 1200
     })
@@ -557,6 +564,70 @@ async function runOpenAiFallback({ systemPrompt, history, userMessage }) {
   try { body = raw ? JSON.parse(raw) : null; } catch (_) { body = null; }
   if (!res.ok) throw new Error((body && body.error && body.error.message) || `OpenAI HTTP ${res.status}`);
   return extractOpenAiText(body);
+}
+
+async function runOpenAiToolLoop({ systemPrompt, history, userMessage, execContext }) {
+  let input = [{ role: 'system', content: systemPrompt }]
+    .concat(normalizeHistory(history).map((m) => ({ role: m.role, content: m.content })))
+    .concat([{ role: 'user', content: userMessage }]);
+  let previousResponseId = null;
+  let iterations = 0;
+  while (iterations < 12) {
+    iterations += 1;
+    const payload = {
+      model: OPENAI_AGENT_MODEL,
+      input,
+      temperature: 0.2,
+      max_output_tokens: 1200,
+      tools: toolDefinitions().map((tool) => ({
+        type: 'function',
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.input_schema
+      }))
+    };
+    if (previousResponseId) payload.previous_response_id = previousResponseId;
+    const res = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`
+      },
+      body: JSON.stringify(payload)
+    });
+    const raw = await res.text();
+    let body = null;
+    try { body = raw ? JSON.parse(raw) : null; } catch (_) { body = null; }
+    if (!res.ok) throw new Error((body && body.error && body.error.message) || `OpenAI HTTP ${res.status}`);
+    previousResponseId = body && body.id ? body.id : previousResponseId;
+    const outputs = Array.isArray(body && body.output) ? body.output : [];
+    const calls = outputs.filter((item) => item && item.type === 'function_call');
+    if (calls.length) {
+      input = [];
+      for (const call of calls) {
+        let args = {};
+        try {
+          args = call.arguments ? JSON.parse(call.arguments) : {};
+        } catch (_) {
+          args = {};
+        }
+        let result;
+        try {
+          result = await executeTool(call.name, args, execContext);
+        } catch (err) {
+          result = { error: err.message || 'tool_failed' };
+        }
+        input.push({
+          type: 'function_call_output',
+          call_id: call.call_id,
+          output: JSON.stringify(result)
+        });
+      }
+      continue;
+    }
+    return extractOpenAiText(body);
+  }
+  throw new Error('OpenAI agent exceeded max iterations');
 }
 
 function parseRoleHint(text, registry) {
@@ -899,7 +970,12 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
     provider = 'anthropic';
   } catch (primaryErr) {
     if (!OPENAI_API_KEY) throw primaryErr;
-    reply = await runOpenAiFallback({ systemPrompt: `${systemPrompt}\n\n${memoryBlock}`, history: storedMessages.concat(normalizeHistory(history)), userMessage: text });
+    reply = await runOpenAiToolLoop({
+      systemPrompt: `${systemPrompt}\n\n${memoryBlock}`,
+      history: storedMessages.concat(normalizeHistory(history)),
+      userMessage: text,
+      execContext
+    });
     provider = 'openai';
   }
   if (currentOrder) {
