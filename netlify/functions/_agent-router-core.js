@@ -183,6 +183,23 @@ async function executeTool(name, input = {}, context = {}) {
         });
         context.orderUpdated = true;
       }
+      try {
+        await logAgentActivity({
+          agentKey: input.assigned_agent_key || 'unknown',
+          status: 'info',
+          summary: `New delegated task from President: ${String(task.title || 'Untitled task').slice(0, 240)}`,
+          details: {
+            task_id: task.task_id,
+            order_id: (input.order_id || context.currentOrderId || null),
+            requested_by_agent_key: input.requested_by_agent_key || 'president_agent',
+            assigned_agent_key: input.assigned_agent_key || null,
+            priority: input.priority || 'normal',
+            task_summary: input.summary || ''
+          }
+        });
+      } catch (_) {
+        // Do not fail task creation if audit logging fails.
+      }
       return { success: true, task };
     }
     case 'query_owner_orders': {
