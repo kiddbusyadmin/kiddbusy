@@ -100,6 +100,11 @@
   schedule = "30 14 * * *"
   timeout = 60
 
+# President progress pulse for Telegram status updates
+[functions.agent-progress-pulse]
+  schedule = "*/5 * * * *"
+  timeout = 30
+
 # Sponsorship claim nurture — runs hourly to follow up blocked sponsorships
 [functions.sponsorship-claim-nurture]
   schedule = "15 * * * *"
@@ -208,6 +213,11 @@
 [[redirects]]
   from = "/api/revenue-consensus"
   to = "/.netlify/functions/revenue-consensus"
+  status = 200
+
+[[redirects]]
+  from = "/api/agent-progress-pulse"
+  to = "/.netlify/functions/agent-progress-pulse"
   status = 200
 
 [[redirects]]

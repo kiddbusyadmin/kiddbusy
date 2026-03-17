@@ -13,7 +13,11 @@ const {
   getOpenTasks,
   createOwnerOrder,
   updateOwnerOrder,
-  getOwnerOrders
+  getOwnerOrders,
+  createProgressSubscription,
+  updateProgressSubscription,
+  getProgressSubscriptions,
+  getProgressReports
 } = require('./_agent-memory');
 
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
@@ -204,6 +208,47 @@ async function executeTool(name, input = {}, context = {}) {
       const tasks = await getOpenTasks({ ownerIdentity: input.owner_identity || 'harold', limit: input.limit || 30 });
       return { count: tasks.length, tasks };
     }
+    case 'create_progress_subscription': {
+      const row = await createProgressSubscription({
+        ownerIdentity: input.owner_identity || 'harold',
+        agentKey: input.agent_key || 'president_agent',
+        channel: input.channel || context.channel || 'telegram',
+        targetChatId: input.target_chat_id || context.targetChatId || null,
+        intervalMinutes: input.interval_minutes || 5,
+        scope: input.scope || 'all_open_orders',
+        summary: input.summary || null,
+        threadKey: input.thread_key || context.threadKey || null,
+        metadata: input.metadata || {}
+      });
+      return { success: true, subscription: row };
+    }
+    case 'query_progress_subscriptions': {
+      const rows = await getProgressSubscriptions({
+        ownerIdentity: input.owner_identity || 'harold',
+        status: input.status || 'active',
+        dueOnly: !!input.due_only,
+        limit: input.limit || 30
+      });
+      return { count: rows.length, subscriptions: rows };
+    }
+    case 'update_progress_subscription': {
+      const row = await updateProgressSubscription({
+        subscriptionId: input.subscription_id,
+        status: input.status || null,
+        summary: input.summary || null,
+        metadata: input.metadata || null,
+        lastSentAt: input.last_sent_at || null,
+        nextDueAt: input.next_due_at || null
+      });
+      return { success: true, subscription: row };
+    }
+    case 'query_progress_reports': {
+      const rows = await getProgressReports({
+        ownerIdentity: input.owner_identity || 'harold',
+        limit: input.limit || 20
+      });
+      return { count: rows.length, reports: rows };
+    }
     case 'store_agent_memory': {
       const row = await upsertMemory({
         ownerIdentity: input.owner_identity || 'harold',
@@ -337,6 +382,18 @@ function toolDefinitions() {
     { name: 'query_agent_tasks', description: 'List open and in-progress agent tasks for continuity and delegation tracking.', input_schema: { type: 'object', properties: {
       owner_identity: { type: 'string' }, limit: { type: 'number' }
     }, required: [] } },
+    { name: 'create_progress_subscription', description: 'Create a recurring owner progress update feed, especially for Telegram updates every N minutes.', input_schema: { type: 'object', properties: {
+      owner_identity: { type: 'string' }, agent_key: { type: 'string' }, channel: { type: 'string' }, target_chat_id: { type: 'string' }, interval_minutes: { type: 'number' }, scope: { type: 'string' }, summary: { type: 'string' }, thread_key: { type: 'string' }, metadata: { type: 'object' }
+    }, required: [] } },
+    { name: 'query_progress_subscriptions', description: 'List active or due progress update subscriptions for the owner.', input_schema: { type: 'object', properties: {
+      owner_identity: { type: 'string' }, status: { type: 'string' }, due_only: { type: 'boolean' }, limit: { type: 'number' }
+    }, required: [] } },
+    { name: 'update_progress_subscription', description: 'Pause, resume, or refresh a progress update subscription.', input_schema: { type: 'object', properties: {
+      subscription_id: { type: 'number' }, status: { type: 'string' }, summary: { type: 'string' }, metadata: { type: 'object' }, last_sent_at: { type: 'string' }, next_due_at: { type: 'string' }
+    }, required: ['subscription_id'] } },
+    { name: 'query_progress_reports', description: 'Read recent progress reports already delivered to the owner.', input_schema: { type: 'object', properties: {
+      owner_identity: { type: 'string' }, limit: { type: 'number' }
+    }, required: [] } },
     { name: 'store_agent_memory', description: 'Persist a durable memory, preference, decision, or standing directive for an agent.', input_schema: { type: 'object', properties: {
       owner_identity: { type: 'string' }, agent_key: { type: 'string' }, memory_kind: { type: 'string' }, key: { type: 'string' }, value: { type: 'object' }, pinned: { type: 'boolean' }
     }, required: ['key', 'value'] } },
@@ -377,7 +434,8 @@ function buildSystemPrompt(agent, registry, channel) {
     'If the current team cannot do it well, recommend a new agent and explain why in one short paragraph.',
     'Only refuse or block when there is a hard legal, compliance, access, or business-rule constraint.',
     'Every owner order should be tracked. For a new order, either delegate it, leave it pending_assignment with a short reason, or mark it completed if you handled it directly.',
-    'If you are intentionally holding work instead of assigning it right away, you must call update_owner_order with status pending_assignment and a concise summary of why it is being held. Do not leave held work implied only in prose.'
+    'If you are intentionally holding work instead of assigning it right away, you must call update_owner_order with status pending_assignment and a concise summary of why it is being held. Do not leave held work implied only in prose.',
+    'If the owner asks for recurring progress updates, especially on Telegram, create a real progress subscription using create_progress_subscription. Do not just promise future updates in prose.'
   ].join(' ');
   const specialistRules = `You are ${agent.name} for KiddBusy. Stay within your specialty while still being practical. Report clearly to the President agent when useful.`;
   return [
@@ -534,7 +592,10 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
   const execContext = {
     currentOrderId: currentOrder ? currentOrder.order_id : null,
     createdTaskCount: 0,
-    orderUpdated: false
+    orderUpdated: false,
+    channel,
+    threadKey: resolvedThreadKey,
+    targetChatId: channel === 'telegram' ? (process.env.TELEGRAM_CHAT_ID || '') : ''
   };
   try {
     if (!ANTHROPIC_API_KEY) throw new Error('Anthropic not configured');

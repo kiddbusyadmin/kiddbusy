@@ -1074,6 +1074,26 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
       </div>
     </div>
   </div>
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Progress Update Feeds</div>
+        <div class="panel-badge" id="badge-agent-office-progress">loading</div>
+      </div>
+      <div class="panel-body" id="body-agent-office-progress">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Recent Progress Reports</div>
+        <div class="panel-badge" id="badge-agent-office-reports">loading</div>
+      </div>
+      <div class="panel-body" id="body-agent-office-reports">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
   <div class="panels full">
     <div class="panel">
       <div class="panel-header">
@@ -2844,6 +2864,28 @@ async function fetchOwnerOrders(status, limit) {
   return out.orders || [];
 }
 
+async function fetchProgressSubscriptions(status, limit) {
+  var res = await fetch('/.netlify/functions/db-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
+    body: JSON.stringify({ action: 'query_progress_subscriptions', status: status || 'active', limit: limit || 40 })
+  });
+  var out = await res.json();
+  if (!res.ok) throw new Error(out.error || 'Failed to load progress subscriptions');
+  return out.subscriptions || [];
+}
+
+async function fetchProgressReports(limit) {
+  var res = await fetch('/.netlify/functions/db-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
+    body: JSON.stringify({ action: 'query_progress_reports', limit: limit || 40 })
+  });
+  var out = await res.json();
+  if (!res.ok) throw new Error(out.error || 'Failed to load progress reports');
+  return out.reports || [];
+}
+
 function formatLocalTimestamp(ts) {
   if (!ts) return '--';
   var d = new Date(ts);
@@ -2910,21 +2952,31 @@ async function loadAgentOffice() {
   var heldBadge = document.getElementById('badge-agent-office-held');
   var funnelEl = document.getElementById('body-agent-office-funnel');
   var tasksBadge = document.getElementById('badge-agent-office-tasks');
+  var progressEl = document.getElementById('body-agent-office-progress');
+  var progressBadge = document.getElementById('badge-agent-office-progress');
+  var reportsEl = document.getElementById('body-agent-office-reports');
+  var reportsBadge = document.getElementById('badge-agent-office-reports');
   if (!body) return;
   body.innerHTML = loadingHTML();
   if (byAgentEl) byAgentEl.innerHTML = loadingHTML();
   if (tasksEl) tasksEl.innerHTML = loadingHTML();
   if (heldEl) heldEl.innerHTML = loadingHTML();
   if (funnelEl) funnelEl.innerHTML = loadingHTML();
+  if (progressEl) progressEl.innerHTML = loadingHTML();
+  if (reportsEl) reportsEl.innerHTML = loadingHTML();
   try {
     var results = await Promise.all([
       fetchAgentActivity(120),
       fetchAgentTasks('open_or_in_progress', 80),
-      fetchOwnerOrders('', 120)
+      fetchOwnerOrders('', 120),
+      fetchProgressSubscriptions('active', 40),
+      fetchProgressReports(30)
     ]);
     var rows = results[0] || [];
     var tasks = results[1] || [];
     var orders = results[2] || [];
+    var subs = results[3] || [];
+    var reports = results[4] || [];
     var rows7d = rows.filter(function(r) { return isWithinRange(r.created_at, '7d'); });
     var heldOrders = orders.filter(function(o) { return String(o.status || '') === 'pending_assignment'; });
     var delegatedOrders = orders.filter(function(o) { return String(o.status || '') === 'delegated' || String(o.status || '') === 'in_progress'; });
@@ -2970,6 +3022,30 @@ async function loadAgentOffice() {
               '</div>';
           }).join('')
         : emptyHTML('No open delegations');
+    }
+
+    if (progressBadge) progressBadge.textContent = subs.length + ' active';
+    if (progressEl) {
+      progressEl.innerHTML = subs.length
+        ? subs.slice(0, 6).map(function(sub) {
+            return '<div style="padding:10px 0;border-bottom:1px solid var(--border)">' +
+              '<div style="font-size:.8rem;color:var(--text);line-height:1.45">President is sending updates every ' + (sub.interval_minutes || 5) + ' min via ' + (sub.channel || 'telegram') + '.</div>' +
+              '<div style="margin-top:4px;font-family:var(--mono);font-size:.7rem;color:var(--muted)">next due ' + formatLocalTimestamp(sub.next_due_at) + ' | last sent ' + formatLocalTimestamp(sub.last_sent_at) + '</div>' +
+              '</div>';
+          }).join('')
+        : emptyHTML('No active progress feeds');
+    }
+
+    if (reportsBadge) reportsBadge.textContent = reports.length + ' recent';
+    if (reportsEl) {
+      reportsEl.innerHTML = reports.length
+        ? reports.slice(0, 6).map(function(report) {
+            return '<div style="padding:10px 0;border-bottom:1px solid var(--border)">' +
+              '<div style="font-size:.8rem;color:var(--text);line-height:1.45">' + String(report.report_text || '').replace(/</g, '&lt;') + '</div>' +
+              '<div style="margin-top:4px;font-family:var(--mono);font-size:.7rem;color:var(--muted)">' + formatLocalTimestamp(report.created_at) + '</div>' +
+              '</div>';
+          }).join('')
+        : emptyHTML('No progress reports have been sent yet');
     }
 
     document.getElementById('officekpi-orders').textContent = orders.length;
@@ -3042,6 +3118,8 @@ async function loadAgentOffice() {
     body.innerHTML = '<div class="empty" style="color:var(--accent)">Agent office unavailable: ' + e.message + '</div>';
     if (byAgentEl) byAgentEl.innerHTML = emptyHTML('Could not load speakers');
     if (tasksEl) tasksEl.innerHTML = emptyHTML('Could not load tasks');
+    if (progressEl) progressEl.innerHTML = emptyHTML('Could not load update feeds');
+    if (reportsEl) reportsEl.innerHTML = emptyHTML('Could not load progress reports');
   }
 }
 

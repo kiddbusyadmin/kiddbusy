@@ -165,6 +165,86 @@ async function getOwnerOrders({ ownerIdentity = 'harold', limit = 50, status = '
   return out.data;
 }
 
+async function createProgressSubscription({ ownerIdentity = 'harold', agentKey = 'president_agent', channel = 'telegram', targetChatId = null, intervalMinutes = 5, scope = 'all_open_orders', summary = null, threadKey = null, metadata = {} }) {
+  const mins = Math.min(Math.max(Number(intervalMinutes) || 5, 5), 1440);
+  const out = await sbFetch('agent_progress_subscriptions', {
+    method: 'POST',
+    body: {
+      owner_identity: ownerIdentity,
+      agent_key: agentKey,
+      channel,
+      target_chat_id: targetChatId,
+      interval_minutes: mins,
+      status: 'active',
+      scope,
+      summary: summary ? String(summary).slice(0, 600) : null,
+      thread_key: threadKey || null,
+      metadata: metadata && typeof metadata === 'object' ? metadata : {},
+      next_due_at: nowIso(),
+      updated_at: nowIso()
+    },
+    prefer: 'return=representation'
+  });
+  if (!out.response.ok) throw new Error('Failed to create progress subscription');
+  return Array.isArray(out.data) && out.data.length ? out.data[0] : null;
+}
+
+async function updateProgressSubscription({ subscriptionId, status = null, summary = null, metadata = null, lastSentAt = null, nextDueAt = null }) {
+  const patch = { updated_at: nowIso() };
+  if (status != null) patch.status = String(status).slice(0, 80);
+  if (summary != null) patch.summary = String(summary).slice(0, 600);
+  if (metadata && typeof metadata === 'object') patch.metadata = metadata;
+  if (lastSentAt != null) patch.last_sent_at = lastSentAt;
+  if (nextDueAt != null) patch.next_due_at = nextDueAt;
+  const out = await sbFetch(`agent_progress_subscriptions?subscription_id=eq.${encodeURIComponent(String(subscriptionId))}`, {
+    method: 'PATCH',
+    body: patch,
+    prefer: 'return=representation'
+  });
+  if (!out.response.ok) throw new Error('Failed to update progress subscription');
+  return Array.isArray(out.data) && out.data.length ? out.data[0] : null;
+}
+
+async function getProgressSubscriptions({ ownerIdentity = 'harold', status = 'active', dueOnly = false, limit = 50 }) {
+  const safe = Math.min(Math.max(Number(limit) || 50, 1), 200);
+  const filters = [
+    `owner_identity=eq.${encodeURIComponent(ownerIdentity)}`,
+    'select=*',
+    'order=updated_at.desc',
+    `limit=${safe}`
+  ];
+  if (status) filters.push(`status=eq.${encodeURIComponent(status)}`);
+  if (dueOnly) filters.push(`next_due_at=lte.${encodeURIComponent(nowIso())}`);
+  const out = await sbFetch(`agent_progress_subscriptions?${filters.join('&')}`);
+  if (!out.response.ok || !Array.isArray(out.data)) return [];
+  return out.data;
+}
+
+async function createProgressReport({ subscriptionId, ownerIdentity = 'harold', agentKey = 'president_agent', channel = 'telegram', targetChatId = null, reportText, reportMeta = {} }) {
+  const out = await sbFetch('agent_progress_reports', {
+    method: 'POST',
+    body: {
+      subscription_id: subscriptionId,
+      owner_identity: ownerIdentity,
+      agent_key: agentKey,
+      channel,
+      target_chat_id: targetChatId,
+      report_text: String(reportText || '').slice(0, 12000),
+      report_meta: reportMeta && typeof reportMeta === 'object' ? reportMeta : {}
+    },
+    prefer: 'return=representation'
+  });
+  if (!out.response.ok) throw new Error('Failed to create progress report');
+  return Array.isArray(out.data) && out.data.length ? out.data[0] : null;
+}
+
+async function getProgressReports({ ownerIdentity = 'harold', limit = 30 }) {
+  const safe = Math.min(Math.max(Number(limit) || 30, 1), 100);
+  const out = await sbFetch(`agent_progress_reports?owner_identity=eq.${encodeURIComponent(ownerIdentity)}&select=*&order=created_at.desc&limit=${safe}`);
+  if (!out.response.ok || !Array.isArray(out.data)) return [];
+  return out.data;
+}
+
 module.exports = {
   getOrCreateThread,
   appendMessage,
@@ -175,5 +255,10 @@ module.exports = {
   getOpenTasks,
   createOwnerOrder,
   updateOwnerOrder,
-  getOwnerOrders
+  getOwnerOrders,
+  createProgressSubscription,
+  updateProgressSubscription,
+  getProgressSubscriptions,
+  createProgressReport,
+  getProgressReports
 };
