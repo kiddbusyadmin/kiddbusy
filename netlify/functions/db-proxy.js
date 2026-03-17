@@ -10,6 +10,9 @@ const { triggerSponsorshipPaymentRequestEmail, verifySponsorshipOwnerClaim } = r
 const { enrollClaimNurture } = require('./_sponsorship-claim-nurture');
 const { buildFinanceSnapshot, upsertFinanceSnapshot } = require('./_accounting-core');
 const { sendCompliantEmail } = require('./_email-compliance');
+const { runCmoBlog } = require('./_cmo-blog-core');
+const { runAgentConversation } = require('./_agent-router-core');
+const accountantAgent = require('./accountant-agent');
 
 const ALLOWED_TABLES = {
   submissions: new Set(['pending', 'approved', 'rejected']),
@@ -144,6 +147,57 @@ async function patchTask(taskId, patch) {
     prefer: 'return=representation'
   });
   return Array.isArray(out.data) && out.data.length ? out.data[0] : null;
+}
+
+async function runCmoBlogTask(body) {
+  const response = await runCmoBlog({
+    httpMethod: 'POST',
+    headers: { 'x-requested-from': 'kiddbusy-hq' },
+    body: JSON.stringify(body || {})
+  });
+  let data = {};
+  try {
+    data = JSON.parse((response && response.body) || '{}');
+  } catch (_) {
+    data = {};
+  }
+  if (!response || Number(response.statusCode || 500) >= 400) {
+    throw new Error(data.error || 'CMO blog task failed');
+  }
+  return data;
+}
+
+async function runAccountantTask(body) {
+  const response = await accountantAgent.handler({
+    httpMethod: 'POST',
+    headers: { 'x-requested-from': 'kiddbusy-hq' },
+    body: JSON.stringify(body || { action: 'run_snapshot' })
+  });
+  let data = {};
+  try {
+    data = JSON.parse((response && response.body) || '{}');
+  } catch (_) {
+    data = {};
+  }
+  if (!response || Number(response.statusCode || 500) >= 400) {
+    throw new Error(data.error || 'Accountant task failed');
+  }
+  return data;
+}
+
+async function runDelegatedAgentTask(task, order) {
+  return runAgentConversation({
+    role: task.assigned_agent_key,
+    userMessage:
+      'Complete this delegated task from President. Task: ' + String(task.title || '') +
+      '\nSummary: ' + String(task.summary || '') +
+      '\nOwner request: ' + String((order && order.request_text) || '') +
+      '\nIf you cannot take external action, provide a concrete completion memo with findings and next steps.',
+    history: [],
+    channel: 'dashboard',
+    threadKey: 'task:' + String(task.task_id),
+    ownerIdentity: 'harold'
+  });
 }
 
 async function sbRequest(path, { method = 'GET', body = null, prefer = null } = {}) {
@@ -662,17 +716,13 @@ exports.handler = async (event) => {
         if (String(task.assigned_agent_key || '') === 'cmo_agent') {
           const city = cleanCityName(taskDetails.city || extractCityFromText(taskContext) || '');
           const articleCount = Math.min(Math.max(Number(taskDetails.article_count) || 5, 1), 25);
-          const result = await callInternalJson('/api/cmo-blog-run', {
-            method: 'POST',
-            body: {
-              target_city: city || '',
-              queue_target: articleCount,
-              max_generate_per_run: articleCount,
-              force_publish_generated: true,
-              publish_rate: articleCount,
-              distribution_enabled: true
-            },
-            source: 'kiddbusy-hq'
+          const result = await runCmoBlogTask({
+            target_city: city || '',
+            queue_target: articleCount,
+            max_generate_per_run: articleCount,
+            force_publish_generated: true,
+            publish_rate: articleCount,
+            distribution_enabled: true
           });
           resultSummary = 'CMO executed blog run' +
             (city ? (' for ' + city) : '') +
@@ -682,46 +732,25 @@ exports.handler = async (event) => {
         } else if (String(task.assigned_agent_key || '') === 'operations_agent') {
           const city = cleanCityName(taskDetails.city || extractCityFromText(taskContext) || '');
           const articleCount = Math.min(Math.max(Number(taskDetails.article_count) || 5, 1), 25);
-          const result = await callInternalJson('/api/cmo-blog-run', {
-            method: 'POST',
-            body: {
-              target_city: city || '',
-              queue_target: articleCount,
-              max_generate_per_run: articleCount,
-              force_publish_generated: true,
-              publish_rate: articleCount,
-              distribution_enabled: true
-            },
-            source: 'kiddbusy-hq'
+          const result = await runCmoBlogTask({
+            target_city: city || '',
+            queue_target: articleCount,
+            max_generate_per_run: articleCount,
+            force_publish_generated: true,
+            publish_rate: articleCount,
+            distribution_enabled: true
           });
           resultSummary = 'Operations coordinated publication' +
             (city ? (' for ' + city) : '') +
             ': generated ' + String(result.generated_count || 0) +
             ', published ' + String(result.published_count || 0) + '.';
         } else if (String(task.assigned_agent_key || '') === 'accountant_agent') {
-          const result = await callInternalJson('/api/accountant-agent', {
-            method: 'POST',
-            body: { action: 'run_snapshot' },
-            source: 'kiddbusy-hq'
-          });
+          const result = await runAccountantTask({ action: 'run_snapshot' });
           const snap = result.snapshot || {};
           resultSummary = 'Accountant refreshed finance snapshot. MRR $' + String(snap.mrr_active || 0) +
             ', 30d net $' + String(snap.net_projection_30d || 0) + '.';
         } else {
-          const result = await callInternalJson('/api/agent-router', {
-            method: 'POST',
-            body: {
-              role: task.assigned_agent_key,
-              message: 'Complete this delegated task from President. Task: ' + String(task.title || '') +
-                '\nSummary: ' + String(task.summary || '') +
-                '\nOwner request: ' + String((order && order.request_text) || '') +
-                '\nIf you cannot take external action, provide a concrete completion memo with findings and next steps.',
-              channel: 'dashboard',
-              thread_key: 'task:' + String(taskId),
-              owner_identity: 'harold'
-            },
-            source: 'kiddbusy-agent'
-          });
+          const result = await runDelegatedAgentTask(task, order);
           resultSummary = String(result.reply || '').slice(0, 1000) || ('Task ' + String(taskId) + ' completed.');
         }
 
