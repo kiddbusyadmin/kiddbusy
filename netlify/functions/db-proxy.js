@@ -232,28 +232,35 @@ async function resolveSponsorshipListingId(sponsorshipRow) {
 }
 
 exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return json(405, { error: 'Method not allowed' });
-  }
-
-  // Lightweight caller marker used by admin.html
-  const source = (event.headers['x-requested-from'] || event.headers['X-Requested-From'] || '').toLowerCase();
-  if (source !== 'kiddbusy-hq') {
-    return json(403, { error: 'Forbidden' });
-  }
-
   if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
     return json(500, { error: 'Supabase service configuration missing' });
   }
 
-  let body;
-  try {
-    body = JSON.parse(event.body || '{}');
-  } catch {
-    return json(400, { error: 'Invalid JSON body' });
+  const method = String(event.httpMethod || 'GET').toUpperCase();
+  const source = (event.headers['x-requested-from'] || event.headers['X-Requested-From'] || '').toLowerCase();
+  const query = event.queryStringParameters || {};
+  let body = {};
+
+  if (method === 'GET') {
+    body = Object.assign({}, query);
+  } else if (method === 'POST') {
+    if (source !== 'kiddbusy-hq') {
+      return json(403, { error: 'Forbidden' });
+    }
+    try {
+      body = JSON.parse(event.body || '{}');
+    } catch {
+      return json(400, { error: 'Invalid JSON body' });
+    }
+  } else {
+    return json(405, { error: 'Method not allowed' });
   }
 
   const { action, table, id, updates, match, status, limit, listing_id, is_sponsored, agent_key } = body;
+
+  if (method === 'GET' && action !== 'run_progress_pulse') {
+    return json(405, { error: 'Method not allowed' });
+  }
 
   if (action === 'query_submissions') {
     const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 1000);

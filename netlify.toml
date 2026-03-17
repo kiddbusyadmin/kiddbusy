@@ -212,7 +212,7 @@
 
 [[redirects]]
   from = "/api/agent-progress-pulse"
-  to = "/.netlify/functions/cmo-blog-scheduled?progress_only=1"
+  to = "/.netlify/functions/db-proxy?action=run_progress_pulse"
   status = 200
 
 [[redirects]]
