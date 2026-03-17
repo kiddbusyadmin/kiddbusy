@@ -787,6 +787,16 @@ async function runCmoBlog(event) {
     var seoKeywordTheme = String(body.seo_keyword_theme || '').trim().toLowerCase();
 
     var cities = await getCities();
+    if (targetCity) {
+      var hasTargetCity = false;
+      for (var tc = 0; tc < cities.length; tc += 1) {
+        if (String(cities[tc] || '').trim().toLowerCase() === targetCity.toLowerCase()) {
+          hasTargetCity = true;
+          break;
+        }
+      }
+      if (!hasTargetCity) cities.unshift(targetCity);
+    }
     var identity = await getIdentitySets();
     var plannedCityRotation = [];
     var archivedSeedCount = 0;

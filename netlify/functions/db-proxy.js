@@ -759,7 +759,7 @@ exports.handler = async (event) => {
               remaining_count: 0
             });
           } else {
-            const batchSize = Math.min(5, remainingBefore);
+            const batchSize = Math.min(1, remainingBefore);
             const result = await runCmoBlogTask({
               target_city: city || '',
               queue_target: batchSize,
@@ -808,7 +808,7 @@ exports.handler = async (event) => {
           if (publishedCount >= articleCount) {
             resultSummary = 'Operations verified publication target' + (city ? (' for ' + city) : '') + ': ' + String(publishedCount) + '/' + String(articleCount) + ' published.';
           } else if (draftCount > 0) {
-            const publishBatch = Math.min(5, draftCount, articleCount - publishedCount);
+            const publishBatch = Math.min(1, draftCount, articleCount - publishedCount);
             const result = await runCmoBlogTask({
               target_city: city || '',
               queue_target: 1,
