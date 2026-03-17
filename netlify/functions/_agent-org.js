@@ -68,11 +68,12 @@ function sanitizeAgent(input) {
   const name = String((input && input.name) || key).trim().slice(0, 80);
   const description = String((input && input.description) || '').trim().slice(0, 500);
   const systemPrompt = String((input && input.system_prompt) || '').trim().slice(0, 3000);
+  const explicitReportTo = input && Object.prototype.hasOwnProperty.call(input, 'report_to') ? input.report_to : undefined;
   return {
     key,
     name,
     role: normalizeKey(input && input.role) || 'specialist',
-    report_to: normalizeKey(input && input.report_to) || 'president_agent',
+    report_to: explicitReportTo === null ? null : (normalizeKey(explicitReportTo) || 'president_agent'),
     direct_access: input && Object.prototype.hasOwnProperty.call(input, 'direct_access') ? !!input.direct_access : true,
     description,
     system_prompt: systemPrompt || `You are ${name}, a KiddBusy specialist agent. ${description || 'Help the business in your domain and report clearly to the President.'}`,
