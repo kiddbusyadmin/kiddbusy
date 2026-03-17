@@ -3669,7 +3669,9 @@ async function runAgent(userText) {
         role: _agentRole || 'president_agent',
         message: userText,
         history: convHistory.slice(-12),
-        channel: 'dashboard'
+        channel: 'dashboard',
+        thread_key: 'dashboard:command-center',
+        owner_identity: 'harold'
       })
     });
     var data = await res.json();

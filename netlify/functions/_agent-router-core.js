@@ -3,6 +3,15 @@ const { triggerSponsorshipPaymentRequestEmail } = require('./_sponsorship-paymen
 const { buildFinanceSnapshot, upsertFinanceSnapshot, addManualEntry, sbFetch } = require('./_accounting-core');
 const { getAgentRegistry, createAgentDefinition, findAgent, normalizeKey } = require('./_agent-org');
 const { logAgentActivity } = require('./_agent-activity');
+const {
+  getOrCreateThread,
+  appendMessage,
+  getRecentMessages,
+  upsertMemory,
+  getAgentMemories,
+  createTask,
+  getOpenTasks
+} = require('./_agent-memory');
 
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -30,6 +39,9 @@ const PRESIDENT_CONTEXT_BRIEF = [
   '- Human review posture: real human reviews should carry ranking weight and are strategically important. Placeholder AI reviews should not dominate once real reviews exist.',
   '- Search/analytics posture: internal traffic and auto-detected city searches should not be confused with genuine user demand when reporting metrics.',
   '- Agent creation rule: when the owner asks to create another agent, create it using the tool instead of only describing it. Give it a clear role, description, and report-to-President structure.',
+  '- Execution behavior: default to figuring out how the current team of agents can complete the owner request. Coordinate before objecting. If capability is missing, suggest creating a new agent for review.',
+  '- Pushback policy: do not be overly resistant. Briefly flag risk or constraints, but execute by default unless blocked by legal/compliance, missing access, or a hard business rule.',
+  '- Memory policy: remember owner preferences, active initiatives, and open work. Use stored thread memory, tasks, and pinned memories to maintain continuity.',
   'Approved blog seeding and city expansion methodology:',
   '- Blog content must be locally informed and useful, not generic filler. Writing quality matters more than volume.',
   '- The blog should support SEO for searches like toddler activities + city + state, weekend activities, rainy day ideas, and city hub intent.',
@@ -142,6 +154,41 @@ async function executeTool(name, input = {}) {
       const created = await createAgentDefinition(input);
       return { success: true, agent: created.agent, registry: created.registry };
     }
+    case 'create_agent_task': {
+      const task = await createTask({
+        ownerIdentity: input.owner_identity || 'harold',
+        requestedByAgentKey: input.requested_by_agent_key || 'president_agent',
+        assignedAgentKey: input.assigned_agent_key,
+        title: input.title,
+        summary: input.summary || '',
+        details: input.details || {},
+        priority: input.priority || 'normal'
+      });
+      return { success: true, task };
+    }
+    case 'query_agent_tasks': {
+      const tasks = await getOpenTasks({ ownerIdentity: input.owner_identity || 'harold', limit: input.limit || 30 });
+      return { count: tasks.length, tasks };
+    }
+    case 'store_agent_memory': {
+      const row = await upsertMemory({
+        ownerIdentity: input.owner_identity || 'harold',
+        agentKey: input.agent_key || 'president_agent',
+        memoryKind: input.memory_kind || 'working_memory',
+        key: input.key,
+        value: input.value || {},
+        pinned: !!input.pinned
+      });
+      return { success: true, memory: row };
+    }
+    case 'query_agent_memory': {
+      const rows = await getAgentMemories({
+        ownerIdentity: input.owner_identity || 'harold',
+        agentKey: input.agent_key || 'president_agent',
+        limit: input.limit || 50
+      });
+      return { count: rows.length, memories: rows };
+    }
     case 'query_submissions': {
       const eq = {};
       if (input.status && input.status !== 'all') eq.status = input.status;
@@ -244,6 +291,18 @@ function toolDefinitions() {
     { name: 'create_agent', description: 'Create a new direct-access specialist agent that reports to the President.', input_schema: { type: 'object', properties: {
       key: { type: 'string' }, name: { type: 'string' }, role: { type: 'string' }, report_to: { type: 'string' }, description: { type: 'string' }, system_prompt: { type: 'string' }
     }, required: ['name', 'description'] } },
+    { name: 'create_agent_task', description: 'Create a task for a specialist agent when the owner request should be delegated or tracked.', input_schema: { type: 'object', properties: {
+      owner_identity: { type: 'string' }, requested_by_agent_key: { type: 'string' }, assigned_agent_key: { type: 'string' }, title: { type: 'string' }, summary: { type: 'string' }, priority: { type: 'string' }, details: { type: 'object' }
+    }, required: ['assigned_agent_key', 'title'] } },
+    { name: 'query_agent_tasks', description: 'List open and in-progress agent tasks for continuity and delegation tracking.', input_schema: { type: 'object', properties: {
+      owner_identity: { type: 'string' }, limit: { type: 'number' }
+    }, required: [] } },
+    { name: 'store_agent_memory', description: 'Persist a durable memory, preference, decision, or standing directive for an agent.', input_schema: { type: 'object', properties: {
+      owner_identity: { type: 'string' }, agent_key: { type: 'string' }, memory_kind: { type: 'string' }, key: { type: 'string' }, value: { type: 'object' }, pinned: { type: 'boolean' }
+    }, required: ['key', 'value'] } },
+    { name: 'query_agent_memory', description: 'Read durable memory entries for an agent, including owner preferences and prior decisions.', input_schema: { type: 'object', properties: {
+      owner_identity: { type: 'string' }, agent_key: { type: 'string' }, limit: { type: 'number' }
+    }, required: [] } },
     { name: 'query_dashboard_stats', description: 'Get top dashboard metrics for the requested time range.', input_schema: { type: 'object', properties: { range: { type: 'string', enum: ['24h', '7d', '30d', 'all'] } }, required: [] } },
     { name: 'query_submissions', description: 'Query listing submissions.', input_schema: { type: 'object', properties: { status: { type: 'string' }, limit: { type: 'number' } }, required: [] } },
     { name: 'query_reviews', description: 'Query reviews.', input_schema: { type: 'object', properties: { status: { type: 'string' }, limit: { type: 'number' } }, required: [] } },
@@ -273,7 +332,10 @@ function buildSystemPrompt(agent, registry, channel) {
     'You are the default managing agent and the owner can also talk to specialists directly.',
     'When the user asks for a new agent, create it with the create_agent tool instead of just describing it.',
     'When responding as President, synthesize across CMO, Accountant, and Operations perspectives.',
-    'Traffic growth is the first gate for monetization. Do not forget that low traffic weakens owner-claim and sponsorship monetization.'
+    'Traffic growth is the first gate for monetization. Do not forget that low traffic weakens owner-claim and sponsorship monetization.',
+    'Default to working through how your existing team can fulfill the request. Use delegation/task creation before pushback.',
+    'If the current team cannot do it well, recommend a new agent and explain why in one short paragraph.',
+    'Only refuse or block when there is a hard legal, compliance, access, or business-rule constraint.'
   ].join(' ');
   const specialistRules = `You are ${agent.name} for KiddBusy. Stay within your specialty while still being practical. Report clearly to the President agent when useful.`;
   return [
@@ -284,6 +346,7 @@ function buildSystemPrompt(agent, registry, channel) {
     'Use plain text, not markdown tables.',
     'Be concise, practical, and action-oriented.',
     'You have Command Center parity via tools.',
+    'Before pushing back, assess whether President + current specialists can complete the request together.',
     'Current agent org:',
     orgLines,
     `Today: ${today}`
@@ -372,24 +435,66 @@ function parseRoleHint(text, registry) {
   return null;
 }
 
-async function runAgentConversation({ role = '', userMessage = '', history = [], channel = 'dashboard' } = {}) {
+function summarizeThreadContext(messages) {
+  const recent = (messages || []).slice(-8);
+  if (!recent.length) return '';
+  return recent.map((m) => `${m.role}${m.agent_key ? ':' + m.agent_key : ''}: ${String(m.content || '').slice(0, 240)}`).join('\n');
+}
+
+async function runAgentConversation({ role = '', userMessage = '', history = [], channel = 'dashboard', threadKey = '', ownerIdentity = 'harold' } = {}) {
   const registry = await getAgentRegistry();
   const hinted = parseRoleHint(userMessage, registry);
   const agent = findAgent(registry, hinted ? hinted.role : role || registry.default_role);
   if (!agent) throw new Error('No agent available');
   const text = hinted ? hinted.text : String(userMessage || '').trim();
+  const resolvedThreadKey = String(threadKey || `${channel}:default`).trim();
+  const thread = await getOrCreateThread({
+    channel,
+    channelThreadKey: resolvedThreadKey,
+    ownerIdentity,
+    activeAgentKey: agent.key
+  });
+  const storedMessages = await getRecentMessages(thread.thread_id, 24);
+  const storedMemories = await getAgentMemories({ ownerIdentity, agentKey: 'president_agent', limit: 40 });
+  const openTasks = await getOpenTasks({ ownerIdentity, limit: 20 });
+  const threadSummary = summarizeThreadContext(storedMessages);
+  const memorySummary = (storedMemories || []).map((m) => `- ${m.memory_kind}/${m.key}: ${JSON.stringify(m.value)}`).join('\n');
+  const taskSummary = (openTasks || []).map((t) => `- ${t.assigned_agent_key}: ${t.title} [${t.status}]`).join('\n');
   const systemPrompt = buildSystemPrompt(agent, registry, channel);
+  const memoryBlock = [
+    'Durable memory and continuity:',
+    memorySummary || '- none recorded',
+    'Open delegated tasks:',
+    taskSummary || '- none recorded',
+    'Recent thread context:',
+    threadSummary || '- no prior thread history'
+  ].join('\n');
   let reply = '';
   let provider = '';
   try {
     if (!ANTHROPIC_API_KEY) throw new Error('Anthropic not configured');
-    reply = await runAnthropicLoop({ systemPrompt, history, userMessage: text });
+    reply = await runAnthropicLoop({ systemPrompt: `${systemPrompt}\n\n${memoryBlock}`, history: storedMessages.concat(normalizeHistory(history)), userMessage: text });
     provider = 'anthropic';
   } catch (primaryErr) {
     if (!OPENAI_API_KEY) throw primaryErr;
-    reply = await runOpenAiFallback({ systemPrompt, history, userMessage: text });
+    reply = await runOpenAiFallback({ systemPrompt: `${systemPrompt}\n\n${memoryBlock}`, history: storedMessages.concat(normalizeHistory(history)), userMessage: text });
     provider = 'openai';
   }
+  await appendMessage({ threadId: thread.thread_id, role: 'user', content: text, agentKey: null, metadata: { channel, owner_identity: ownerIdentity } });
+  await appendMessage({ threadId: thread.thread_id, role: 'assistant', content: reply, agentKey: agent.key, metadata: { provider, channel } });
+  await upsertMemory({
+    ownerIdentity,
+    agentKey: 'president_agent',
+    memoryKind: 'thread_summary',
+    key: resolvedThreadKey,
+    value: {
+      last_user_request: text.slice(0, 600),
+      last_agent: agent.key,
+      last_reply: String(reply || '').slice(0, 1200),
+      updated_at: new Date().toISOString()
+    },
+    pinned: false
+  });
   await logAgentActivity({
     agentKey: agent.key,
     status: 'success',
@@ -397,7 +502,8 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
     details: {
       channel,
       provider,
-      prompt_preview: text.slice(0, 240)
+      prompt_preview: text.slice(0, 240),
+      thread_key: resolvedThreadKey
     }
   });
   return {
@@ -406,7 +512,9 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
     agent_name: agent.name,
     provider,
     reply,
-    registry
+    registry,
+    thread_id: thread.thread_id,
+    thread_key: resolvedThreadKey
   };
 }
 

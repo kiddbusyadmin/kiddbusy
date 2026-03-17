@@ -35,7 +35,9 @@ exports.handler = async (event) => {
       role: body.role || '',
       userMessage: body.message || '',
       history: body.history || [],
-      channel: body.channel || 'dashboard'
+      channel: body.channel || 'dashboard',
+      threadKey: body.thread_key || 'dashboard:primary',
+      ownerIdentity: body.owner_identity || 'harold'
     });
     return json(200, result);
   } catch (err) {

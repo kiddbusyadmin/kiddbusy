@@ -37,7 +37,9 @@ async function runTelegramAgent(userMessage) {
     role: 'president_agent',
     userMessage: String(userMessage || ''),
     history: [],
-    channel: 'telegram'
+    channel: 'telegram',
+    threadKey: `telegram:${TELEGRAM_ALLOWED_CHAT_ID || 'default'}`,
+    ownerIdentity: 'harold'
   });
   const label = result && result.agent_name ? `[${result.agent_name}] ` : '';
   return `${label}${result.reply || ''}`.trim();
