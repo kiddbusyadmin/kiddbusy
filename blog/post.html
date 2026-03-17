@@ -64,16 +64,94 @@ h1 { font-family: 'Fredoka One', cursive; line-height: 1.2; margin-bottom: 12px;
 .cta-site:hover { background: #5730a8; }
 .cross-card {
   margin-top: 18px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #faf7ff;
+  border: 2px solid var(--border);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at top right, rgba(255,90,95,.08), transparent 32%),
+    linear-gradient(180deg, #fbf8ff 0%, #f7f2ff 100%);
+  padding: 18px;
+}
+.cross-kicker {
+  font-size: .74rem;
+  font-weight: 900;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--tomato);
+  margin-bottom: 6px;
+}
+.cross-title {
+  font-family: 'Fredoka One', cursive;
+  font-size: 1.25rem;
+  line-height: 1.2;
+  color: #2f1f53;
+  margin-bottom: 6px;
+}
+.cross-intro {
+  color: #544774;
+  font-size: .95rem;
+  margin-bottom: 14px;
+}
+.cross-groups {
+  display: grid;
+  gap: 12px;
+}
+.cross-group {
+  background: rgba(255,255,255,.8);
+  border: 1px solid #eadfff;
+  border-radius: 14px;
   padding: 14px;
 }
-.cross-title { font-weight: 900; margin-bottom: 8px; color: #2f1f53; }
-.cross-list { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-.cross-link { font-size: .9rem; color: #2f1f53; font-weight: 800; }
-.cross-link:hover { color: var(--plum); }
-.cross-muted { font-size: .8rem; color: var(--muted); margin-top: 2px; }
+.cross-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.cross-group-title {
+  font-weight: 900;
+  color: #2f1f53;
+}
+.cross-group-note {
+  font-size: .78rem;
+  color: var(--muted);
+}
+.cross-list {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.cross-item {
+  display: block;
+  background: #fff;
+  border: 1px solid #eee5ff;
+  border-radius: 12px;
+  padding: 12px 13px;
+  transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
+}
+.cross-item:hover {
+  transform: translateY(-1px);
+  border-color: #d7c4ff;
+  box-shadow: 0 8px 18px rgba(108,63,197,.08);
+}
+.cross-link {
+  font-size: .96rem;
+  color: #2f1f53;
+  font-weight: 900;
+  line-height: 1.35;
+}
+.cross-item:hover .cross-link { color: var(--plum); }
+.cross-muted {
+  font-size: .82rem;
+  color: var(--muted);
+  margin-top: 4px;
+  line-height: 1.45;
+}
+@media (max-width: 640px) {
+  .cross-card { padding: 16px; }
+  .cross-group { padding: 12px; }
+  .cross-list { grid-template-columns: 1fr; }
+}
 </style>
 </head>
 <body>
@@ -296,45 +374,64 @@ function renderCityHubCrosslinks(hub, currentSlug) {
     return;
   }
 
-  var sections = [];
-  sections.push('<div class=\"cross-title\">Explore ' + safeText(cityDisplay) + ' further</div>');
-  sections.push('<div class=\"cross-list\">' +
-    '<div><a class=\"cross-link\" href=\"/blog/city/' + encodeURIComponent(citySlug) + '\">City landing page</a><div class=\"cross-muted\">Top listings + latest events + local posts</div></div>' +
-    '</div>');
+  function renderGroup(title, note, itemsHtml) {
+    if (!itemsHtml) return '';
+    return '<section class=\"cross-group\">' +
+      '<div class=\"cross-group-head\">' +
+      '<div class=\"cross-group-title\">' + safeText(title) + '</div>' +
+      (note ? '<div class=\"cross-group-note\">' + safeText(note) + '</div>' : '') +
+      '</div>' +
+      '<div class=\"cross-list\">' + itemsHtml + '</div>' +
+      '</section>';
+  }
+
+  function renderItem(href, label, muted, external) {
+    return '<a class=\"cross-item\" href=\"' + safeText(href || '#') + '\"' +
+      (external ? ' target=\"_blank\" rel=\"noopener noreferrer\"' : '') + '>' +
+      '<div class=\"cross-link\">' + safeText(label || '') + '</div>' +
+      (muted ? '<div class=\"cross-muted\">' + safeText(muted) + '</div>' : '') +
+      '</a>';
+  }
+
+  var groups = [];
+  groups.push(renderGroup(
+    'City guide',
+    'Start here',
+    renderItem('/blog/city/' + encodeURIComponent(citySlug), cityDisplay + ' landing page', 'Top listings, latest events, and local posts', false)
+  ));
 
   if (topListings.length) {
-    sections.push('<div class=\"cross-title\" style=\"margin-top:12px\">Top listing links</div>');
-    sections.push('<div class=\"cross-list\">' + topListings.slice(0, 6).map(function(r) {
+    groups.push(renderGroup('Official websites', 'Top local spots', topListings.slice(0, 6).map(function(r) {
       var w = String((r && r.website) || '').trim();
       if (!w) return '';
-      return '<div><a class=\"cross-link\" href=\"' + safeText(w) + '\" target=\"_blank\" rel=\"noopener noreferrer\">' + safeText(r.name || '') + '</a><div class=\"cross-muted\">' + safeText(r.category || '') + '</div></div>';
-    }).filter(Boolean).join('') + '</div>');
+      return renderItem(w, r.name || '', r.category || '', true);
+    }).filter(Boolean).join('')));
   }
 
   if (latestEvents.length) {
-    sections.push('<div class=\"cross-title\" style=\"margin-top:12px\">Latest event links</div>');
-    sections.push('<div class=\"cross-list\">' + latestEvents.slice(0, 6).map(function(e) {
-      return '<div><a class=\"cross-link\" href=\"' + safeText(e.source_url || '#') + '\" target=\"_blank\" rel=\"noopener noreferrer\">' + safeText(e.name || '') + '</a><div class=\"cross-muted\">' + safeText(e.start_date || '') + '</div></div>';
-    }).join('') + '</div>');
+    groups.push(renderGroup('Event links', 'Fresh local activity', latestEvents.slice(0, 6).map(function(e) {
+      return renderItem(e.source_url || '#', e.name || '', e.start_date || '', true);
+    }).join('')));
   }
 
   if (relatedPosts.length) {
-    sections.push('<div class=\"cross-title\" style=\"margin-top:12px\">Related blog posts</div>');
-    sections.push('<div class=\"cross-list\">' + relatedPosts.slice(0, 8).filter(function(p) {
+    groups.push(renderGroup('Related reads', 'More local ideas', relatedPosts.slice(0, 8).filter(function(p) {
       return String(p.slug || '').trim() && String(p.slug || '').trim() !== String(currentSlug || '').trim();
     }).map(function(p) {
-      return '<div><a class=\"cross-link\" href=\"/blog/' + encodeURIComponent(p.slug || '') + '\">' + safeText(p.title || '') + '</a><div class=\"cross-muted\">' + safeText((p.city_display || p.city || '')) + '</div></div>';
-    }).join('') + '</div>');
+      return renderItem('/blog/' + encodeURIComponent(p.slug || ''), p.title || '', (p.city_display || p.city || ''), false);
+    }).join('')));
   }
 
   if (relatedHubs.length) {
-    sections.push('<div class=\"cross-title\" style=\"margin-top:12px\">Other city guides</div>');
-    sections.push('<div class=\"cross-list\">' + relatedHubs.slice(0, 8).map(function(c) {
-      return '<div><a class=\"cross-link\" href=\"/blog/city/' + encodeURIComponent(c.city_slug || '') + '\">' + safeText(c.city_display || c.city || '') + '</a></div>';
-    }).join('') + '</div>');
+    groups.push(renderGroup('Other city guides', 'Keep exploring', relatedHubs.slice(0, 8).map(function(c) {
+      return renderItem('/blog/city/' + encodeURIComponent(c.city_slug || ''), c.city_display || c.city || '', 'City landing page', false);
+    }).join('')));
   }
 
-  el.innerHTML = sections.join('');
+  el.innerHTML = '<div class=\"cross-kicker\">Explore Further</div>' +
+    '<div class=\"cross-title\">Keep exploring ' + safeText(cityDisplay) + '</div>' +
+    '<div class=\"cross-intro\">Jump to the city guide, official websites, upcoming events, and more related reading without digging through a messy link list.</div>' +
+    '<div class=\"cross-groups\">' + groups.filter(Boolean).join('') + '</div>';
   el.style.display = 'block';
 }
 
