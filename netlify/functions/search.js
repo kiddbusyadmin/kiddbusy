@@ -1,5 +1,5 @@
 // netlify/functions/search.js
-// Primary: Anthropic web search. Fallback: OpenAI web search.
+// Primary: OpenAI web search. Fallback: Anthropic web search.
 // Returns normalized JSON payload in Anthropic-like shape:
 // { provider, fallback_used, content: [{ type: 'text', text: '[...]' }] }
 
@@ -323,36 +323,37 @@ exports.handler = async function handler(event, context) {
     day: 'numeric'
   });
 
-  let anthropicErr = null;
+  let openAiErr = null;
   try {
-    const primary = await callAnthropic(city, type, today);
+    const primary = await callOpenAi(city, type, today);
     return json(200, {
       provider: primary.provider,
       fallback_used: false,
+      tool_type: primary.tool_type || null,
       content: [{ type: 'text', text: JSON.stringify(primary.items) }]
     });
   } catch (err) {
-    anthropicErr = err;
-    console.warn('[search] anthropic failed, trying openai fallback:', err && err.message ? err.message : err);
+    openAiErr = err;
+    console.warn('[search] openai failed, trying anthropic fallback:', err && err.message ? err.message : err);
   }
 
   try {
-    const secondary = await callOpenAi(city, type, today);
+    const secondary = await callAnthropic(city, type, today);
     return json(200, {
       provider: secondary.provider,
       fallback_used: true,
-      fallback_reason: anthropicErr ? String(anthropicErr.message || anthropicErr) : 'primary_unavailable',
+      fallback_reason: openAiErr ? String(openAiErr.message || openAiErr) : 'primary_unavailable',
       tool_type: secondary.tool_type || null,
       content: [{ type: 'text', text: JSON.stringify(secondary.items) }]
     });
   } catch (fallbackErr) {
     console.error('[search] both providers failed:', {
-      anthropic: anthropicErr ? String(anthropicErr.message || anthropicErr) : null,
-      openai: String(fallbackErr && fallbackErr.message ? fallbackErr.message : fallbackErr)
+      openai: openAiErr ? String(openAiErr.message || openAiErr) : null,
+      anthropic: String(fallbackErr && fallbackErr.message ? fallbackErr.message : fallbackErr)
     });
     return json(503, {
       error: 'Search providers unavailable',
-      primary_error: anthropicErr ? String(anthropicErr.message || anthropicErr) : null,
+      primary_error: openAiErr ? String(openAiErr.message || openAiErr) : null,
       fallback_error: String(fallbackErr && fallbackErr.message ? fallbackErr.message : fallbackErr)
     });
   }

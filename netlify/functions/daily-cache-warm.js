@@ -3,6 +3,8 @@ const { createClient } = require('@supabase/supabase-js');
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+const OPENAI_KEY = process.env.OPENAI_API_KEY || '';
+const OPENAI_MODEL = process.env.OPENAI_SEARCH_MODEL || 'gpt-4.1-mini';
 const SUPPORTED_CITIES = require('./_supported-cities.json');
 const USE_WEB_SEARCH_CITIES = new Set(['Raleigh','Salt Lake City','Indianapolis','Kansas City','Buffalo','Jersey City','Louisville','Richmond','Boise','Tucson']);
 const HIGH_PRIORITY_CITIES = new Set([
@@ -87,13 +89,60 @@ function shouldWarmCity(city, statsByCity) {
 }
 
 async function callAI(city, useWebSearch) {
-  const body = { model: 'claude-haiku-4-5-20251001', max_tokens: 3200, system: ACTIVITIES_SYSTEM, messages: [{ role: 'user', content: 'List 20 kid-friendly activities in "' + city + '". Return only JSON array.' }] };
+  const userPrompt = 'List 20 kid-friendly activities in "' + city + '". Return only JSON array.';
+  let primaryErr = null;
+  if (OPENAI_KEY) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const res = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + OPENAI_KEY },
+        body: JSON.stringify({
+          model: OPENAI_MODEL,
+          input: [
+            { role: 'system', content: ACTIVITIES_SYSTEM },
+            { role: 'user', content: userPrompt }
+          ],
+          tools: useWebSearch ? [{ type: 'web_search' }] : undefined,
+          max_output_tokens: 3200
+        })
+      });
+      const rawText = await res.text();
+      let data = null;
+      try { data = rawText ? JSON.parse(rawText) : null; } catch (_) { data = null; }
+      if (res.status === 429 || res.status === 529) {
+        if (attempt < 3) {
+          await sleep(attempt * 15000);
+          continue;
+        }
+        primaryErr = new Error('Rate limited');
+        break;
+      }
+      if (!res.ok) {
+        primaryErr = new Error((data && data.error && data.error.message) || ('OpenAI HTTP ' + res.status));
+        break;
+      }
+      const raw = String((data && data.output_text) || '').trim();
+      const match = raw.match(/\[[\s\S]*\]/);
+      if (!match) throw new Error('No JSON');
+      return JSON.parse(match[0]);
+    }
+  } else {
+    primaryErr = new Error('OpenAI key missing');
+  }
+  if (!ANTHROPIC_KEY) throw (primaryErr || new Error('No AI key configured'));
+  const body = { model: process.env.ANTHROPIC_SEARCH_MODEL || 'claude-haiku-4-5-20251001', max_tokens: 3200, system: ACTIVITIES_SYSTEM, messages: [{ role: 'user', content: userPrompt }] };
   if (useWebSearch) body.tools = [{ type: 'web_search_20250305', name: 'web_search' }];
   for (let attempt = 1; attempt <= 3; attempt++) {
     const res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01' }, body: JSON.stringify(body) });
     const data = await res.json();
-    if (res.status === 429 || res.status === 529) { if (attempt < 3) { await sleep(attempt * 15000); continue; } throw new Error('Rate limited'); }
-    if (data.error) throw new Error(data.error.message);
+    if (res.status === 429 || res.status === 529) {
+      if (attempt < 3) {
+        await sleep(attempt * 15000);
+        continue;
+      }
+      throw (primaryErr || new Error('Rate limited'));
+    }
+    if (data.error) throw new Error((primaryErr ? String(primaryErr.message || primaryErr) + '; ' : '') + data.error.message);
     const textBlocks = (data.content || []).filter(b => b.type === 'text');
     const raw = textBlocks[textBlocks.length - 1]?.text || '';
     const match = raw.match(/\[[\s\S]*\]/);
@@ -211,10 +260,10 @@ exports.handler = async function(event) {
       body: JSON.stringify({ error: 'missing_supabase_config' })
     };
   }
-  if (!ANTHROPIC_KEY) {
+  if (!OPENAI_KEY && !ANTHROPIC_KEY) {
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: 'missing_anthropic_key' })
+      body: JSON.stringify({ error: 'missing_llm_key' })
     };
   }
   const sb = createClient(SUPABASE_URL, SUPABASE_KEY);

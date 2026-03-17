@@ -150,16 +150,16 @@ async function callOpenAiWebSearchJson({ system, user, maxTokens, expect }) {
 async function callWebSearchJsonWithFallback({ system, user, maxTokens, expect }) {
   let primaryErr = null;
   try {
-    return await callAnthropicWebSearchJson({ system, user, maxTokens, expect });
+    return await callOpenAiWebSearchJson({ system, user, maxTokens, expect });
   } catch (err) {
     primaryErr = err;
   }
   try {
-    return await callOpenAiWebSearchJson({ system, user, maxTokens, expect });
+    return await callAnthropicWebSearchJson({ system, user, maxTokens, expect });
   } catch (fallbackErr) {
     const p = primaryErr ? String(primaryErr.message || primaryErr) : 'primary_failed';
     const f = fallbackErr ? String(fallbackErr.message || fallbackErr) : 'fallback_failed';
-    throw new Error(`Anthropic+OpenAI failed (${p}; ${f})`);
+    throw new Error(`OpenAI+Anthropic failed (${p}; ${f})`);
   }
 }
 
@@ -277,6 +277,7 @@ If uncertain, lower confidence and explain briefly in notes.`;
   const lead = normalizeLead(parsed, website);
   lead.raw_response = llm.raw_response;
   lead.source_model = llm.model;
+  lead.source_provider = llm.provider;
   return lead;
 }
 
@@ -341,6 +342,7 @@ If uncertain, lower confidence and explain briefly in notes.`;
     byId[id] = normalizeLead(item, null);
     byId[id].raw_response = llm.raw_response;
     byId[id].source_model = llm.model;
+    byId[id].source_provider = llm.provider;
   }
   return byId;
 }
@@ -377,8 +379,8 @@ async function upsertLead({ listing, lead }) {
     lead_email: lead.contact_email,
     lead_phone: lead.contact_phone,
     business_website: lead.business_website,
-    source_type: 'anthropic_web_search',
-    source_model: String(lead.source_model || OWNER_LEADS_MODEL),
+    source_type: String(lead.source_provider || 'openai') + '_web_search',
+    source_model: String(lead.source_model || OPENAI_OWNER_LEADS_MODEL || OWNER_LEADS_MODEL),
     confidence: lead.confidence,
     status: 'suspected',
     outreach_stage: 'uncontacted',

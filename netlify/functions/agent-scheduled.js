@@ -8,7 +8,9 @@ const { buildFinanceSnapshot, upsertFinanceSnapshot } = require('./_accounting-c
 const SUPABASE_URL = process.env.KB_DB_URL || 'https://wgwexzyqaiwosgraaczi.supabase.co';
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const AGENT_SCHEDULED_MODEL = process.env.AGENT_SCHEDULED_MODEL || 'claude-haiku-4-5-20251001';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const AGENT_SCHEDULED_MODEL = process.env.AGENT_SCHEDULED_MODEL || process.env.OPENAI_AGENT_MODEL || 'gpt-4.1-mini';
+const ANTHROPIC_SCHEDULED_MODEL = process.env.ANTHROPIC_AGENT_MODEL || 'claude-haiku-4-5-20251001';
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
@@ -305,52 +307,103 @@ DAILY SUMMARY: Send to admin@kiddbusy.com AND send a brief plain-text summary vi
 
   let iterations = 0;
   const MAX_ITERATIONS = 25;
+  let previousResponseId = null;
 
   while (iterations < MAX_ITERATIONS) {
     iterations++;
     log(`\n[iteration ${iterations}]`);
-
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
+    try {
+      if (!OPENAI_API_KEY) throw new Error('OpenAI not configured');
+      const payload = {
         model: AGENT_SCHEDULED_MODEL,
-        max_tokens: 2048,
-        system: systemPrompt,
-        tools,
-        messages
-      })
-    });
+        input: previousResponseId
+          ? messages
+          : [{ role: 'system', content: systemPrompt }].concat(messages.map((m) => ({ role: m.role, content: m.content }))),
+        max_output_tokens: 2048,
+        tools: tools.map((tool) => ({
+          type: 'function',
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.input_schema
+        }))
+      };
+      if (previousResponseId) payload.previous_response_id = previousResponseId;
+      const res = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${OPENAI_API_KEY}`
+        },
+        body: JSON.stringify(payload)
+      });
+      const raw = await res.text();
+      let response = null;
+      try { response = raw ? JSON.parse(raw) : null; } catch (_) { response = null; }
+      if (!res.ok) throw new Error((response && response.error && response.error.message) || `OpenAI HTTP ${res.status}`);
+      previousResponseId = response && response.id ? response.id : previousResponseId;
+      const outputs = Array.isArray(response && response.output) ? response.output : [];
+      const calls = outputs.filter((item) => item && item.type === 'function_call');
+      if (calls.length) {
+        messages = [];
+        for (const call of calls) {
+          let args = {};
+          try { args = call.arguments ? JSON.parse(call.arguments) : {}; } catch (_) { args = {}; }
+          const result = await executeTool(call.name, args, log);
+          messages.push({
+            type: 'function_call_output',
+            call_id: call.call_id,
+            output: JSON.stringify(result)
+          });
+        }
+        continue;
+      }
+      const finalText = String((response && response.output_text) || '').trim();
+      log(`\n[agent done]\n${finalText}`);
+      return finalText;
+    } catch (primaryErr) {
+      if (!ANTHROPIC_API_KEY) throw primaryErr;
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: ANTHROPIC_SCHEDULED_MODEL,
+          max_tokens: 2048,
+          system: systemPrompt,
+          tools,
+          messages
+        })
+      });
 
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(`Anthropic API error: ${err.error?.message || JSON.stringify(err)}`);
-    }
-
-    const response = await res.json();
-    log(`  stop_reason: ${response.stop_reason}`);
-
-    if (response.stop_reason === 'tool_use') {
-      const toolUses = response.content.filter(b => b.type === 'tool_use');
-      const toolResults = [];
-
-      for (const toolUse of toolUses) {
-        const result = await executeTool(toolUse.name, toolUse.input, log);
-        toolResults.push({
-          type: 'tool_result',
-          tool_use_id: toolUse.id,
-          content: JSON.stringify(result)
-        });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(`OpenAI+Anthropic failed (${String(primaryErr.message || primaryErr)}; ${err.error?.message || JSON.stringify(err)})`);
       }
 
-      messages.push({ role: 'assistant', content: response.content });
-      messages.push({ role: 'user', content: toolResults });
+      const response = await res.json();
+      log(`  stop_reason: ${response.stop_reason}`);
 
-    } else {
+      if (response.stop_reason === 'tool_use') {
+        const toolUses = response.content.filter(b => b.type === 'tool_use');
+        const toolResults = [];
+
+        for (const toolUse of toolUses) {
+          const result = await executeTool(toolUse.name, toolUse.input, log);
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: JSON.stringify(result)
+          });
+        }
+
+        messages.push({ role: 'assistant', content: response.content });
+        messages.push({ role: 'user', content: toolResults });
+        continue;
+      }
+
       const finalText = response.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
       log(`\n[agent done]\n${finalText}`);
       return finalText;

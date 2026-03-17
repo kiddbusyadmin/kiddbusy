@@ -203,7 +203,40 @@ async function generateConsensusReport(input) {
 
   let text = '';
   let primaryError = null;
-  if (ANTHROPIC_API_KEY) {
+  if (OPENAI_API_KEY) {
+    try {
+      const response = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: OPENAI_CONSENSUS_MODEL,
+          input: [
+            { role: 'system', content: system },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.2,
+          max_output_tokens: 1800
+        })
+      });
+      const rawText = await response.text();
+      let body = null;
+      try { body = rawText ? JSON.parse(rawText) : null; } catch (_) { body = null; }
+      if (!response.ok) {
+        const msg = body && body.error && body.error.message ? body.error.message : `OpenAI HTTP ${response.status}`;
+        throw new Error(msg);
+      }
+      text = extractOpenAiText(body);
+    } catch (err) {
+      primaryError = err;
+    }
+  } else {
+    primaryError = new Error('OPENAI_API_KEY not configured');
+  }
+
+  if (!text.trim() && ANTHROPIC_API_KEY) {
     try {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -226,41 +259,13 @@ async function generateConsensusReport(input) {
       }
       text = extractTextFromAnthropic(body);
     } catch (err) {
-      primaryError = err;
+      const pri = primaryError ? String(primaryError.message || primaryError) : 'primary_failed';
+      throw new Error(`OpenAI+Anthropic failed (${pri}; ${String(err.message || err)})`);
     }
-  } else {
-    primaryError = new Error('ANTHROPIC_API_KEY not configured');
   }
 
   if (!text.trim()) {
-    if (!OPENAI_API_KEY) {
-      throw primaryError || new Error('No LLM provider available');
-    }
-    const response = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: OPENAI_CONSENSUS_MODEL,
-        input: [
-          { role: 'system', content: system },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.2,
-        max_output_tokens: 1800
-      })
-    });
-    const rawText = await response.text();
-    let body = null;
-    try { body = rawText ? JSON.parse(rawText) : null; } catch (_) { body = null; }
-    if (!response.ok) {
-      const msg = body && body.error && body.error.message ? body.error.message : `OpenAI HTTP ${response.status}`;
-      const pri = primaryError ? String(primaryError.message || primaryError) : 'none';
-      throw new Error(`Anthropic+OpenAI failed (${pri}; ${msg})`);
-    }
-    text = extractOpenAiText(body);
+    throw primaryError || new Error('No LLM provider available');
   }
 
   const parsed = safeParseJsonCandidate(text);

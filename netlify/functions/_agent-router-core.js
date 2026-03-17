@@ -31,8 +31,9 @@ const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
-const PRESIDENT_MODEL = process.env.PRESIDENT_AGENT_MODEL || process.env.TELEGRAM_AGENT_MODEL || 'claude-haiku-4-5-20251001';
 const OPENAI_AGENT_MODEL = process.env.OPENAI_AGENT_MODEL || 'gpt-4.1-mini';
+const PRESIDENT_MODEL = process.env.PRESIDENT_AGENT_MODEL || process.env.TELEGRAM_AGENT_MODEL || OPENAI_AGENT_MODEL;
+const ANTHROPIC_AGENT_MODEL = process.env.ANTHROPIC_AGENT_MODEL || 'claude-haiku-4-5-20251001';
 
 const PRESIDENT_CONTEXT_BRIEF = [
   'KiddBusy operating brief:',
@@ -46,7 +47,7 @@ const PRESIDENT_CONTEXT_BRIEF = [
   '- Finance scope: Accountant tracks finance snapshots, projected revenue, costs, sponsor lifecycle state, and manual entries relevant to P&L.',
   '- Marketing scope: CMO owns traffic growth, SEO, blog strategy, organic content, owner outreach sequencing, and conversion lift.',
   '- Research scope: Research scouts activity trends, local patterns, and strategic content opportunities that can feed CMO and President planning.',
-  '- AI/provider posture: Anthropic is primary where configured, with OpenAI fallback present in key paths. Do not assume a single model/provider is always available.',
+  '- AI/provider posture: blog writing stays on Anthropic. Operational routing prefers OpenAI, with Anthropic fallback where available. Do not assume a single model/provider is always available.',
   '- Email posture: operational and marketing emails exist with unsubscribe handling and logging. Respect compliance constraints and send volume limits.',
   '- Sponsorship posture: sponsorship requires verified ownership. Stripe lifecycle exists, but revenue recommendations must stay grounded in actual traffic.',
   '- Image/photo posture: listings can start with emoji, then approved or auto-approved owner/user photos can replace that on cards.',
@@ -1094,67 +1095,67 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
     if (deterministicAnalyticsReply) {
       reply = deterministicAnalyticsReply;
       provider = 'deterministic_analytics';
-    } else if (!ANTHROPIC_API_KEY) throw new Error('Anthropic not configured');
+    } else if (!OPENAI_API_KEY) throw new Error('OpenAI not configured');
     else {
-    reply = await (async function() {
-      const messages = normalizeHistory(storedMessages.concat(normalizeHistory(history)));
-      let working = messages.concat([{ role: 'user', content: text }]);
-      let iterations = 0;
-      while (iterations < 12) {
-        iterations += 1;
-        const res = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': ANTHROPIC_API_KEY,
-            'anthropic-version': '2023-06-01'
-          },
-          body: JSON.stringify({
-            model: PRESIDENT_MODEL,
-            max_tokens: 1400,
-            temperature: 0.2,
-            system: `${systemPrompt}\n\n${memoryBlock}`,
-            tools: toolDefinitions(),
-            messages: working
-          })
-        });
-        const body = await res.json();
-        if (!res.ok) throw new Error((body && body.error && body.error.message) || `Anthropic HTTP ${res.status}`);
-        if (body.stop_reason === 'tool_use') {
-          const toolUses = (body.content || []).filter((c) => c && c.type === 'tool_use');
-          const toolResults = [];
-          for (const toolUse of toolUses) {
-            let result;
-            try {
-              result = await executeTool(toolUse.name, toolUse.input || {}, execContext);
-            } catch (err) {
-              result = { error: err.message || 'tool_failed' };
-            }
-            toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(result) });
-          }
-          working.push({ role: 'assistant', content: body.content });
-          working.push({ role: 'user', content: toolResults });
-          continue;
-        }
-        return extractAnthropicText(body);
-      }
-      throw new Error('Agent exceeded max iterations');
-    })();
-    provider = 'anthropic';
+    reply = await runOpenAiToolLoop({
+      systemPrompt: `${systemPrompt}\n\n${memoryBlock}`,
+      history: storedMessages.concat(normalizeHistory(history)),
+      userMessage: text,
+      execContext
+    });
+    provider = 'openai';
     }
   } catch (primaryErr) {
-    if (!OPENAI_API_KEY) throw primaryErr;
+    if (!ANTHROPIC_API_KEY) throw primaryErr;
     if (deterministicAnalyticsReply) {
       reply = deterministicAnalyticsReply;
       provider = 'deterministic_analytics';
     } else {
-      reply = await runOpenAiToolLoop({
-        systemPrompt: `${systemPrompt}\n\n${memoryBlock}`,
-        history: storedMessages.concat(normalizeHistory(history)),
-        userMessage: text,
-        execContext
-      });
-      provider = 'openai';
+      reply = await (async function() {
+        const messages = normalizeHistory(storedMessages.concat(normalizeHistory(history)));
+        let working = messages.concat([{ role: 'user', content: text }]);
+        let iterations = 0;
+        while (iterations < 12) {
+          iterations += 1;
+          const res = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': ANTHROPIC_API_KEY,
+              'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+              model: ANTHROPIC_AGENT_MODEL,
+              max_tokens: 1400,
+              temperature: 0.2,
+              system: `${systemPrompt}\n\n${memoryBlock}`,
+              tools: toolDefinitions(),
+              messages: working
+            })
+          });
+          const body = await res.json();
+          if (!res.ok) throw new Error((body && body.error && body.error.message) || `Anthropic HTTP ${res.status}`);
+          if (body.stop_reason === 'tool_use') {
+            const toolUses = (body.content || []).filter((c) => c && c.type === 'tool_use');
+            const toolResults = [];
+            for (const toolUse of toolUses) {
+              let result;
+              try {
+                result = await executeTool(toolUse.name, toolUse.input || {}, execContext);
+              } catch (err) {
+                result = { error: err.message || 'tool_failed' };
+              }
+              toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(result) });
+            }
+            working.push({ role: 'assistant', content: body.content });
+            working.push({ role: 'user', content: toolResults });
+            continue;
+          }
+          return extractAnthropicText(body);
+        }
+        throw new Error('Agent exceeded max iterations');
+      })();
+      provider = 'anthropic';
     }
   }
   if (currentOrder) {
