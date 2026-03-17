@@ -778,7 +778,7 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
     reply = await runOpenAiFallback({ systemPrompt: `${systemPrompt}\n\n${memoryBlock}`, history: storedMessages.concat(normalizeHistory(history)), userMessage: text });
     provider = 'openai';
   }
-  if (currentOrder && !execContext.orderUpdated) {
+  if (currentOrder) {
     if (agent.key === 'president_agent') {
       try {
         await ensurePresidentDelegation(text, reply, execContext);
