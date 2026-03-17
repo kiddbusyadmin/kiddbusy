@@ -1,5 +1,4 @@
 const { runCmoBlog } = require('./_cmo-blog-core');
-const { runAgentTasks, runDelegationWatchdog } = require('./_agent-task-runner-core');
 
 function json(statusCode, payload) {
   return {
@@ -9,7 +8,7 @@ function json(statusCode, payload) {
   };
 }
 
-async function runProgressPulseViaDbProxy() {
+async function runDbProxyAction(action) {
   const base = process.env.URL || process.env.DEPLOY_PRIME_URL || 'https://kiddbusy.com';
   const response = await fetch(base.replace(/\/$/, '') + '/.netlify/functions/db-proxy', {
     method: 'POST',
@@ -17,7 +16,7 @@ async function runProgressPulseViaDbProxy() {
       'Content-Type': 'application/json',
       'X-Requested-From': 'kiddbusy-hq'
     },
-    body: JSON.stringify({ action: 'run_progress_pulse' })
+    body: JSON.stringify({ action: action })
   });
   const text = await response.text();
   let data = {};
@@ -26,7 +25,7 @@ async function runProgressPulseViaDbProxy() {
   } catch (_) {
     data = { raw: text };
   }
-  if (!response.ok) throw new Error(data.error || ('Progress pulse HTTP ' + response.status));
+  if (!response.ok) throw new Error(data.error || (String(action || 'db_action') + ' HTTP ' + response.status));
   return data;
 }
 
@@ -42,21 +41,17 @@ exports.handler = async function handler(event) {
   let watchdog = { success: true, stalled_count: 0, escalated_count: 0, inspected: [] };
 
   try {
-    progress = await runProgressPulseViaDbProxy();
+    progress = await runDbProxyAction('run_progress_pulse');
   } catch (err) {
     progress = { success: false, error: String((err && err.message) || err || 'Progress pulse failed') };
   }
 
   try {
-    taskRun = await runAgentTasks();
+    const taskPayload = await runDbProxyAction('run_agent_tasks');
+    taskRun = taskPayload.tasks || taskPayload;
+    watchdog = taskPayload.watchdog || watchdog;
   } catch (err) {
     taskRun = { success: false, error: String((err && err.message) || err || 'Agent task runner failed') };
-  }
-
-  try {
-    watchdog = await runDelegationWatchdog();
-  } catch (err) {
-    watchdog = { success: false, error: String((err && err.message) || err || 'Delegation watchdog failed') };
   }
 
   if (progressOnly || taskOnly || watchdogOnly) {
