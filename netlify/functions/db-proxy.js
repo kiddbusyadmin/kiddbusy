@@ -528,6 +528,44 @@ exports.handler = async (event) => {
     }
   }
 
+  if (action === 'update_agent_task_status') {
+    const taskId = Number(body.task_id);
+    const nextTaskStatus = String(body.status || '').trim().toLowerCase();
+    const allowed = new Set(['open', 'in_progress', 'completed', 'blocked']);
+    if (!Number.isFinite(taskId) || taskId <= 0) return json(400, { error: 'Valid task_id required' });
+    if (!allowed.has(nextTaskStatus)) return json(400, { error: 'Invalid task status' });
+    const patchBody = {
+      status: nextTaskStatus,
+      updated_at: nowIso()
+    };
+    if (body.summary != null) patchBody.summary = String(body.summary).slice(0, 1200);
+    if (body.details && typeof body.details === 'object') patchBody.details = body.details;
+    if (nextTaskStatus === 'completed') patchBody.completed_at = nowIso();
+    try {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/agent_tasks?task_id=eq.${encodeURIComponent(String(taskId))}`, {
+        method: 'PATCH',
+        headers: {
+          apikey: SUPABASE_SERVICE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation'
+        },
+        body: JSON.stringify(patchBody)
+      });
+      const text = await response.text();
+      let data = [];
+      try {
+        data = text ? JSON.parse(text) : [];
+      } catch {
+        data = [];
+      }
+      if (!response.ok) return json(response.status, { error: 'Supabase update failed', details: data });
+      return json(200, { success: true, task: Array.isArray(data) && data.length ? data[0] : null });
+    } catch (err) {
+      return json(500, { error: err.message || 'Unexpected error' });
+    }
+  }
+
   if (action === 'query_owner_orders') {
     const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
     const statusFilter = String(status || '').trim().toLowerCase();
