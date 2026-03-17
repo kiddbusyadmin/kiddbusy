@@ -647,6 +647,41 @@ function summarizeThreadContext(messages) {
   return recent.map((m) => `${m.role}${m.agent_key ? ':' + m.agent_key : ''}: ${String(m.content || '').slice(0, 240)}`).join('\n');
 }
 
+function inferRangeFromText(text) {
+  const raw = String(text || '').toLowerCase();
+  if (/\b(last|past)\s+24\s*(hours|hrs|h)\b|\b24h\b|\btoday\b/.test(raw)) return '24h';
+  if (/\b(last|past)\s+7\s*(days|d)\b|\b7d\b|\bweek\b/.test(raw)) return '7d';
+  if (/\b(last|past)\s+(30\s*days|month)\b|\b30d\b/.test(raw)) return '30d';
+  if (/\ball time\b/.test(raw)) return 'all';
+  return '24h';
+}
+
+function isDeterministicTrafficQuestion(text) {
+  const raw = String(text || '').toLowerCase();
+  if (!raw) return false;
+  return /\btraffic\b|\bsessions?\b|\bmanual searches?\b|\bauto geo\b|\bauto searches?\b|\bactivity\b|\btop event\b|\btop city\b/.test(raw);
+}
+
+async function maybeBuildDeterministicAnalyticsReply(text) {
+  if (!isDeterministicTrafficQuestion(text)) return null;
+  const range = inferRangeFromText(text);
+  const traffic = await getTrafficSummary({ range, includeInternal: false, includeBots: false });
+  const activity = await getActivitySummary({ range: range === 'all' ? '24h' : range, includeInternal: false, includeBots: false });
+  const label = range === '24h' ? 'last 24 hours' : range === '7d' ? 'last 7 days' : range === '30d' ? 'last 30 days' : 'all time';
+  const lines = [];
+  lines.push('For ' + label + ':');
+  lines.push('Sessions: ' + String(traffic.sessions || 0));
+  lines.push('Manual searches: ' + String(traffic.manual_searches || 0));
+  lines.push('Auto geo searches: ' + String(traffic.auto_searches || 0));
+  lines.push('Search conversion: ' + String(traffic.search_conversion_pct || 0) + '%');
+  lines.push('Filtered out: ' + String(traffic.excluded_bots_in_range || 0) + ' bot rows and ' + String(traffic.excluded_internal_in_range || 0) + ' internal rows.');
+  if (/\bactivity\b|\btop event\b|\btop city\b/.test(String(text || '').toLowerCase())) {
+    lines.push('Top event: ' + String(((activity.top_event || {}).name) || '--') + ' (' + String(((activity.top_event || {}).count) || 0) + ')');
+    lines.push('Top city: ' + String(((activity.top_city || {}).name) || '--') + ' (' + String(((activity.top_city || {}).count) || 0) + ')');
+  }
+  return lines.join('\n');
+}
+
 function inferCityFromRequest(text) {
   var raw = String(text || '').trim();
   var m = raw.match(/\b(?:for|in)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})(?:,\s*[A-Z]{2})?\b/);
@@ -921,8 +956,15 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
     targetChatId: channel === 'telegram' ? (process.env.TELEGRAM_CHAT_ID || '') : '',
     userMessage: text
   };
+  const deterministicAnalyticsReply = agent.key === 'president_agent'
+    ? await maybeBuildDeterministicAnalyticsReply(text)
+    : null;
   try {
-    if (!ANTHROPIC_API_KEY) throw new Error('Anthropic not configured');
+    if (deterministicAnalyticsReply) {
+      reply = deterministicAnalyticsReply;
+      provider = 'deterministic_analytics';
+    } else if (!ANTHROPIC_API_KEY) throw new Error('Anthropic not configured');
+    else {
     reply = await (async function() {
       const messages = normalizeHistory(storedMessages.concat(normalizeHistory(history)));
       let working = messages.concat([{ role: 'user', content: text }]);
@@ -968,15 +1010,21 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
       throw new Error('Agent exceeded max iterations');
     })();
     provider = 'anthropic';
+    }
   } catch (primaryErr) {
     if (!OPENAI_API_KEY) throw primaryErr;
-    reply = await runOpenAiToolLoop({
-      systemPrompt: `${systemPrompt}\n\n${memoryBlock}`,
-      history: storedMessages.concat(normalizeHistory(history)),
-      userMessage: text,
-      execContext
-    });
-    provider = 'openai';
+    if (deterministicAnalyticsReply) {
+      reply = deterministicAnalyticsReply;
+      provider = 'deterministic_analytics';
+    } else {
+      reply = await runOpenAiToolLoop({
+        systemPrompt: `${systemPrompt}\n\n${memoryBlock}`,
+        history: storedMessages.concat(normalizeHistory(history)),
+        userMessage: text,
+        execContext
+      });
+      provider = 'openai';
+    }
   }
   if (currentOrder) {
     if (agent.key === 'president_agent') {
