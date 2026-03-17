@@ -88,12 +88,12 @@
 [functions.cmo-blog-run]
   timeout = 30
 
-# CMO blog writer + President progress pulse
+# CMO blog writer only. Operational agent heartbeat runs separately via agent-task-runner.
 [functions.cmo-blog-scheduled]
-  schedule = "*/5 * * * *"
+  schedule = "15 9 * * *"
   timeout = 30
 
-# Specialist task consumer
+# Specialist task consumer + President progress/watchdog heartbeat
 [functions.agent-task-runner]
   schedule = "*/5 * * * *"
   timeout = 60
