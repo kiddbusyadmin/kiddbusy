@@ -4,6 +4,8 @@
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SUBMISSION_ALERT_EMAIL = process.env.SUBMISSION_ALERT_EMAIL || 'admin@kiddbusy.com';
+const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
 const { triggerSponsorshipPaymentRequestEmail, verifySponsorshipOwnerClaim } = require('./_sponsorship-payment-email');
 const { enrollClaimNurture } = require('./_sponsorship-claim-nurture');
 const { buildFinanceSnapshot, upsertFinanceSnapshot } = require('./_accounting-core');
@@ -30,6 +32,73 @@ function json(statusCode, payload) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   };
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function isoAfterMinutes(minutes) {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() + Number(minutes || 5));
+  return d.toISOString();
+}
+
+async function sendTelegramMessage(chatId, text) {
+  if (!TELEGRAM_TOKEN || !chatId) throw new Error('Telegram not configured');
+  const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text: String(text || '').slice(0, 4000) })
+  });
+  const body = await response.text();
+  if (!response.ok) throw new Error(`Telegram HTTP ${response.status}: ${body}`);
+  return body;
+}
+
+function humanAgentName(key) {
+  const k = String(key || '').trim();
+  if (k === 'president_agent') return 'President';
+  if (k === 'operations_agent') return 'Operations';
+  if (k === 'cmo_agent') return 'CMO';
+  if (k === 'accountant_agent') return 'Accountant';
+  if (k === 'research_agent') return 'Research';
+  if (!k) return 'Unknown';
+  return k.replace(/_/g, ' ');
+}
+
+function buildProgressText(subscription, orders, tasks) {
+  const held = orders.filter((o) => String(o.status || '') === 'pending_assignment');
+  const delegated = orders.filter((o) => {
+    const rowStatus = String(o.status || '');
+    return rowStatus === 'delegated' || rowStatus === 'in_progress';
+  });
+  const completed = orders.filter((o) => String(o.status || '') === 'completed');
+  const lines = [];
+  lines.push('President update (' + String(subscription.interval_minutes || 5) + ' min cadence)');
+  lines.push('Open orders: ' + String(held.length + delegated.length) + ' | Held: ' + String(held.length) + ' | Delegated: ' + String(delegated.length) + ' | Completed tracked: ' + String(completed.length));
+  if (held.length) lines.push('Held: #' + String(held[0].order_id || '') + ' ' + String(held[0].summary || held[0].title || ''));
+  else lines.push('Held: no orders waiting with President.');
+  if (delegated.length) {
+    const d = delegated[0];
+    let relatedTask = null;
+    for (let i = 0; i < tasks.length; i += 1) {
+      const orderId = ((tasks[i].details || {}).order_id || '');
+      if (String(orderId) === String(d.order_id || '')) {
+        relatedTask = tasks[i];
+        break;
+      }
+    }
+    if (relatedTask) lines.push('Delegated: ' + humanAgentName(relatedTask.assigned_agent_key) + ' on "' + String(relatedTask.title || '') + '" [' + String(relatedTask.status || '') + ']');
+    else lines.push('Delegated: #' + String(d.order_id || '') + ' ' + String(d.summary || d.title || ''));
+  } else {
+    lines.push('Delegated: no open delegated work.');
+  }
+  const activeTasks = tasks.slice(0, 2).map((t) => humanAgentName(t.assigned_agent_key) + ': ' + String(t.title || '') + ' [' + String(t.status || '') + ']');
+  if (activeTasks.length) lines.push('Team pulse: ' + activeTasks.join(' | '));
+  else lines.push('Team pulse: no active specialist tasks.');
+  lines.push('Reply to the President on Telegram to adjust cadence, pause updates, or ask for detail on any order.');
+  return lines.join('\n');
 }
 
 async function sbRequest(path, { method = 'GET', body = null, prefer = null } = {}) {
@@ -423,6 +492,84 @@ exports.handler = async (event) => {
       return json(200, { count: Array.isArray(data) ? data.length : 0, reports: data });
     } catch (err) {
       return json(500, { error: err.message || 'Unexpected error' });
+    }
+  }
+
+  if (action === 'run_progress_pulse') {
+    try {
+      const subs = await sbRequest(`agent_progress_subscriptions?select=*&status=eq.active&next_due_at=lte.${encodeURIComponent(nowIso())}&order=updated_at.desc&limit=50`, {
+        method: 'GET'
+      });
+      const sent = [];
+      for (const sub of subs) {
+        const ownerIdentity = String(sub.owner_identity || 'harold');
+        const chatId = sub.target_chat_id || TELEGRAM_CHAT_ID;
+        const orders = await sbRequest(`agent_orders?owner_identity=eq.${encodeURIComponent(ownerIdentity)}&status=in.(pending_assignment,delegated,in_progress)&select=*&order=updated_at.desc&limit=30`, {
+          method: 'GET'
+        });
+        const tasks = await sbRequest(`agent_tasks?owner_identity=eq.${encodeURIComponent(ownerIdentity)}&status=in.(open,in_progress)&select=*&order=updated_at.desc&limit=30`, {
+          method: 'GET'
+        });
+        const reportText = buildProgressText(sub, orders, tasks);
+        await sendTelegramMessage(chatId, reportText);
+        await sbRequest('agent_progress_reports', {
+          method: 'POST',
+          body: {
+            subscription_id: sub.subscription_id,
+            owner_identity: ownerIdentity,
+            agent_key: sub.agent_key || 'president_agent',
+            channel: 'telegram',
+            target_chat_id: chatId,
+            report_text: reportText,
+            report_meta: {
+              open_orders: orders.length,
+              held_orders: orders.filter((o) => String(o.status || '') === 'pending_assignment').length,
+              delegated_orders: orders.filter((o) => {
+                const rowStatus = String(o.status || '');
+                return rowStatus === 'delegated' || rowStatus === 'in_progress';
+              }).length,
+              open_tasks: tasks.length
+            }
+          }
+        });
+        await sbRequest(`agent_progress_subscriptions?subscription_id=eq.${encodeURIComponent(String(sub.subscription_id))}`, {
+          method: 'PATCH',
+          body: {
+            last_sent_at: nowIso(),
+            next_due_at: isoAfterMinutes(sub.interval_minutes || 5),
+            summary: 'Last sent with ' + String(orders.length) + ' open orders and ' + String(tasks.length) + ' open tasks.',
+            updated_at: nowIso()
+          }
+        });
+        await sbRequest('agent_activity', {
+          method: 'POST',
+          body: {
+            agent_key: sub.agent_key || 'president_agent',
+            summary: 'Progress update sent to Telegram for subscription ' + String(sub.subscription_id) + '.',
+            status: 'success',
+            details: {
+              subscription_id: sub.subscription_id,
+              channel: 'telegram',
+              scope: sub.scope || 'all_open_orders'
+            }
+          }
+        });
+        sent.push({ subscription_id: sub.subscription_id, chat_id: chatId });
+      }
+      return json(200, { success: true, due: subs.length, sent });
+    } catch (err) {
+      try {
+        await sbRequest('agent_activity', {
+          method: 'POST',
+          body: {
+            agent_key: 'president_agent',
+            summary: 'Progress pulse failed: ' + String(err.message || 'unknown error').slice(0, 800),
+            status: 'error',
+            details: { run_type: 'db_proxy_progress_pulse' }
+          }
+        });
+      } catch (_) {}
+      return json(500, { error: err.message || 'Progress pulse failed' });
     }
   }
 
