@@ -897,7 +897,8 @@ async function ensurePresidentDelegation(text, reply, execContext) {
   var existingAgents = {};
   var current = Array.isArray(execContext.createdWorkflows) ? execContext.createdWorkflows : [];
   for (var i = 0; i < current.length; i += 1) {
-    var key = String((current[i] && current[i].assigned_agent_key) || '').trim() + ':' + String((current[i] && current[i].workflow_key) || '').trim();
+    var row = current[i] && current[i].workflow ? current[i].workflow : current[i];
+    var key = String((row && row.assigned_agent_key) || '').trim() + ':' + String((row && row.workflow_key) || '').trim();
     if (key) existingAgents[key] = true;
   }
   for (var p = 0; p < plan.length; p += 1) {
