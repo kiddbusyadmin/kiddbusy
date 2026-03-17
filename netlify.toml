@@ -101,7 +101,7 @@
   timeout = 60
 
 # President progress pulse for Telegram status updates
-[functions.agentprogresspulse]
+[functions.progresspulse]
   schedule = "*/5 * * * *"
   timeout = 30
 
@@ -217,7 +217,7 @@
 
 [[redirects]]
   from = "/api/agent-progress-pulse"
-  to = "/.netlify/functions/agentprogresspulse"
+  to = "/.netlify/functions/progresspulse"
   status = 200
 
 [[redirects]]
