@@ -330,6 +330,59 @@ function wordCount(text) {
   return clean.split(/\s+/).length;
 }
 
+function currentDateParts() {
+  var now = new Date();
+  return {
+    year: now.getUTCFullYear(),
+    monthIndex: now.getUTCMonth(),
+    day: now.getUTCDate()
+  };
+}
+
+function monthNames() {
+  return [
+    'january',
+    'february',
+    'march',
+    'april',
+    'may',
+    'june',
+    'july',
+    'august',
+    'september',
+    'october',
+    'november',
+    'december'
+  ];
+}
+
+function buildCurrentTimingGuidance() {
+  var now = new Date();
+  var monthList = monthNames();
+  var monthName = monthList[now.getUTCMonth()];
+  var day = now.getUTCDate();
+  var weekday = now.getUTCDay();
+  var daysUntilSaturday = (6 - weekday + 7) % 7;
+  var saturday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysUntilSaturday));
+  var sunday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysUntilSaturday + 1));
+  var saturdayMonth = monthList[saturday.getUTCMonth()];
+  var sundayMonth = monthList[sunday.getUTCMonth()];
+  var range = saturdayMonth === sundayMonth
+    ? (capitalizeWord(saturdayMonth) + ' ' + saturday.getUTCDate() + '-' + sunday.getUTCDate())
+    : (capitalizeWord(saturdayMonth) + ' ' + saturday.getUTCDate() + ' - ' + capitalizeWord(sundayMonth) + ' ' + sunday.getUTCDate());
+  return {
+    month_name: monthName,
+    today_label: capitalizeWord(monthName) + ' ' + day + ', ' + now.getUTCFullYear(),
+    weekend_label: range
+  };
+}
+
+function capitalizeWord(value) {
+  var text = String(value || '');
+  if (!text) return '';
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 function hasCurrentTimeAnchor(text) {
   var hay = String(text || '').toLowerCase();
   if (!hay) return false;
@@ -358,6 +411,40 @@ function hasCurrentTimeAnchor(text) {
   if (/\b\d{1,2}\/\d{1,2}\b/.test(hay)) return true;
   if (/\b\d{1,2}-\d{1,2}\b/.test(hay)) return true;
   return false;
+}
+
+function hasAlignedCurrentTiming(text) {
+  var hay = String(text || '').toLowerCase();
+  if (!hay) return false;
+  var months = monthNames();
+  var parts = currentDateParts();
+  var currentMonth = months[parts.monthIndex];
+  var allowedMonthIndexes = {};
+  allowedMonthIndexes[parts.monthIndex] = true;
+  if (parts.day >= 26 && parts.monthIndex < 11) allowedMonthIndexes[parts.monthIndex + 1] = true;
+  if (parts.day <= 5 && parts.monthIndex > 0) allowedMonthIndexes[parts.monthIndex - 1] = true;
+
+  for (var i = 0; i < months.length; i += 1) {
+    if (hay.indexOf(months[i]) >= 0 && !allowedMonthIndexes[i]) return false;
+  }
+
+  var numericDates = hay.match(/\b(\d{1,2})\/(\d{1,2})\b/g) || [];
+  for (var j = 0; j < numericDates.length; j += 1) {
+    var m = numericDates[j].match(/(\d{1,2})\/(\d{1,2})/);
+    if (!m) continue;
+    var monthNum = Number(m[1]);
+    if (!Number.isFinite(monthNum) || monthNum < 1 || monthNum > 12) return false;
+    if (!allowedMonthIndexes[monthNum - 1]) return false;
+  }
+
+  if (/\bthis weekend\b/.test(hay) || /\bthis week\b/.test(hay) || /\bthis month\b/.test(hay) || /\btoday\b/.test(hay) || /\btomorrow\b/.test(hay)) {
+    return true;
+  }
+
+  for (var k = 0; k < months.length; k += 1) {
+    if (hay.indexOf(months[k]) >= 0 && allowedMonthIndexes[k]) return true;
+  }
+  return numericDates.length > 0;
 }
 
 function hasCommercialSignals(text) {
@@ -452,6 +539,7 @@ function hasStrongLocalSignals(post, targetCity, localListingNames) {
   if (!city || combined.indexOf(city) < 0) return false;
   if (wordCount(stripTags(body)) < 220) return false;
   if (!hasCurrentTimeAnchor(combined)) return false;
+  if (!hasAlignedCurrentTiming(combined)) return false;
   if (hasCommercialSignals(combined)) return false;
   if (hasToddlerUnsafeSignals(combined)) return false;
   if (hasToddlerFriendlySignals(combined) < 3) return false;
@@ -569,6 +657,7 @@ async function generateBatch(cities, existingTitles, batchSize, preferredCity, k
   ].join(' ');
 
   var avoidTitles = Array.from(existingTitles).slice(-80).join(' | ') || 'none';
+  var timing = buildCurrentTimingGuidance();
   var prompt = [
     'Generate exactly ' + String(batchSize) + ' unique blog posts for KiddBusy as a JSON array.',
     'Primary city for all posts in this batch: ' + targetCity + '.',
@@ -576,6 +665,11 @@ async function generateBatch(cities, existingTitles, batchSize, preferredCity, k
       ? ('SEO target keywords for this batch (use each at most once):\n- ' + targets.join('\n- '))
       : 'SEO target keywords for this batch: create high-intent local family search variants naturally.'),
     cityContext,
+    'Timing requirements for this run:',
+    '- Today is ' + timing.today_label + '.',
+    '- If you mention "this weekend", it must refer to ' + timing.weekend_label + '.',
+    '- If you mention a month by name, use ' + capitalizeWord(timing.month_name) + ' unless the weekend range crosses into the next month.',
+    '- Do not mention outdated months, stale weekends, or dates that conflict with today\'s publish date.',
     'Hard rules:',
     '- 220-380 words per post in body_html.',
     '- body_html may only use <p>, <h2>, <ul>, <li>, <strong>, <a>.',
@@ -591,7 +685,7 @@ async function generateBatch(cities, existingTitles, batchSize, preferredCity, k
     '- Include a <h2>Local Picks</h2> section with a <ul> and at least 3 <li> entries.',
     '- Include official site links when available in context.',
     '- Use full names as provided in context. Do not invent place names.',
-    '- Include at least 1 very current time anchor in each post (this weekend, this month, or date range).',
+    '- Include at least 1 very current time anchor in each post (this weekend, this month, or date range) and it must match today\'s timing guidance.',
     '- All posts must be materially different.',
     '- Avoid these existing titles: ' + avoidTitles
   ].join('\n');
