@@ -200,6 +200,29 @@ async function runDelegatedAgentTask(task, order) {
   });
 }
 
+async function listCityCmoPosts(city, statuses) {
+  const safeCity = encodeURIComponent(String(city || '').trim());
+  if (!safeCity) return [];
+  const statusList = Array.isArray(statuses) && statuses.length
+    ? statuses.map((s) => String(s || '').trim()).filter(Boolean)
+    : ['draft', 'published'];
+  const query =
+    'blog_posts?select=id,status,city,slug,title,published_at,created_at&source=eq.cmo_agent' +
+    '&city=ilike.*' + safeCity + '*' +
+    '&status=in.(' + statusList.map((s) => encodeURIComponent(s)).join(',') + ')' +
+    '&limit=500';
+  const out = await sbRequest(query, { method: 'GET' });
+  return Array.isArray(out.data) ? out.data : [];
+}
+
+async function listOpenTasksByAgent(agentKey) {
+  const query = 'agent_tasks?select=task_id,assigned_agent_key,status,details,title&assigned_agent_key=eq.' +
+    encodeURIComponent(String(agentKey || '')) +
+    '&status=in.(open,in_progress)&limit=50';
+  const out = await sbRequest(query, { method: 'GET' });
+  return Array.isArray(out.data) ? out.data : [];
+}
+
 async function sbRequest(path, { method = 'GET', body = null, prefer = null } = {}) {
   const headers = {
     apikey: SUPABASE_SERVICE_KEY,
@@ -712,38 +735,116 @@ exports.handler = async (event) => {
           JSON.stringify(taskDetails || {})
         ].join('\n').trim();
 
+        const finalizedAt = nowIso();
         let resultSummary = '';
+        let nextStatus = 'completed';
+        let activityStatus = 'success';
+        let nextTaskDetails = Object.assign({}, taskDetails, {
+          auto_executor: 'db_proxy_task_runner',
+          last_run_at: finalizedAt
+        });
+
         if (String(task.assigned_agent_key || '') === 'cmo_agent') {
           const city = cleanCityName(taskDetails.city || extractCityFromText(taskContext) || '');
-          const articleCount = Math.min(Math.max(Number(taskDetails.article_count) || 5, 1), 25);
-          const result = await runCmoBlogTask({
-            target_city: city || '',
-            queue_target: articleCount,
-            max_generate_per_run: articleCount,
-            force_publish_generated: true,
-            publish_rate: articleCount,
-            distribution_enabled: true
-          });
-          resultSummary = 'CMO executed blog run' +
-            (city ? (' for ' + city) : '') +
-            ': generated ' + String(result.generated_count || 0) +
-            ', published ' + String(result.published_count || 0) +
-            ', queue depth ' + String(result.queue_depth || 0) + '.';
+          const articleCount = Math.min(Math.max(Number(taskDetails.article_count) || Number(taskDetails.target_count) || 5, 1), 25);
+          const beforePosts = await listCityCmoPosts(city, ['draft', 'published']);
+          const beforePublished = beforePosts.filter((row) => String(row.status || '') === 'published').length;
+          const remainingBefore = Math.max(articleCount - beforePublished, 0);
+          if (remainingBefore <= 0) {
+            resultSummary = 'CMO target already satisfied' + (city ? (' for ' + city) : '') + ': ' + String(beforePublished) + '/' + String(articleCount) + ' published.';
+            nextTaskDetails = Object.assign({}, nextTaskDetails, {
+              city: city || taskDetails.city || '',
+              target_count: articleCount,
+              published_count: beforePublished,
+              remaining_count: 0
+            });
+          } else {
+            const batchSize = Math.min(5, remainingBefore);
+            const result = await runCmoBlogTask({
+              target_city: city || '',
+              queue_target: batchSize,
+              max_generate_per_run: batchSize,
+              force_publish_generated: true,
+              publish_rate: batchSize,
+              distribution_enabled: true
+            });
+            const afterPosts = await listCityCmoPosts(city, ['draft', 'published']);
+            const afterPublished = afterPosts.filter((row) => String(row.status || '') === 'published').length;
+            const remainingAfter = Math.max(articleCount - afterPublished, 0);
+            nextTaskDetails = Object.assign({}, nextTaskDetails, {
+              city: city || taskDetails.city || '',
+              target_count: articleCount,
+              published_count: afterPublished,
+              draft_count: afterPosts.filter((row) => String(row.status || '') === 'draft').length,
+              last_batch_size: batchSize,
+              last_generated_count: Number(result.generated_count || 0),
+              last_published_count: Number(result.published_count || 0),
+              remaining_count: remainingAfter
+            });
+            resultSummary = 'CMO progress' +
+              (city ? (' for ' + city) : '') +
+              ': published ' + String(afterPublished) + '/' + String(articleCount) +
+              ', generated ' + String(result.generated_count || 0) +
+              ', published this run ' + String(result.published_count || 0) + '.';
+            if (remainingAfter > 0) {
+              nextStatus = 'in_progress';
+              activityStatus = 'info';
+              resultSummary += ' Remaining: ' + String(remainingAfter) + '.';
+            }
+          }
         } else if (String(task.assigned_agent_key || '') === 'operations_agent') {
           const city = cleanCityName(taskDetails.city || extractCityFromText(taskContext) || '');
-          const articleCount = Math.min(Math.max(Number(taskDetails.article_count) || 5, 1), 25);
-          const result = await runCmoBlogTask({
-            target_city: city || '',
-            queue_target: articleCount,
-            max_generate_per_run: articleCount,
-            force_publish_generated: true,
-            publish_rate: articleCount,
-            distribution_enabled: true
+          const articleCount = Math.min(Math.max(Number(taskDetails.article_count) || Number(taskDetails.target_count) || 5, 1), 25);
+          const cityPosts = await listCityCmoPosts(city, ['draft', 'published']);
+          const publishedCount = cityPosts.filter((row) => String(row.status || '') === 'published').length;
+          const draftCount = cityPosts.filter((row) => String(row.status || '') === 'draft').length;
+          nextTaskDetails = Object.assign({}, nextTaskDetails, {
+            city: city || taskDetails.city || '',
+            target_count: articleCount,
+            published_count: publishedCount,
+            draft_count: draftCount,
+            remaining_count: Math.max(articleCount - publishedCount, 0)
           });
-          resultSummary = 'Operations coordinated publication' +
-            (city ? (' for ' + city) : '') +
-            ': generated ' + String(result.generated_count || 0) +
-            ', published ' + String(result.published_count || 0) + '.';
+          if (publishedCount >= articleCount) {
+            resultSummary = 'Operations verified publication target' + (city ? (' for ' + city) : '') + ': ' + String(publishedCount) + '/' + String(articleCount) + ' published.';
+          } else if (draftCount > 0) {
+            const publishBatch = Math.min(5, draftCount, articleCount - publishedCount);
+            const result = await runCmoBlogTask({
+              target_city: city || '',
+              queue_target: 1,
+              max_generate_per_run: 0,
+              force_publish_generated: false,
+              publish_rate: publishBatch,
+              distribution_enabled: true
+            });
+            const afterPosts = await listCityCmoPosts(city, ['draft', 'published']);
+            const afterPublished = afterPosts.filter((row) => String(row.status || '') === 'published').length;
+            const remainingAfter = Math.max(articleCount - afterPublished, 0);
+            nextTaskDetails = Object.assign({}, nextTaskDetails, {
+              published_count: afterPublished,
+              draft_count: afterPosts.filter((row) => String(row.status || '') === 'draft').length,
+              last_published_count: Number(result.published_count || 0),
+              remaining_count: remainingAfter
+            });
+            resultSummary = 'Operations pushed publication' +
+              (city ? (' for ' + city) : '') +
+              ': published ' + String(afterPublished) + '/' + String(articleCount) +
+              ', published this run ' + String(result.published_count || 0) + '.';
+            if (remainingAfter > 0) {
+              nextStatus = 'in_progress';
+              activityStatus = 'info';
+              resultSummary += ' Waiting for more CMO inventory.';
+            }
+          } else {
+            const cmoOpenTasks = await listOpenTasksByAgent('cmo_agent');
+            nextStatus = 'in_progress';
+            activityStatus = 'info';
+            resultSummary = 'Operations waiting on CMO content' +
+              (city ? (' for ' + city) : '') +
+              ': published ' + String(publishedCount) + '/' + String(articleCount) +
+              ', drafts ' + String(draftCount) +
+              ', open CMO tasks ' + String(cmoOpenTasks.length) + '.';
+          }
         } else if (String(task.assigned_agent_key || '') === 'accountant_agent') {
           const result = await runAccountantTask({ action: 'run_snapshot' });
           const snap = result.snapshot || {};
@@ -754,31 +855,36 @@ exports.handler = async (event) => {
           resultSummary = String(result.reply || '').slice(0, 1000) || ('Task ' + String(taskId) + ' completed.');
         }
 
-        await patchTask(taskId, {
-          status: 'completed',
+        const taskPatch = {
+          status: nextStatus,
           summary: resultSummary.slice(0, 1200),
-          details: Object.assign({}, taskDetails, {
-            auto_executor: 'db_proxy_task_runner',
-            last_run_at: nowIso(),
+          details: Object.assign({}, nextTaskDetails, {
             result_summary: resultSummary.slice(0, 600)
           }),
-          updated_at: nowIso(),
-          completed_at: nowIso()
-        });
+          updated_at: finalizedAt
+        };
+        if (nextStatus === 'completed') taskPatch.completed_at = finalizedAt;
+        await patchTask(taskId, taskPatch);
 
         if (orderId) {
+          const orderDetails = Object.assign({}, (order && order.details) || {}, {
+            last_progress_agent_key: task.assigned_agent_key || null,
+            task_id: taskId,
+            task_status: nextStatus
+          });
+          if (nextStatus === 'completed') {
+            orderDetails.completed_by_agent_key = task.assigned_agent_key || null;
+          }
+          const orderPatch = {
+            status: nextStatus === 'completed' ? 'completed' : 'in_progress',
+            summary: resultSummary.slice(0, 1200),
+            updated_at: finalizedAt,
+            details: orderDetails
+          };
+          if (nextStatus === 'completed') orderPatch.completed_at = finalizedAt;
           await sbRequest(`agent_orders?order_id=eq.${encodeURIComponent(String(orderId))}`, {
             method: 'PATCH',
-            body: {
-              status: 'completed',
-              summary: resultSummary.slice(0, 1200),
-              updated_at: nowIso(),
-              completed_at: nowIso(),
-              details: Object.assign({}, (order && order.details) || {}, {
-                completed_by_agent_key: task.assigned_agent_key || null,
-                task_id: taskId
-              })
-            }
+            body: orderPatch
           });
         }
 
@@ -787,12 +893,13 @@ exports.handler = async (event) => {
           body: {
             agent_key: task.assigned_agent_key || 'unknown',
             summary: resultSummary.slice(0, 1200),
-            status: 'success',
+            status: activityStatus,
             details: {
               task_id: taskId,
               order_id: orderId,
               run_type: 'agent_task_runner',
-              task_title: task.title || ''
+              task_title: task.title || '',
+              task_status: nextStatus
             }
           }
         });
@@ -800,7 +907,7 @@ exports.handler = async (event) => {
         processed.push({
           task_id: taskId,
           assigned_agent_key: task.assigned_agent_key,
-          status: 'completed',
+          status: nextStatus,
           summary: resultSummary.slice(0, 240)
         });
       }
