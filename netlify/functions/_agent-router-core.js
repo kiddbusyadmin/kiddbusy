@@ -176,6 +176,8 @@ async function executeTool(name, input = {}, context = {}) {
         priority: input.priority || 'normal'
       });
       context.createdTaskCount = (context.createdTaskCount || 0) + 1;
+      context.createdTasks = Array.isArray(context.createdTasks) ? context.createdTasks : [];
+      context.createdTasks.push(task);
       if ((input.order_id || context.currentOrderId) && !context.orderUpdated) {
         await updateOwnerOrder({
           orderId: input.order_id || context.currentOrderId,
@@ -573,17 +575,28 @@ function shouldAutoDelegateExecutionRequest(text) {
   return /\b(publish|write|create|generate|draft|post|launch|build|fix|review|approve|queue)\b/.test(raw);
 }
 
-async function maybeAutoDelegatePresidentRequest(text, execContext) {
+function collectClaimedAgents(text) {
+  var raw = String(text || '').toLowerCase();
+  var out = {};
+  if (!raw) return [];
+  if (/\bcmo\b/.test(raw)) out.cmo_agent = true;
+  if (/\boperations\b|\bops\b/.test(raw)) out.operations_agent = true;
+  if (/\baccountant\b|\bfinance\b/.test(raw)) out.accountant_agent = true;
+  if (/\bresearch\b/.test(raw)) out.research_agent = true;
+  return Object.keys(out);
+}
+
+function buildAutoDelegationPlan(text, reply) {
   var raw = String(text || '').trim();
   var lower = raw.toLowerCase();
-  if (!shouldAutoDelegateExecutionRequest(lower)) return null;
-
+  var replyText = String(reply || '').trim();
+  var combinedClaimed = collectClaimedAgents(raw + '\n' + replyText);
+  var isExecution = shouldAutoDelegateExecutionRequest(lower);
+  if (!isExecution && !combinedClaimed.length) return [];
   if (/\b(blog|post|article|seo)\b/.test(lower)) {
     var city = inferCityFromRequest(raw);
     var isTeen = /\bteen|teens|older kids|high school|middle school\b/.test(lower);
-    return executeTool('create_agent_task', {
-      owner_identity: 'harold',
-      requested_by_agent_key: 'president_agent',
+    var blogPlan = [{
       assigned_agent_key: 'cmo_agent',
       title: raw.slice(0, 180),
       summary: 'Auto-delegated by President because this was an execution request that needs real subagent work.',
@@ -594,23 +607,66 @@ async function maybeAutoDelegatePresidentRequest(text, execContext) {
         seo_keyword_theme: isTeen ? 'local_teen' : 'local_toddler',
         auto_delegated: true
       },
-      priority: 'high',
-      order_id: execContext.currentOrderId || null
-    }, execContext);
+      priority: 'high'
+    }];
+    if (combinedClaimed.indexOf('operations_agent') >= 0) {
+      blogPlan.push({
+        assigned_agent_key: 'operations_agent',
+        title: 'Publish handoff for ' + raw.slice(0, 150),
+        summary: 'President promised Operations follow-through on this content request.',
+        details: {
+          city: city || '',
+          article_count: 1,
+          target_count: 1,
+          seo_keyword_theme: isTeen ? 'local_teen' : 'local_toddler',
+          auto_delegated: true,
+          dependent_on_agent_key: 'cmo_agent'
+        },
+        priority: 'normal'
+      });
+    }
+    return blogPlan;
   }
 
-  return executeTool('create_agent_task', {
-    owner_identity: 'harold',
-    requested_by_agent_key: 'president_agent',
-    assigned_agent_key: 'operations_agent',
+  return [{
+    assigned_agent_key: combinedClaimed[0] || 'operations_agent',
     title: raw.slice(0, 180),
     summary: 'Auto-delegated by President because this request needs execution follow-through.',
     details: {
       auto_delegated: true
     },
-    priority: 'high',
-    order_id: execContext.currentOrderId || null
-  }, execContext);
+    priority: 'high'
+  }];
+}
+
+async function ensurePresidentDelegation(text, reply, execContext) {
+  var plan = buildAutoDelegationPlan(text, reply);
+  if (!Array.isArray(plan) || !plan.length) return [];
+  var created = [];
+  var existingAgents = {};
+  var current = Array.isArray(execContext.createdTasks) ? execContext.createdTasks : [];
+  for (var i = 0; i < current.length; i += 1) {
+    var key = String((current[i] && current[i].assigned_agent_key) || '').trim();
+    if (key) existingAgents[key] = true;
+  }
+  for (var p = 0; p < plan.length; p += 1) {
+    var item = plan[p] || {};
+    var assigned = String(item.assigned_agent_key || '').trim();
+    if (!assigned || existingAgents[assigned]) continue;
+    var result = await executeTool('create_agent_task', {
+      owner_identity: 'harold',
+      requested_by_agent_key: 'president_agent',
+      assigned_agent_key: assigned,
+      title: item.title || String(text || '').slice(0, 180),
+      summary: item.summary || 'Auto-delegated by President.',
+      details: Object.assign({}, item.details || {}),
+      priority: item.priority || 'high',
+      order_id: execContext.currentOrderId || null
+    }, execContext);
+    created.push(result);
+    existingAgents[assigned] = true;
+  }
+  return created;
 }
 
 async function runAgentConversation({ role = '', userMessage = '', history = [], channel = 'dashboard', threadKey = '', ownerIdentity = 'harold' } = {}) {
@@ -664,6 +720,7 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
   const execContext = {
     currentOrderId: currentOrder ? currentOrder.order_id : null,
     createdTaskCount: 0,
+    createdTasks: [],
     orderUpdated: false,
     channel,
     threadKey: resolvedThreadKey,
@@ -722,9 +779,9 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
     provider = 'openai';
   }
   if (currentOrder && !execContext.orderUpdated) {
-    if (agent.key === 'president_agent' && execContext.createdTaskCount === 0) {
+    if (agent.key === 'president_agent') {
       try {
-        await maybeAutoDelegatePresidentRequest(text, execContext);
+        await ensurePresidentDelegation(text, reply, execContext);
       } catch (_) {}
     }
     if (execContext.createdTaskCount > 0) {
@@ -732,7 +789,11 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
         orderId: currentOrder.order_id,
         status: 'delegated',
         summary: String(reply || '').slice(0, 600),
-        details: { auto_status: 'delegated_from_task_creation' }
+        details: {
+          auto_status: 'delegated_from_task_creation',
+          task_ids: (execContext.createdTasks || []).map(function(t) { return t && t.task_id; }).filter(Boolean),
+          delegated_agents: (execContext.createdTasks || []).map(function(t) { return t && t.assigned_agent_key; }).filter(Boolean)
+        }
       });
     } else {
       await updateOwnerOrder({
