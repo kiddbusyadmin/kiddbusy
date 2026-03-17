@@ -1,8 +1,9 @@
 // CONFIG
-const ADMIN_PASSWORD = 'kiddbusy2024';
 const SUPABASE_URL = 'https://wgwexzyqaiwosgraaczi.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indnd2V4enlxYWl3b3NncmFhY3ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODEwNzUsImV4cCI6MjA4ODI1NzA3NX0.IS8u4SL1XeLh9KgD4c2Pl9BiGNg0zkiNauUzu_QtKH8';
 const ANTHROPIC_API_URL = '/.netlify/functions/agent-proxy';
+const AGENT_AUTH_URL = '/.netlify/functions/agent-auth';
+const AGENT_SESSION_KEY = 'kiddbusy_agent_session';
 
 // STATE
 let conversationHistory = [];
@@ -14,20 +15,58 @@ function getSupabase() {
 }
 
 // AUTH
-function checkLogin() {
+function getAgentSessionToken() {
+  return sessionStorage.getItem(AGENT_SESSION_KEY) || '';
+}
+
+function setAgentSessionToken(token) {
+  if (token) sessionStorage.setItem(AGENT_SESSION_KEY, token);
+}
+
+function clearAgentSessionToken() {
+  sessionStorage.removeItem(AGENT_SESSION_KEY);
+}
+
+function showLoginError(message) {
+  const el = document.getElementById('login-error');
+  el.textContent = message || 'incorrect password';
+  el.style.display = 'block';
+}
+
+async function checkLogin() {
   const pass = document.getElementById('pass-input').value;
-  if (pass === ADMIN_PASSWORD) {
+  document.getElementById('login-error').style.display = 'none';
+  try {
+    const response = await fetch(AGENT_AUTH_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pass })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.token) {
+      showLoginError('incorrect password');
+      document.getElementById('pass-input').value = '';
+      return;
+    }
+    setAgentSessionToken(result.token);
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
     document.getElementById('user-input').focus();
-  } else {
-    document.getElementById('login-error').style.display = 'block';
+  } catch (_) {
+    showLoginError('login unavailable');
     document.getElementById('pass-input').value = '';
   }
 }
 
 document.getElementById('pass-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') checkLogin();
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+  if (getAgentSessionToken()) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+  }
 });
 
 // TOOLS
@@ -411,7 +450,11 @@ Today: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeri
 
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-agent' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Requested-From': 'kiddbusy-agent',
+      'Authorization': 'Bearer ' + getAgentSessionToken()
+    },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4096,
@@ -423,6 +466,12 @@ Today: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeri
 
   if (!response.ok) {
     const err = await response.json();
+    if (response.status === 401) {
+      clearAgentSessionToken();
+      document.getElementById('login-screen').style.display = 'flex';
+      document.getElementById('app').style.display = 'none';
+      showLoginError('session expired - log in again');
+    }
     throw new Error(err.error?.message || 'API error');
   }
   return await response.json();

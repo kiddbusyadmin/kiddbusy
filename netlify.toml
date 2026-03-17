@@ -8,6 +8,9 @@
 [functions.agent-proxy]
   timeout = 60
 
+[functions.agent-auth]
+  timeout = 30
+
 [functions.agent-router]
   timeout = 60
 

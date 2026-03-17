@@ -1,7 +1,19 @@
 // netlify/functions/agent-proxy.js
 // Proxies requests to Anthropic API, keeping the API key server-side
 
+const { verifyAgentSessionToken, extractBearerToken } = require('./_agent-auth');
+
 exports.handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+        'Access-Control-Allow-Methods': 'POST,OPTIONS'
+      }
+    };
+  }
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method not allowed' };
   }
@@ -15,6 +27,19 @@ exports.handler = async (event) => {
   }
 
   try {
+    const token = extractBearerToken(event.headers || {});
+    const auth = verifyAgentSessionToken(token);
+    if (!auth.ok) {
+      return {
+        statusCode: 401,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        },
+        body: JSON.stringify({ error: { message: 'Unauthorized' } })
+      };
+    }
+
     const body = JSON.parse(event.body);
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -33,13 +58,19 @@ exports.handler = async (event) => {
       statusCode: response.status,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+        'Access-Control-Allow-Methods': 'POST,OPTIONS'
       },
       body: JSON.stringify(data)
     };
   } catch (err) {
     return {
       statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      },
       body: JSON.stringify({ error: { message: err.message } })
     };
   }
