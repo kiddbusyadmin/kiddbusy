@@ -167,10 +167,12 @@ async function getOwnerOrders({ ownerIdentity = 'harold', limit = 50, status = '
 
 async function createProgressSubscription({ ownerIdentity = 'harold', agentKey = 'president_agent', channel = 'telegram', targetChatId = null, intervalMinutes = 5, scope = 'all_open_orders', summary = null, threadKey = null, metadata = {} }) {
   const mins = Math.min(Math.max(Number(intervalMinutes) || 5, 5), 1440);
+  const ownerRaw = String(ownerIdentity || 'harold').trim().toLowerCase();
+  const normalizedOwner = ['harold', 'owner', 'president', 'president_agent'].includes(ownerRaw) ? 'harold' : ownerRaw;
   const out = await sbFetch('agent_progress_subscriptions', {
     method: 'POST',
     body: {
-      owner_identity: ownerIdentity,
+      owner_identity: normalizedOwner,
       agent_key: agentKey,
       channel,
       target_chat_id: targetChatId,
@@ -207,12 +209,8 @@ async function updateProgressSubscription({ subscriptionId, status = null, summa
 
 async function getProgressSubscriptions({ ownerIdentity = 'harold', status = 'active', dueOnly = false, limit = 50 }) {
   const safe = Math.min(Math.max(Number(limit) || 50, 1), 200);
-  const filters = [
-    `owner_identity=eq.${encodeURIComponent(ownerIdentity)}`,
-    'select=*',
-    'order=updated_at.desc',
-    `limit=${safe}`
-  ];
+  const filters = ['select=*', 'order=updated_at.desc', `limit=${safe}`];
+  if (String(ownerIdentity || '').trim()) filters.unshift(`owner_identity=eq.${encodeURIComponent(ownerIdentity)}`);
   if (status) filters.push(`status=eq.${encodeURIComponent(status)}`);
   if (dueOnly) filters.push(`next_due_at=lte.${encodeURIComponent(nowIso())}`);
   const out = await sbFetch(`agent_progress_subscriptions?${filters.join('&')}`);
