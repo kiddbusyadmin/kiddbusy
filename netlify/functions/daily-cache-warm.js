@@ -5,8 +5,16 @@ const SUPABASE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVI
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 const SUPPORTED_CITIES = require('./_supported-cities.json');
 const USE_WEB_SEARCH_CITIES = new Set(['Raleigh','Salt Lake City','Indianapolis','Kansas City','Buffalo','Jersey City','Louisville','Richmond','Boise','Tucson']);
+const HIGH_PRIORITY_CITIES = new Set([
+  'New York','Los Angeles','Chicago','Houston','Phoenix','Philadelphia','San Antonio','San Diego','Dallas',
+  'Austin','San Jose','Charlotte','San Francisco','Seattle','Denver','Boston','Atlanta','Miami','Orlando','Nashville'
+]);
 const ACTIVITIES_SYSTEM = 'You are KiddBusy. Return ONLY a JSON array of 20 kid-friendly activities. Each object: name(string), category(string), emoji(string), desc(string), addr(string), website(string official URL or null; avoid aggregators/search pages), open(boolean), ages(array of strings), tags(array of strings), rating(number 4-5), reviewCount(number).';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const HOT_CITY_REFRESH_HOURS = Math.max(Number(process.env.WARM_HOT_CITY_REFRESH_HOURS) || 12, 3);
+const STANDARD_CITY_REFRESH_HOURS = Math.max(Number(process.env.WARM_STANDARD_CITY_REFRESH_HOURS) || 48, 6);
+const MIN_LISTINGS_PER_CITY = Math.max(Number(process.env.WARM_MIN_LISTINGS_PER_CITY) || 12, 5);
+const MAX_CITIES_PER_RUN = Math.max(Number(process.env.WARM_MAX_CITIES_PER_RUN) || 8, 1);
 
 function normalizeCity(v) {
   return String(v || '').trim();
@@ -35,6 +43,49 @@ function getSupportedCities() {
   }
   return out;
 }
+
+function buildCityStats(rows) {
+  const stats = {};
+  const list = Array.isArray(rows) ? rows : [];
+  for (let i = 0; i < list.length; i += 1) {
+    const row = list[i] || {};
+    const city = normalizeCity(row.city);
+    if (!city) continue;
+    if (!stats[city]) stats[city] = { count: 0, latest_refreshed: '' };
+    stats[city].count += 1;
+    const refreshed = String(row.last_refreshed || '').trim();
+    if (refreshed && (!stats[city].latest_refreshed || refreshed > stats[city].latest_refreshed)) {
+      stats[city].latest_refreshed = refreshed;
+    }
+  }
+  return stats;
+}
+
+function cityRefreshHours(city) {
+  return HIGH_PRIORITY_CITIES.has(city) ? HOT_CITY_REFRESH_HOURS : STANDARD_CITY_REFRESH_HOURS;
+}
+
+function shouldWarmCity(city, statsByCity) {
+  const stats = statsByCity[city] || { count: 0, latest_refreshed: '' };
+  if (stats.count < MIN_LISTINGS_PER_CITY) {
+    return { due: true, reason: 'low_inventory', count: stats.count, latest_refreshed: stats.latest_refreshed || null };
+  }
+  const refreshHours = cityRefreshHours(city);
+  const latest = stats.latest_refreshed;
+  if (!latest) {
+    return { due: true, reason: 'missing_refresh_timestamp', count: stats.count, latest_refreshed: null };
+  }
+  const latestMs = new Date(latest).getTime();
+  if (!Number.isFinite(latestMs)) {
+    return { due: true, reason: 'invalid_refresh_timestamp', count: stats.count, latest_refreshed: latest };
+  }
+  const ageHours = (Date.now() - latestMs) / 3600000;
+  if (ageHours >= refreshHours) {
+    return { due: true, reason: 'stale_cache', count: stats.count, latest_refreshed: latest, age_hours: Number(ageHours.toFixed(1)) };
+  }
+  return { due: false, reason: 'fresh_enough', count: stats.count, latest_refreshed: latest, age_hours: Number(ageHours.toFixed(1)) };
+}
+
 async function callAI(city, useWebSearch) {
   const body = { model: 'claude-haiku-4-5-20251001', max_tokens: 3200, system: ACTIVITIES_SYSTEM, messages: [{ role: 'user', content: 'List 20 kid-friendly activities in "' + city + '". Return only JSON array.' }] };
   if (useWebSearch) body.tools = [{ type: 'web_search_20250305', name: 'web_search' }];
@@ -168,21 +219,47 @@ exports.handler = async function(event) {
   }
   const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
   const allCities = getSupportedCities();
-  // 3 buckets on an hourly schedule -> each city is warmed about every 3 hours.
-  const totalBuckets = 3;
+  const { data: listingRows } = await sb
+    .from('listings')
+    .select('city,last_refreshed,status')
+    .eq('status', 'active')
+    .limit(10000);
+  const statsByCity = buildCityStats(Array.isArray(listingRows) ? listingRows : []);
+  // 12 buckets on an hourly schedule -> each city is evaluated about every 12 hours.
+  const totalBuckets = 12;
   const currentBucket = new Date().getUTCHours();
   const forceFull = !!(event && event.queryStringParameters && String(event.queryStringParameters.full || '') === '1');
   const singleCity = normalizeCity(event && event.queryStringParameters && event.queryStringParameters.city);
-  let runCities = forceFull
+  let candidateCities = forceFull
     ? allCities
-    : allCities.filter(function(city) { return hashCityToBucket(city, totalBuckets) === currentBucket; });
+    : allCities.filter(function(city) { return hashCityToBucket(city, totalBuckets) === (currentBucket % totalBuckets); });
   if (singleCity) {
-    runCities = allCities.filter(function(city) {
+    candidateCities = allCities.filter(function(city) {
       return String(city).toLowerCase() === String(singleCity).toLowerCase();
     });
   }
+  const dueMeta = {};
+  let runCities = candidateCities.filter(function(city) {
+    const meta = forceFull || singleCity ? { due: true, reason: forceFull ? 'forced_full_run' : 'single_city' } : shouldWarmCity(city, statsByCity);
+    dueMeta[city] = meta;
+    return !!meta.due;
+  });
+  runCities.sort(function(a, b) {
+    const aMeta = dueMeta[a] || {};
+    const bMeta = dueMeta[b] || {};
+    const aPriority = HIGH_PRIORITY_CITIES.has(a) ? 1 : 0;
+    const bPriority = HIGH_PRIORITY_CITIES.has(b) ? 1 : 0;
+    if (aPriority !== bPriority) return bPriority - aPriority;
+    const aCount = Number(aMeta.count || 0);
+    const bCount = Number(bMeta.count || 0);
+    if (aCount !== bCount) return aCount - bCount;
+    return String(a).localeCompare(String(b));
+  });
+  if (!forceFull && !singleCity && runCities.length > MAX_CITIES_PER_RUN) {
+    runCities = runCities.slice(0, MAX_CITIES_PER_RUN);
+  }
 
-  console.log('[WARM] supported cities=' + allCities.length + ', run bucket=' + currentBucket + '/' + totalBuckets + ', this run=' + runCities.length + ', forceFull=' + forceFull + ', city=' + (singleCity || 'none'));
+  console.log('[WARM] supported cities=' + allCities.length + ', eval bucket=' + currentBucket + '/' + totalBuckets + ', candidates=' + candidateCities.length + ', due=' + runCities.length + ', forceFull=' + forceFull + ', city=' + (singleCity || 'none'));
   const results = {}; let succeeded = 0, failed = 0;
   for (let i = 0; i < runCities.length; i++) {
     const city = runCities[i];
@@ -191,10 +268,10 @@ exports.handler = async function(event) {
       console.log('[WARM] (' + (i+1) + '/' + runCities.length + ') ' + city);
       const activities = await callAI(city, useWebSearch);
       const saved = await upsertListings(sb, activities, city);
-      results[city] = 'ok:' + saved; succeeded++;
+      results[city] = { status: 'ok', saved: saved, reason: dueMeta[city] ? dueMeta[city].reason : 'unknown' }; succeeded++;
     } catch (err) {
       console.error('[WARM] FAIL ' + city + ': ' + err.message);
-      results[city] = 'fail:' + err.message; failed++;
+      results[city] = { status: 'fail', error: err.message, reason: dueMeta[city] ? dueMeta[city].reason : 'unknown' }; failed++;
     }
     if (i < runCities.length - 1) await sleep(2500);
   }
@@ -205,9 +282,16 @@ exports.handler = async function(event) {
       supported_cities: allCities.length,
       bucket: currentBucket,
       buckets_total: totalBuckets,
+      candidate_cities: candidateCities.length,
       run_cities: runCities.length,
       force_full: forceFull,
       city: singleCity || null,
+      refresh_policy: {
+        hot_city_refresh_hours: HOT_CITY_REFRESH_HOURS,
+        standard_city_refresh_hours: STANDARD_CITY_REFRESH_HOURS,
+        min_listings_per_city: MIN_LISTINGS_PER_CITY,
+        max_cities_per_run: MAX_CITIES_PER_RUN
+      },
       succeeded,
       failed,
       results
