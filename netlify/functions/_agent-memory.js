@@ -110,6 +110,61 @@ async function getOpenTasks({ ownerIdentity = 'harold', limit = 30 }) {
   return out.data;
 }
 
+async function createOwnerOrder({ ownerIdentity = 'harold', threadId = null, channel = 'dashboard', channelThreadKey = 'dashboard:primary', requestedAgentKey = 'president_agent', title, requestText, details = {} }) {
+  const out = await sbFetch('agent_orders', {
+    method: 'POST',
+    body: {
+      owner_identity: ownerIdentity,
+      thread_id: threadId,
+      channel,
+      channel_thread_key: channelThreadKey,
+      requested_agent_key: requestedAgentKey,
+      title: String(title || requestText || 'Owner order').slice(0, 240),
+      request_text: String(requestText || '').slice(0, 12000),
+      status: 'pending_assignment',
+      details: details && typeof details === 'object' ? details : {},
+      updated_at: nowIso()
+    },
+    prefer: 'return=representation'
+  });
+  if (!out.response.ok) throw new Error('Failed to create owner order');
+  return Array.isArray(out.data) && out.data.length ? out.data[0] : null;
+}
+
+async function updateOwnerOrder({ orderId, status, summary = null, details = null, completed = false }) {
+  const patch = {
+    status: String(status || 'pending_assignment').slice(0, 80),
+    updated_at: nowIso()
+  };
+  if (summary != null) patch.summary = String(summary).slice(0, 1200);
+  if (details && typeof details === 'object') patch.details = details;
+  if (completed) patch.completed_at = nowIso();
+  const out = await sbFetch(`agent_orders?order_id=eq.${encodeURIComponent(String(orderId))}`, {
+    method: 'PATCH',
+    body: patch,
+    prefer: 'return=representation'
+  });
+  if (!out.response.ok) throw new Error('Failed to update owner order');
+  return Array.isArray(out.data) && out.data.length ? out.data[0] : null;
+}
+
+async function getOwnerOrders({ ownerIdentity = 'harold', limit = 50, status = '' }) {
+  const safe = Math.min(Math.max(Number(limit) || 50, 1), 200);
+  const filters = [
+    `owner_identity=eq.${encodeURIComponent(ownerIdentity)}`,
+    'select=*',
+    'order=updated_at.desc',
+    `limit=${safe}`
+  ];
+  if (status) {
+    if (status === 'open_funnel') filters.push('status=in.(pending_assignment,delegated,in_progress)');
+    else filters.push(`status=eq.${encodeURIComponent(status)}`);
+  }
+  const out = await sbFetch(`agent_orders?${filters.join('&')}`);
+  if (!out.response.ok || !Array.isArray(out.data)) return [];
+  return out.data;
+}
+
 module.exports = {
   getOrCreateThread,
   appendMessage,
@@ -117,5 +172,8 @@ module.exports = {
   upsertMemory,
   getAgentMemories,
   createTask,
-  getOpenTasks
+  getOpenTasks,
+  createOwnerOrder,
+  updateOwnerOrder,
+  getOwnerOrders
 };

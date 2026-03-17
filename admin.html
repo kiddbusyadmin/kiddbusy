@@ -1014,42 +1014,62 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
   <div class="date-banner">// AGENT OFFICE</div>
   <div class="stats-row" style="margin-bottom:16px">
     <div class="stat-card blue">
-      <div class="stat-label">Recent Exchanges (7d)</div>
-      <div class="stat-value" id="officekpi-exchanges">--</div>
-      <div class="stat-sub" id="officekpi-exchanges-sub">from agent activity</div>
+      <div class="stat-label">Orders Received</div>
+      <div class="stat-value" id="officekpi-orders">--</div>
+      <div class="stat-sub" id="officekpi-orders-sub">all tracked orders</div>
     </div>
     <div class="stat-card purple">
-      <div class="stat-label">Agents Talking</div>
-      <div class="stat-value" id="officekpi-speakers">--</div>
-      <div class="stat-sub" id="officekpi-speakers-sub">distinct voices</div>
+      <div class="stat-label">Held By President</div>
+      <div class="stat-value" id="officekpi-held">--</div>
+      <div class="stat-sub" id="officekpi-held-sub">pending assignment</div>
     </div>
     <div class="stat-card yellow">
-      <div class="stat-label">Open Tasks</div>
-      <div class="stat-value" id="officekpi-tasks">--</div>
-      <div class="stat-sub" id="officekpi-tasks-sub">delegated work</div>
+      <div class="stat-label">Open Delegations</div>
+      <div class="stat-value" id="officekpi-delegated">--</div>
+      <div class="stat-sub" id="officekpi-delegated-sub">assigned out</div>
     </div>
     <div class="stat-card green">
-      <div class="stat-label">Latest Topic</div>
-      <div class="stat-value" id="officekpi-topic" style="font-size:1.15rem">--</div>
-      <div class="stat-sub" id="officekpi-topic-sub">most recent office thread</div>
+      <div class="stat-label">Completed</div>
+      <div class="stat-value" id="officekpi-completed">--</div>
+      <div class="stat-sub" id="officekpi-completed-sub">performance funnel</div>
     </div>
   </div>
   <div class="panels">
     <div class="panel">
       <div class="panel-header">
-        <div class="panel-title">Who Is Talking</div>
-        <div class="panel-badge">last 7 days</div>
+        <div class="panel-title">Order Funnel</div>
+        <div class="panel-badge">President performance</div>
       </div>
-      <div class="panel-body" id="body-agent-office-by-agent">
+      <div class="panel-body" id="body-agent-office-funnel">
         <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
       </div>
     </div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Held By President</div>
+        <div class="panel-badge" id="badge-agent-office-held">loading</div>
+      </div>
+      <div class="panel-body" id="body-agent-office-held">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="panels">
     <div class="panel">
       <div class="panel-header">
         <div class="panel-title">Open Delegations</div>
         <div class="panel-badge" id="badge-agent-office-tasks">loading</div>
       </div>
       <div class="panel-body" id="body-agent-office-tasks">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Who Is Talking</div>
+        <div class="panel-badge">last 7 days</div>
+      </div>
+      <div class="panel-body" id="body-agent-office-by-agent">
         <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
       </div>
     </div>
@@ -2813,6 +2833,17 @@ async function fetchAgentTasks(status, limit) {
   return out.tasks || [];
 }
 
+async function fetchOwnerOrders(status, limit) {
+  var res = await fetch('/.netlify/functions/db-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
+    body: JSON.stringify({ action: 'query_owner_orders', status: status || '', limit: limit || 80 })
+  });
+  var out = await res.json();
+  if (!res.ok) throw new Error(out.error || 'Failed to load owner orders');
+  return out.orders || [];
+}
+
 function formatLocalTimestamp(ts) {
   if (!ts) return '--';
   var d = new Date(ts);
@@ -2875,19 +2906,29 @@ async function loadAgentOffice() {
   var badge = document.getElementById('badge-agent-office');
   var byAgentEl = document.getElementById('body-agent-office-by-agent');
   var tasksEl = document.getElementById('body-agent-office-tasks');
+  var heldEl = document.getElementById('body-agent-office-held');
+  var heldBadge = document.getElementById('badge-agent-office-held');
+  var funnelEl = document.getElementById('body-agent-office-funnel');
   var tasksBadge = document.getElementById('badge-agent-office-tasks');
   if (!body) return;
   body.innerHTML = loadingHTML();
   if (byAgentEl) byAgentEl.innerHTML = loadingHTML();
   if (tasksEl) tasksEl.innerHTML = loadingHTML();
+  if (heldEl) heldEl.innerHTML = loadingHTML();
+  if (funnelEl) funnelEl.innerHTML = loadingHTML();
   try {
     var results = await Promise.all([
       fetchAgentActivity(120),
-      fetchAgentTasks('open_or_in_progress', 80)
+      fetchAgentTasks('open_or_in_progress', 80),
+      fetchOwnerOrders('', 120)
     ]);
     var rows = results[0] || [];
     var tasks = results[1] || [];
+    var orders = results[2] || [];
     var rows7d = rows.filter(function(r) { return isWithinRange(r.created_at, '7d'); });
+    var heldOrders = orders.filter(function(o) { return String(o.status || '') === 'pending_assignment'; });
+    var delegatedOrders = orders.filter(function(o) { return String(o.status || '') === 'delegated' || String(o.status || '') === 'in_progress'; });
+    var completedOrders = orders.filter(function(o) { return String(o.status || '') === 'completed'; });
     var speakers = {};
     rows7d.forEach(function(r) {
       var key = String(r.agent_key || 'unknown');
@@ -2907,6 +2948,18 @@ async function loadAgentOffice() {
         : emptyHTML('No agent conversations yet');
     }
 
+    if (heldBadge) heldBadge.textContent = heldOrders.length + ' waiting';
+    if (heldEl) {
+      heldEl.innerHTML = heldOrders.length
+        ? heldOrders.slice(0, 8).map(function(order) {
+            return '<div style="padding:10px 0;border-bottom:1px solid var(--border)">' +
+              '<div style="font-size:.8rem;color:var(--text);line-height:1.45">President is still holding: ' + (order.title || 'Untitled order') + '</div>' +
+              '<div style="margin-top:4px;font-family:var(--mono);font-size:.7rem;color:var(--muted)">' + formatLocalTimestamp(order.updated_at || order.created_at) + '</div>' +
+              '</div>';
+          }).join('')
+        : emptyHTML('Nothing is currently waiting on President triage');
+    }
+
     if (tasksBadge) tasksBadge.textContent = tasks.length + ' open';
     if (tasksEl) {
       tasksEl.innerHTML = tasks.length
@@ -2919,18 +2972,29 @@ async function loadAgentOffice() {
         : emptyHTML('No open delegations');
     }
 
-    document.getElementById('officekpi-exchanges').textContent = rows7d.length;
-    document.getElementById('officekpi-exchanges-sub').textContent = 'all time: ' + rows.length;
-    document.getElementById('officekpi-speakers').textContent = Object.keys(speakers).length;
-    document.getElementById('officekpi-speakers-sub').textContent = sortedSpeakers.length ? ('most active: ' + humanAgentName(sortedSpeakers[0][0])) : 'distinct voices';
-    document.getElementById('officekpi-tasks').textContent = tasks.length;
-    document.getElementById('officekpi-tasks-sub').textContent = tasks.filter(function(t) { return String(t.status || '') === 'in_progress'; }).length + ' in progress';
-    var latestTopic = rows.length ? officeTopic(rows[0].summary) : 'No topic yet';
-    document.getElementById('officekpi-topic').textContent = latestTopic;
-    document.getElementById('officekpi-topic-sub').textContent = rows.length ? formatLocalTimestamp(rows[0].created_at) : 'most recent office thread';
+    document.getElementById('officekpi-orders').textContent = orders.length;
+    document.getElementById('officekpi-orders-sub').textContent = 'last tracked: ' + (orders.length ? formatLocalTimestamp(orders[0].created_at) : '--');
+    document.getElementById('officekpi-held').textContent = heldOrders.length;
+    document.getElementById('officekpi-held-sub').textContent = orders.length ? (Math.round((heldOrders.length / Math.max(orders.length, 1)) * 100) + '% of total') : 'pending assignment';
+    document.getElementById('officekpi-delegated').textContent = delegatedOrders.length;
+    document.getElementById('officekpi-delegated-sub').textContent = tasks.filter(function(t) { return String(t.status || '') === 'in_progress'; }).length + ' in progress';
+    document.getElementById('officekpi-completed').textContent = completedOrders.length;
+    document.getElementById('officekpi-completed-sub').textContent = orders.length ? (Math.round((completedOrders.length / Math.max(orders.length, 1)) * 100) + '% completion') : 'performance funnel';
+
+    if (funnelEl) {
+      var totalOrders = Math.max(orders.length, 1);
+      var heldPct = Math.round((heldOrders.length / totalOrders) * 100);
+      var delegatedPct = Math.round((delegatedOrders.length / totalOrders) * 100);
+      var completedPct = Math.round((completedOrders.length / totalOrders) * 100);
+      funnelEl.innerHTML =
+        '<div class="funnel-row start"><div class="funnel-label">Orders Received</div><div class="funnel-bar-bg"><div class="funnel-bar-fill" style="width:100%">' + orders.length + '</div></div><div class="funnel-pct">100%</div></div>' +
+        '<div class="funnel-row abandon"><div class="funnel-label">Held By President</div><div class="funnel-bar-bg"><div class="funnel-bar-fill" style="width:' + heldPct + '%">' + heldOrders.length + '</div></div><div class="funnel-pct">' + heldPct + '%</div></div>' +
+        '<div class="funnel-row submit"><div class="funnel-label">Delegated</div><div class="funnel-bar-bg"><div class="funnel-bar-fill" style="width:' + delegatedPct + '%">' + delegatedOrders.length + '</div></div><div class="funnel-pct">' + delegatedPct + '%</div></div>' +
+        '<div class="funnel-row submit"><div class="funnel-label">Completed</div><div class="funnel-bar-bg"><div class="funnel-bar-fill" style="width:' + completedPct + '%">' + completedOrders.length + '</div></div><div class="funnel-pct">' + completedPct + '%</div></div>';
+    }
 
     badge.textContent = rows.length + ' moments';
-    if (!rows.length && !tasks.length) {
+    if (!rows.length && !tasks.length && !orders.length) {
       body.innerHTML = emptyHTML('No office conversation yet');
       return;
     }
@@ -2953,10 +3017,18 @@ async function loadAgentOffice() {
         status: r.status
       });
     });
+    heldOrders.slice(0, 4).forEach(function(order) {
+      officeLines.push({
+        created_at: order.updated_at || order.created_at,
+        speaker: 'President',
+        line: 'President: I am still holding this one before assigning it out: ' + (order.title || 'Untitled order') + '.',
+        type: 'held'
+      });
+    });
     officeLines.sort(function(a, b) { return new Date(b.created_at).getTime() - new Date(a.created_at).getTime(); });
 
     body.innerHTML = officeLines.map(function(item) {
-      var accent = item.type === 'task' ? 'var(--yellow)' : (String(item.status || '').toLowerCase() === 'error' ? 'var(--accent)' : 'var(--blue)');
+      var accent = item.type === 'task' ? 'var(--yellow)' : (item.type === 'held' ? 'var(--purple)' : (String(item.status || '').toLowerCase() === 'error' ? 'var(--accent)' : 'var(--blue)'));
       return '<div style="display:flex;gap:12px;padding:14px 0;border-bottom:1px solid var(--border)">' +
         '<div style="min-width:118px;font-family:var(--mono);font-size:.7rem;color:var(--muted);white-space:nowrap">' + formatLocalTimestamp(item.created_at) + '</div>' +
         '<div style="width:10px;height:10px;border-radius:50%;background:' + accent + ';margin-top:6px;flex:0 0 auto"></div>' +

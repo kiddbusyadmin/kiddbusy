@@ -10,7 +10,10 @@ const {
   upsertMemory,
   getAgentMemories,
   createTask,
-  getOpenTasks
+  getOpenTasks,
+  createOwnerOrder,
+  updateOwnerOrder,
+  getOwnerOrders
 } = require('./_agent-memory');
 
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
@@ -144,7 +147,7 @@ async function queryDashboardStats(range = '24h') {
   };
 }
 
-async function executeTool(name, input = {}) {
+async function executeTool(name, input = {}, context = {}) {
   switch (name) {
     case 'list_agents': {
       const registry = await getAgentRegistry();
@@ -161,10 +164,41 @@ async function executeTool(name, input = {}) {
         assignedAgentKey: input.assigned_agent_key,
         title: input.title,
         summary: input.summary || '',
-        details: input.details || {},
+        details: Object.assign({}, input.details || {}, {
+          order_id: input.order_id || context.currentOrderId || null
+        }),
         priority: input.priority || 'normal'
       });
+      context.createdTaskCount = (context.createdTaskCount || 0) + 1;
+      if ((input.order_id || context.currentOrderId) && !context.orderUpdated) {
+        await updateOwnerOrder({
+          orderId: input.order_id || context.currentOrderId,
+          status: 'delegated',
+          summary: input.summary || task.title,
+          details: { delegated_to: input.assigned_agent_key, task_id: task.task_id }
+        });
+        context.orderUpdated = true;
+      }
       return { success: true, task };
+    }
+    case 'query_owner_orders': {
+      const rows = await getOwnerOrders({
+        ownerIdentity: input.owner_identity || 'harold',
+        limit: input.limit || 50,
+        status: input.status || ''
+      });
+      return { count: rows.length, orders: rows };
+    }
+    case 'update_owner_order': {
+      const row = await updateOwnerOrder({
+        orderId: input.order_id || context.currentOrderId,
+        status: input.status || 'pending_assignment',
+        summary: input.summary || null,
+        details: input.details || null,
+        completed: String(input.status || '').toLowerCase() === 'completed'
+      });
+      context.orderUpdated = true;
+      return { success: true, order: row };
     }
     case 'query_agent_tasks': {
       const tasks = await getOpenTasks({ ownerIdentity: input.owner_identity || 'harold', limit: input.limit || 30 });
@@ -292,8 +326,14 @@ function toolDefinitions() {
       key: { type: 'string' }, name: { type: 'string' }, role: { type: 'string' }, report_to: { type: 'string' }, description: { type: 'string' }, system_prompt: { type: 'string' }
     }, required: ['name', 'description'] } },
     { name: 'create_agent_task', description: 'Create a task for a specialist agent when the owner request should be delegated or tracked.', input_schema: { type: 'object', properties: {
-      owner_identity: { type: 'string' }, requested_by_agent_key: { type: 'string' }, assigned_agent_key: { type: 'string' }, title: { type: 'string' }, summary: { type: 'string' }, priority: { type: 'string' }, details: { type: 'object' }
+      owner_identity: { type: 'string' }, requested_by_agent_key: { type: 'string' }, assigned_agent_key: { type: 'string' }, title: { type: 'string' }, summary: { type: 'string' }, priority: { type: 'string' }, details: { type: 'object' }, order_id: { type: 'number' }
     }, required: ['assigned_agent_key', 'title'] } },
+    { name: 'query_owner_orders', description: 'Query owner orders assigned to President so you can track held, delegated, and completed work.', input_schema: { type: 'object', properties: {
+      owner_identity: { type: 'string' }, status: { type: 'string' }, limit: { type: 'number' }
+    }, required: [] } },
+    { name: 'update_owner_order', description: 'Update the current owner order status. Use this to leave work pending_assignment, mark it delegated, or mark it completed if handled directly.', input_schema: { type: 'object', properties: {
+      order_id: { type: 'number' }, status: { type: 'string', enum: ['pending_assignment', 'delegated', 'in_progress', 'completed', 'blocked'] }, summary: { type: 'string' }, details: { type: 'object' }
+    }, required: ['status'] } },
     { name: 'query_agent_tasks', description: 'List open and in-progress agent tasks for continuity and delegation tracking.', input_schema: { type: 'object', properties: {
       owner_identity: { type: 'string' }, limit: { type: 'number' }
     }, required: [] } },
@@ -335,7 +375,8 @@ function buildSystemPrompt(agent, registry, channel) {
     'Traffic growth is the first gate for monetization. Do not forget that low traffic weakens owner-claim and sponsorship monetization.',
     'Default to working through how your existing team can fulfill the request. Use delegation/task creation before pushback.',
     'If the current team cannot do it well, recommend a new agent and explain why in one short paragraph.',
-    'Only refuse or block when there is a hard legal, compliance, access, or business-rule constraint.'
+    'Only refuse or block when there is a hard legal, compliance, access, or business-rule constraint.',
+    'Every owner order should be tracked. For a new order, either delegate it, leave it pending_assignment with a short reason, or mark it completed if you handled it directly.'
   ].join(' ');
   const specialistRules = `You are ${agent.name} for KiddBusy. Stay within your specialty while still being practical. Report clearly to the President agent when useful.`;
   return [
@@ -457,28 +498,112 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
   const storedMessages = await getRecentMessages(thread.thread_id, 24);
   const storedMemories = await getAgentMemories({ ownerIdentity, agentKey: 'president_agent', limit: 40 });
   const openTasks = await getOpenTasks({ ownerIdentity, limit: 20 });
+  const openOrders = await getOwnerOrders({ ownerIdentity, limit: 20, status: 'open_funnel' });
   const threadSummary = summarizeThreadContext(storedMessages);
   const memorySummary = (storedMemories || []).map((m) => `- ${m.memory_kind}/${m.key}: ${JSON.stringify(m.value)}`).join('\n');
   const taskSummary = (openTasks || []).map((t) => `- ${t.assigned_agent_key}: ${t.title} [${t.status}]`).join('\n');
+  const orderSummary = (openOrders || []).map((o) => `- #${o.order_id} ${o.status}: ${o.title}`).join('\n');
+  var currentOrder = null;
+  if (agent.key === 'president_agent' && text) {
+    currentOrder = await createOwnerOrder({
+      ownerIdentity,
+      threadId: thread.thread_id,
+      channel,
+      channelThreadKey: resolvedThreadKey,
+      requestedAgentKey: 'president_agent',
+      title: text.slice(0, 180),
+      requestText: text,
+      details: { source: channel }
+    });
+  }
   const systemPrompt = buildSystemPrompt(agent, registry, channel);
   const memoryBlock = [
     'Durable memory and continuity:',
     memorySummary || '- none recorded',
+    'Open owner orders:',
+    orderSummary || '- none recorded',
     'Open delegated tasks:',
     taskSummary || '- none recorded',
     'Recent thread context:',
-    threadSummary || '- no prior thread history'
+    threadSummary || '- no prior thread history',
+    currentOrder ? ('Current owner order id: ' + currentOrder.order_id) : 'Current owner order id: none'
   ].join('\n');
   let reply = '';
   let provider = '';
+  const execContext = {
+    currentOrderId: currentOrder ? currentOrder.order_id : null,
+    createdTaskCount: 0,
+    orderUpdated: false
+  };
   try {
     if (!ANTHROPIC_API_KEY) throw new Error('Anthropic not configured');
-    reply = await runAnthropicLoop({ systemPrompt: `${systemPrompt}\n\n${memoryBlock}`, history: storedMessages.concat(normalizeHistory(history)), userMessage: text });
+    reply = await (async function() {
+      const messages = normalizeHistory(storedMessages.concat(normalizeHistory(history)));
+      let working = messages.concat([{ role: 'user', content: text }]);
+      let iterations = 0;
+      while (iterations < 12) {
+        iterations += 1;
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': ANTHROPIC_API_KEY,
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify({
+            model: PRESIDENT_MODEL,
+            max_tokens: 1400,
+            temperature: 0.2,
+            system: `${systemPrompt}\n\n${memoryBlock}`,
+            tools: toolDefinitions(),
+            messages: working
+          })
+        });
+        const body = await res.json();
+        if (!res.ok) throw new Error((body && body.error && body.error.message) || `Anthropic HTTP ${res.status}`);
+        if (body.stop_reason === 'tool_use') {
+          const toolUses = (body.content || []).filter((c) => c && c.type === 'tool_use');
+          const toolResults = [];
+          for (const toolUse of toolUses) {
+            let result;
+            try {
+              result = await executeTool(toolUse.name, toolUse.input || {}, execContext);
+            } catch (err) {
+              result = { error: err.message || 'tool_failed' };
+            }
+            toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(result) });
+          }
+          working.push({ role: 'assistant', content: body.content });
+          working.push({ role: 'user', content: toolResults });
+          continue;
+        }
+        return extractAnthropicText(body);
+      }
+      throw new Error('Agent exceeded max iterations');
+    })();
     provider = 'anthropic';
   } catch (primaryErr) {
     if (!OPENAI_API_KEY) throw primaryErr;
     reply = await runOpenAiFallback({ systemPrompt: `${systemPrompt}\n\n${memoryBlock}`, history: storedMessages.concat(normalizeHistory(history)), userMessage: text });
     provider = 'openai';
+  }
+  if (currentOrder && !execContext.orderUpdated) {
+    if (execContext.createdTaskCount > 0) {
+      await updateOwnerOrder({
+        orderId: currentOrder.order_id,
+        status: 'delegated',
+        summary: String(reply || '').slice(0, 600),
+        details: { auto_status: 'delegated_from_task_creation' }
+      });
+    } else {
+      await updateOwnerOrder({
+        orderId: currentOrder.order_id,
+        status: 'completed',
+        summary: String(reply || '').slice(0, 600),
+        details: { auto_status: 'completed_by_direct_response' },
+        completed: true
+      });
+    }
   }
   await appendMessage({ threadId: thread.thread_id, role: 'user', content: text, agentKey: null, metadata: { channel, owner_identity: ownerIdentity } });
   await appendMessage({ threadId: thread.thread_id, role: 'assistant', content: reply, agentKey: agent.key, metadata: { provider, channel } });
