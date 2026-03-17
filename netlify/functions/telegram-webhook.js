@@ -11,6 +11,7 @@ const TELEGRAM_ALLOWED_CHAT_ID = process.env.TELEGRAM_CHAT_ID; // your personal 
 const { sendCompliantEmail } = require('./_email-compliance');
 const { triggerSponsorshipPaymentRequestEmail } = require('./_sponsorship-payment-email');
 const { buildFinanceSnapshot, upsertFinanceSnapshot, addManualEntry } = require('./_accounting-core');
+const { runAgentConversation } = require('./_agent-router-core');
 
 // ---- TELEGRAM ----
 async function sendTelegram(chatId, text) {
@@ -353,91 +354,16 @@ async function executeTool(name, input) {
   }
 }
 
-// ---- CLAUDE AGENT ----
+// ---- SHARED AGENT ROUTER ----
 async function runAgent(userMessage) {
-  const tools = [
-    { name: 'query_submissions', description: 'Query submissions.', input_schema: { type: 'object', properties: { status: { type: 'string' } }, required: [] } },
-    { name: 'query_reviews', description: 'Query reviews.', input_schema: { type: 'object', properties: { status: { type: 'string' } }, required: [] } },
-    { name: 'query_sponsorships', description: 'Query sponsorships.', input_schema: { type: 'object', properties: { status: { type: 'string' } }, required: [] } },
-    { name: 'query_listings', description: 'Query listings.', input_schema: { type: 'object', properties: { status: { type: 'string' }, limit: { type: 'number' } }, required: [] } },
-    { name: 'query_submission_photos', description: 'Query submission photo moderation queue.', input_schema: { type: 'object', properties: { status: { type: 'string' }, limit: { type: 'number' } }, required: [] } },
-    { name: 'query_email_leads', description: 'Query email leads list.', input_schema: { type: 'object', properties: { city: { type: 'string' }, limit: { type: 'number' } }, required: [] } },
-    { name: 'query_analytics', description: 'Query analytics events used by command center.', input_schema: { type: 'object', properties: { event: { type: 'string' }, city: { type: 'string' }, limit: { type: 'number' } }, required: [] } },
-    { name: 'query_owner_kpis', description: 'Get owner claim funnel KPIs used in dashboard.', input_schema: { type: 'object', properties: {}, required: [] } },
-    { name: 'query_cmo_settings', description: 'Get CMO agent settings and execution mode.', input_schema: { type: 'object', properties: {}, required: [] } },
-    { name: 'query_agent_activity', description: 'Get agent execution summary feed.', input_schema: { type: 'object', properties: { agent_key: { type: 'string' }, status: { type: 'string' }, limit: { type: 'number' } }, required: [] } },
-    { name: 'query_email_compliance', description: 'Get unsubscribe/send-log compliance metrics.', input_schema: { type: 'object', properties: { limit: { type: 'number' } }, required: [] } },
-    { name: 'query_dashboard_stats', description: 'Get top dashboard stat-card datapoints for a range.', input_schema: { type: 'object', properties: { range: { type: 'string', enum: ['24h', '7d', '30d', 'all'] } }, required: [] } },
-    { name: 'query_finance_snapshot', description: 'Get current accountant snapshot including MRR, projected revenue, expenses, net, paid vs cancelled sponsors.', input_schema: { type: 'object', properties: {}, required: [] } },
-    { name: 'run_accountant_snapshot', description: 'Persist a fresh accountant snapshot.', input_schema: { type: 'object', properties: {}, required: [] } },
-    { name: 'add_finance_manual_entry', description: 'Add a manual revenue/expense input from owner.', input_schema: { type: 'object', properties: { kind: { type: 'string', enum: ['revenue', 'expense'] }, amount: { type: 'number' }, category: { type: 'string' }, vendor: { type: 'string' }, notes: { type: 'string' }, entry_date: { type: 'string' } }, required: ['kind', 'amount'] } },
-    { name: 'update_submission_status', description: 'Approve or reject a submission.', input_schema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string', enum: ['approved', 'rejected'] } }, required: ['id', 'status'] } },
-    { name: 'update_review_status', description: 'Approve or reject a review.', input_schema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string', enum: ['approved', 'rejected'] } }, required: ['id', 'status'] } },
-    { name: 'update_sponsorship_status', description: 'Update sponsorship status.', input_schema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string' } }, required: ['id', 'status'] } },
-    { name: 'send_email', description: 'Send an email from admin@kiddbusy.com.', input_schema: { type: 'object', properties: { to: { type: 'string' }, subject: { type: 'string' }, body: { type: 'string' }, from_name: { type: 'string' } }, required: ['to', 'subject', 'body'] } },
-    { name: 'send_telegram', description: 'Send a Telegram message to the admin.', input_schema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] } }
-  ];
-
-  const systemPrompt = `You are the KiddBusy admin agent. You manage a family activity directory. You are responding to a Telegram message from Harold, the owner.
-
-You have command-center parity data access. You can query any KPI/data point shown in the dashboard tabs, including:
-- Dashboard top metrics
-- Live activity analytics
-- Owner KPI funnel
-- Submissions and photo moderation queues
-- Sponsorships and listings
-- Email leads and compliance logs
-- CMO settings and agent activity feed
-
-Be concise — this is a chat interface. Use plain text, not HTML. When Harold asks for a status update, query the DB and summarize briefly. When he gives you an instruction, execute it and confirm. Today: ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}.`;
-
-  let messages = [{ role: 'user', content: userMessage }];
-  let iterations = 0;
-
-  while (iterations < 15) {
-    iterations++;
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: TELEGRAM_AGENT_MODEL,
-        max_tokens: 1024,
-        system: systemPrompt,
-        tools,
-        messages
-      })
-    });
-
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(`Anthropic error: ${err.error?.message}`);
-    }
-
-    const response = await res.json();
-
-    if (response.stop_reason === 'tool_use') {
-      const toolUses = response.content.filter(b => b.type === 'tool_use');
-      const toolResults = [];
-      for (const toolUse of toolUses) {
-        let result;
-        try {
-          result = await executeTool(toolUse.name, toolUse.input);
-        } catch (e) {
-          result = { error: e.message };
-        }
-        toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(result) });
-      }
-      messages.push({ role: 'assistant', content: response.content });
-      messages.push({ role: 'user', content: toolResults });
-    } else {
-      return response.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
-    }
-  }
-  throw new Error('Agent exceeded max iterations');
+  const result = await runAgentConversation({
+    role: 'president_agent',
+    userMessage,
+    history: [],
+    channel: 'telegram'
+  });
+  const label = result && result.agent_name ? `[${result.agent_name}] ` : '';
+  return `${label}${result.reply || ''}`.trim();
 }
 
 // ---- NETLIFY HANDLER ----

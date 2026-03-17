@@ -8,6 +8,12 @@
 [functions.agent-proxy]
   timeout = 60
 
+[functions.agent-router]
+  timeout = 60
+
+[functions.agent-org]
+  timeout = 30
+
 [functions.send-email]
   timeout = 30
 
@@ -98,6 +104,16 @@
 [functions.sponsorship-claim-nurture]
   schedule = "15 * * * *"
   timeout = 30
+
+[[redirects]]
+  from = "/api/agent-router"
+  to = "/.netlify/functions/agent-router"
+  status = 200
+
+[[redirects]]
+  from = "/api/agent-org"
+  to = "/.netlify/functions/agent-org"
+  status = 200
 
 [[redirects]]
   from = "/api/cmo-config"

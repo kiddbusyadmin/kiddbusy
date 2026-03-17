@@ -1104,14 +1104,23 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 <div class="view" id="view-agent">
   <div class="agent-sidebar">
     <div class="sidebar-sec">
+      <div class="sidebar-lbl">Agent Org</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+        <select id="agent-role-select" onchange="onAgentRoleChanged()" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-family:var(--mono);font-size:.74rem">
+          <option value="president_agent">President</option>
+        </select>
+      </div>
+      <div id="agent-org-summary" style="font-size:.76rem;color:var(--muted);line-height:1.45">President is the default manager. Specialists report up but remain directly accessible.</div>
+      <div id="agent-roster" style="margin-top:10px;display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+    <div class="sidebar-sec">
       <div class="sidebar-lbl">Quick Commands</div>
       <button class="q-cmd" onclick="sendQuick('What is pending right now? Give me counts for submissions and reviews.')">Pending items</button>
-      <button class="q-cmd" onclick="sendQuick('How many email subscribers do we have?')">Email list size</button>
-      <button class="q-cmd" onclick="sendQuick('Approve all pending reviews that look legitimate')">Approve reviews</button>
-      <button class="q-cmd" onclick="sendQuick('Give me a full status summary of the site')">Full summary</button>
-      <button class="q-cmd" onclick="sendQuick('Any new sponsorship inquiries?')">Sponsorships</button>
-      <button class="q-cmd" onclick="sendQuick('Which cities are getting the most searches?')">City traffic</button>
-      <button class="q-cmd" onclick="sendQuick('What is the review funnel drop-off rate?')">Review funnel</button>
+      <button class="q-cmd" onclick="sendQuick('Give me a full status summary of the site through the President lens.')">President summary</button>
+      <button class="q-cmd" onclick="sendQuick('/cmo What are our best traffic and SEO moves right now?')">CMO traffic</button>
+      <button class="q-cmd" onclick="sendQuick('/accountant What is current revenue, burn, and 30 day projection?')">Accountant P&amp;L</button>
+      <button class="q-cmd" onclick="sendQuick('/ops Any broken workflows, stale data, or approval queues need attention?')">Ops health</button>
+      <button class="q-cmd" onclick="sendQuick('President, create a Support agent who monitors contact issues and summarizes customer pain points.')">Create agent</button>
     </div>
     <div class="sidebar-sec" style="flex:1;overflow:hidden;display:flex;flex-direction:column;border-bottom:none;">
       <div class="sidebar-lbl">Agent Log</div>
@@ -1156,6 +1165,8 @@ var searchesRange = '24h';
 var LOGIN_STATE_KEY = 'kiddbusy_hq_unlocked';
 var _cmoConfig = null;
 var includeInternalTraffic = false;
+var _agentRegistry = null;
+var _agentRole = 'president_agent';
 
 var EVENT_COLORS = {
   city_search:'#4d9fff', multi_city_session:'#7c5cbf',
@@ -1222,6 +1233,9 @@ function switchTab(name, el) {
   }
   if (name === 'finance') {
     loadFinanceDashboard();
+  }
+  if (name === 'agent') {
+    loadAgentOrg();
   }
   if (name === 'agentsummary') {
     loadAgentSummary();
@@ -3585,7 +3599,55 @@ function sendQuick(text) {
   document.querySelectorAll('.view').forEach(function(v) {
     v.classList.toggle('active', v.id === 'view-agent');
   });
+  loadAgentOrg();
   runAgent(text);
+}
+
+async function loadAgentOrg() {
+  try {
+    var res = await fetch('/api/agent-org', { headers: { 'X-Requested-From': 'kiddbusy-hq' } });
+    var out = await res.json();
+    if (!res.ok) throw new Error(out.error || 'Failed to load agent org');
+    _agentRegistry = out.registry || null;
+    renderAgentOrg();
+  } catch (e) {
+    addLog('[agent-org-error] ' + e.message, 'err');
+  }
+}
+
+function renderAgentOrg() {
+  var select = document.getElementById('agent-role-select');
+  var roster = document.getElementById('agent-roster');
+  var summary = document.getElementById('agent-org-summary');
+  if (!select || !roster || !_agentRegistry || !_agentRegistry.agents) return;
+  var current = _agentRole || _agentRegistry.default_role || 'president_agent';
+  select.innerHTML = (_agentRegistry.agents || []).filter(function(a) {
+    return !!a.direct_access;
+  }).map(function(agent) {
+    var selected = current === agent.key ? ' selected' : '';
+    return '<option value="' + agent.key + '"' + selected + '>' + agent.name + '</option>';
+  }).join('');
+  roster.innerHTML = (_agentRegistry.agents || []).map(function(agent) {
+    var badge = agent.key === 'president_agent' ? 'President' : ((agent.report_to || 'none') === 'president_agent' ? 'Reports to President' : 'Custom');
+    return '<div style="border:1px solid var(--border);border-radius:10px;padding:8px 10px;background:var(--surface2)">' +
+      '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center">' +
+      '<div style="font-size:.8rem;font-weight:600">' + (agent.name || agent.key) + '</div>' +
+      '<div class="panel-badge" style="font-size:.62rem">' + badge + '</div>' +
+      '</div>' +
+      '<div style="font-size:.72rem;color:var(--muted);margin-top:4px;line-height:1.4">' + (agent.description || 'No description yet.') + '</div>' +
+      '</div>';
+  }).join('');
+  summary.textContent = 'Default: ' + ((_agentRegistry.default_role || 'president_agent').replace(/_/g, ' ')) + '. President manages specialists, and you can talk to any of them directly.';
+}
+
+function onAgentRoleChanged() {
+  var select = document.getElementById('agent-role-select');
+  _agentRole = (select && select.value) || 'president_agent';
+  var currentAgent = ((_agentRegistry && _agentRegistry.agents) || []).find(function(a) { return a.key === _agentRole; });
+  var summary = document.getElementById('agent-org-summary');
+  if (summary && currentAgent) {
+    summary.textContent = currentAgent.name + ': ' + (currentAgent.description || 'Active agent selected.');
+  }
 }
 
 // ===== AGENT LOOP =====
@@ -3600,72 +3662,32 @@ async function runAgent(userText) {
   addLog('User: ' + userText.substring(0, 60));
 
   try {
-    var messages = convHistory.slice();
-    var iterations = 0;
+    var res = await fetch('/api/agent-router', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
+      body: JSON.stringify({
+        role: _agentRole || 'president_agent',
+        message: userText,
+        history: convHistory.slice(-12),
+        channel: 'dashboard'
+      })
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Agent request failed');
 
-    while (iterations < 15) {
-      iterations++;
+    var indicator = document.getElementById('typing-indicator');
+    if (indicator) indicator.remove();
 
-      var res = await fetch('/.netlify/functions/agent-proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-requested-from': 'kiddbusy-hq' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 2048,
-          system: AGENT_SYSTEM,
-          tools: AGENT_TOOLS,
-          messages: messages
-        })
-      });
-
-      if (!res.ok) {
-        var errData = await res.json();
-        throw new Error(errData.error || 'API error ' + res.status);
-      }
-
-      var data = await res.json();
-      addLog('[' + iterations + '] stop=' + data.stop_reason);
-
-      if (data.stop_reason === 'tool_use') {
-        var toolUses = data.content.filter(function(b) { return b.type === 'tool_use'; });
-        var toolResults = [];
-
-        for (var i = 0; i < toolUses.length; i++) {
-          var tu = toolUses[i];
-          var result = await execTool(tu.name, tu.input);
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: tu.id,
-            content: JSON.stringify(result)
-          });
-        }
-
-        messages.push({ role: 'assistant', content: data.content });
-        messages.push({ role: 'user', content: toolResults });
-
-      } else {
-        // Final response
-        var textBlocks = data.content.filter(function(b) { return b.type === 'text'; });
-        var fullText = textBlocks.map(function(b) { return b.text; }).join('\n');
-
-        var indicator = document.getElementById('typing-indicator');
-        if (indicator) indicator.remove();
-
-        addMsg('agent', fullText);
-        convHistory.push({ role: 'assistant', content: fullText });
-        addLog('Done.', 'ok');
-
-        // Refresh dashboard data silently
-        loadAll();
-        break;
-      }
+    var prefix = data && data.agent_name ? '[' + data.agent_name + '] ' : '';
+    var fullText = prefix + (data.reply || '');
+    addMsg('agent', fullText);
+    convHistory.push({ role: 'assistant', content: fullText });
+    if (data.registry) {
+      _agentRegistry = data.registry;
+      renderAgentOrg();
     }
-
-    if (iterations >= 15) {
-      var indicator2 = document.getElementById('typing-indicator');
-      if (indicator2) indicator2.remove();
-      addMsg('agent', 'Hit iteration limit. Please try a more specific question.');
-    }
+    addLog('Done via ' + (data.provider || 'agent') + '.', 'ok');
+    loadAll();
 
   } catch(err) {
     var indicator3 = document.getElementById('typing-indicator');
