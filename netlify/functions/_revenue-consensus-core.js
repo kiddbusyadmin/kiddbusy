@@ -4,6 +4,8 @@ const { logAgentActivity } = require('./_agent-activity');
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const CONSENSUS_MODEL = process.env.REVENUE_CONSENSUS_MODEL || 'claude-sonnet-4-20250514';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const OPENAI_CONSENSUS_MODEL = process.env.OPENAI_CONSENSUS_MODEL || 'gpt-4.1';
 const OWNER_SUMMARY_EMAIL = process.env.OWNER_SUMMARY_EMAIL || 'admin@kiddbusy.com';
 
 function json(statusCode, payload) {
@@ -150,11 +152,27 @@ function safeParseJsonCandidate(text) {
   }
 }
 
-async function generateConsensusReport(input) {
-  if (!ANTHROPIC_API_KEY) {
-    throw new Error('ANTHROPIC_API_KEY not configured');
+function extractOpenAiText(data) {
+  if (!data) return '';
+  const chunks = [];
+  if (typeof data.output_text === 'string' && data.output_text.trim()) {
+    chunks.push(data.output_text);
   }
+  if (Array.isArray(data.output)) {
+    for (const item of data.output) {
+      if (!item) continue;
+      if (typeof item.text === 'string') chunks.push(item.text);
+      if (Array.isArray(item.content)) {
+        for (const c of item.content) {
+          if (c && typeof c.text === 'string') chunks.push(c.text);
+        }
+      }
+    }
+  }
+  return chunks.join('\n');
+}
 
+async function generateConsensusReport(input) {
   const system = [
     'You are a strict executive facilitation agent for KiddBusy.',
     'Simulate a daily working session between two internal agents: CMO and Accountant.',
@@ -183,28 +201,68 @@ async function generateConsensusReport(input) {
     JSON.stringify(input)
   ].join('\n');
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: CONSENSUS_MODEL,
-      max_tokens: 1600,
-      temperature: 0.2,
-      system,
-      messages: [{ role: 'user', content: prompt }]
-    })
-  });
-
-  const body = await response.json();
-  if (!response.ok) {
-    throw new Error((body && body.error && body.error.message) || 'Consensus model request failed');
+  let text = '';
+  let primaryError = null;
+  if (ANTHROPIC_API_KEY) {
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: CONSENSUS_MODEL,
+          max_tokens: 1600,
+          temperature: 0.2,
+          system,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        throw new Error((body && body.error && body.error.message) || 'Consensus model request failed');
+      }
+      text = extractTextFromAnthropic(body);
+    } catch (err) {
+      primaryError = err;
+    }
+  } else {
+    primaryError = new Error('ANTHROPIC_API_KEY not configured');
   }
 
-  const text = extractTextFromAnthropic(body);
+  if (!text.trim()) {
+    if (!OPENAI_API_KEY) {
+      throw primaryError || new Error('No LLM provider available');
+    }
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: OPENAI_CONSENSUS_MODEL,
+        input: [
+          { role: 'system', content: system },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.2,
+        max_output_tokens: 1800
+      })
+    });
+    const rawText = await response.text();
+    let body = null;
+    try { body = rawText ? JSON.parse(rawText) : null; } catch (_) { body = null; }
+    if (!response.ok) {
+      const msg = body && body.error && body.error.message ? body.error.message : `OpenAI HTTP ${response.status}`;
+      const pri = primaryError ? String(primaryError.message || primaryError) : 'none';
+      throw new Error(`Anthropic+OpenAI failed (${pri}; ${msg})`);
+    }
+    text = extractOpenAiText(body);
+  }
+
   const parsed = safeParseJsonCandidate(text);
   if (!parsed || typeof parsed !== 'object') {
     throw new Error('Consensus model returned non-JSON output');

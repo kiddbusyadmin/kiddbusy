@@ -2,6 +2,12 @@ const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const OWNER_LEADS_MODEL = process.env.OWNER_LEADS_MODEL || 'claude-haiku-4-5-20251001';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const OPENAI_OWNER_LEADS_MODEL = process.env.OPENAI_OWNER_LEADS_MODEL || 'gpt-4.1-mini';
+const OPENAI_WEB_SEARCH_TOOL_TYPES = String(process.env.OPENAI_WEB_SEARCH_TOOL_TYPES || 'web_search,web_search_preview')
+  .split(',')
+  .map((v) => String(v || '').trim())
+  .filter(Boolean);
 const { logAgentActivity } = require('./_agent-activity');
 
 function json(statusCode, payload) {
@@ -53,6 +59,108 @@ function parseJsonArrayFromText(raw) {
   const arrMatch = fenced.match(/\[[\s\S]*\]/);
   if (!arrMatch) throw new Error('No JSON array found in model output');
   return JSON.parse(arrMatch[0]);
+}
+
+function extractOpenAiText(data) {
+  if (!data) return '';
+  const chunks = [];
+  if (typeof data.output_text === 'string' && data.output_text.trim()) {
+    chunks.push(data.output_text);
+  }
+  if (Array.isArray(data.output)) {
+    for (const item of data.output) {
+      if (!item) continue;
+      if (typeof item.text === 'string') chunks.push(item.text);
+      if (Array.isArray(item.content)) {
+        for (const c of item.content) {
+          if (c && typeof c.text === 'string') chunks.push(c.text);
+        }
+      }
+    }
+  }
+  return chunks.join('\n');
+}
+
+async function callAnthropicWebSearchJson({ system, user, maxTokens, expect }) {
+  if (!ANTHROPIC_API_KEY) throw new Error('Anthropic key missing');
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: OWNER_LEADS_MODEL,
+      max_tokens: maxTokens,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      system,
+      messages: [{ role: 'user', content: user }]
+    })
+  });
+  const raw = await response.json();
+  if (!response.ok) {
+    throw new Error(raw && raw.error && raw.error.message ? raw.error.message : 'Anthropic API error');
+  }
+  const textBlocks = (raw.content || []).filter((b) => b.type === 'text');
+  const text = textBlocks.length ? textBlocks[textBlocks.length - 1].text : '';
+  const parsed = expect === 'array' ? parseJsonArrayFromText(text) : parseJsonFromText(text);
+  return { provider: 'anthropic', model: OWNER_LEADS_MODEL, parsed, raw_response: raw };
+}
+
+async function callOpenAiWebSearchJson({ system, user, maxTokens, expect }) {
+  if (!OPENAI_API_KEY) throw new Error('OpenAI key missing');
+  let lastErr = null;
+  const toolTypes = OPENAI_WEB_SEARCH_TOOL_TYPES.length ? OPENAI_WEB_SEARCH_TOOL_TYPES : ['web_search'];
+  for (const toolType of toolTypes) {
+    try {
+      const response = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: OPENAI_OWNER_LEADS_MODEL,
+          input: [
+            { role: 'system', content: system },
+            { role: 'user', content: user }
+          ],
+          tools: [{ type: toolType }],
+          max_output_tokens: maxTokens
+        })
+      });
+      const rawText = await response.text();
+      let raw = null;
+      try { raw = rawText ? JSON.parse(rawText) : null; } catch (_) { raw = null; }
+      if (!response.ok) {
+        const msg = raw && raw.error && raw.error.message ? raw.error.message : `OpenAI HTTP ${response.status}`;
+        throw new Error(msg);
+      }
+      const text = extractOpenAiText(raw);
+      const parsed = expect === 'array' ? parseJsonArrayFromText(text) : parseJsonFromText(text);
+      return { provider: 'openai', model: OPENAI_OWNER_LEADS_MODEL, parsed, raw_response: raw };
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr || new Error('OpenAI fallback failed');
+}
+
+async function callWebSearchJsonWithFallback({ system, user, maxTokens, expect }) {
+  let primaryErr = null;
+  try {
+    return await callAnthropicWebSearchJson({ system, user, maxTokens, expect });
+  } catch (err) {
+    primaryErr = err;
+  }
+  try {
+    return await callOpenAiWebSearchJson({ system, user, maxTokens, expect });
+  } catch (fallbackErr) {
+    const p = primaryErr ? String(primaryErr.message || primaryErr) : 'primary_failed';
+    const f = fallbackErr ? String(fallbackErr.message || fallbackErr) : 'fallback_failed';
+    throw new Error(`Anthropic+OpenAI failed (${p}; ${f})`);
+  }
 }
 
 function normalizeLead(parsed, fallbackWebsite) {
@@ -159,32 +267,16 @@ Rules:
 Goal: produce a suspected owner name and best contact email for outreach inviting business claim on KiddBusy.
 If uncertain, lower confidence and explain briefly in notes.`;
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: OWNER_LEADS_MODEL,
-      max_tokens: 1200,
-      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-      system,
-      messages: [{ role: 'user', content: user }]
-    })
+  const llm = await callWebSearchJsonWithFallback({
+    system,
+    user,
+    maxTokens: 1200,
+    expect: 'object'
   });
-
-  const raw = await response.json();
-  if (!response.ok) {
-    throw new Error(raw && raw.error && raw.error.message ? raw.error.message : 'Anthropic API error');
-  }
-
-  const textBlocks = (raw.content || []).filter((b) => b.type === 'text');
-  const text = textBlocks.length ? textBlocks[textBlocks.length - 1].text : '';
-  const parsed = parseJsonFromText(text);
+  const parsed = llm.parsed;
   const lead = normalizeLead(parsed, website);
-  lead.raw_response = raw;
+  lead.raw_response = llm.raw_response;
+  lead.source_model = llm.model;
   return lead;
 }
 
@@ -231,30 +323,13 @@ ${lines}
 Goal: suspected owner name and best contact email for outreach inviting business claim on KiddBusy.
 If uncertain, lower confidence and explain briefly in notes.`;
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: OWNER_LEADS_MODEL,
-      max_tokens: 3600,
-      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-      system,
-      messages: [{ role: 'user', content: user }]
-    })
+  const llm = await callWebSearchJsonWithFallback({
+    system,
+    user,
+    maxTokens: 3600,
+    expect: 'array'
   });
-
-  const raw = await response.json();
-  if (!response.ok) {
-    throw new Error(raw && raw.error && raw.error.message ? raw.error.message : 'Anthropic API error');
-  }
-
-  const textBlocks = (raw.content || []).filter((b) => b.type === 'text');
-  const text = textBlocks.length ? textBlocks[textBlocks.length - 1].text : '';
-  const parsed = parseJsonArrayFromText(text);
+  const parsed = llm.parsed;
   if (!Array.isArray(parsed)) {
     throw new Error('Batch enrichment returned non-array payload');
   }
@@ -264,7 +339,8 @@ If uncertain, lower confidence and explain briefly in notes.`;
     const id = Number(item && item.listing_id);
     if (!Number.isFinite(id) || id <= 0) continue;
     byId[id] = normalizeLead(item, null);
-    byId[id].raw_response = raw;
+    byId[id].raw_response = llm.raw_response;
+    byId[id].source_model = llm.model;
   }
   return byId;
 }
@@ -302,7 +378,7 @@ async function upsertLead({ listing, lead }) {
     lead_phone: lead.contact_phone,
     business_website: lead.business_website,
     source_type: 'anthropic_web_search',
-    source_model: OWNER_LEADS_MODEL,
+    source_model: String(lead.source_model || OWNER_LEADS_MODEL),
     confidence: lead.confidence,
     status: 'suspected',
     outreach_stage: 'uncontacted',
@@ -339,8 +415,8 @@ exports.handler = async (event) => {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
     return json(500, { error: 'Supabase service configuration missing' });
   }
-  if (!ANTHROPIC_API_KEY) {
-    return json(500, { error: 'ANTHROPIC_API_KEY missing' });
+  if (!ANTHROPIC_API_KEY && !OPENAI_API_KEY) {
+    return json(500, { error: 'No LLM API key configured (ANTHROPIC_API_KEY or OPENAI_API_KEY required)' });
   }
 
   let body;
