@@ -1,4 +1,5 @@
 const { runCmoBlog } = require('./_cmo-blog-core');
+const { runAgentTasks, runDelegationWatchdog } = require('./_agent-task-runner-core');
 
 function json(statusCode, payload) {
   return {
@@ -34,7 +35,11 @@ exports.handler = async function handler(event) {
   const rawUrl = String(ev.rawUrl || 'https://kiddbusy.local/.netlify/functions/cmo-blog-scheduled');
   const url = new URL(rawUrl);
   const progressOnly = url.searchParams.get('progress_only') === '1';
+  const taskOnly = url.searchParams.get('tasks_only') === '1';
+  const watchdogOnly = url.searchParams.get('watchdog_only') === '1';
   let progress = { success: true, due: 0, sent: [] };
+  let taskRun = { success: true, processed_count: 0, processed: [] };
+  let watchdog = { success: true, stalled_count: 0, escalated_count: 0, inspected: [] };
 
   try {
     progress = await runProgressPulseViaDbProxy();
@@ -42,17 +47,38 @@ exports.handler = async function handler(event) {
     progress = { success: false, error: String((err && err.message) || err || 'Progress pulse failed') };
   }
 
-  if (progressOnly) {
-    return json(progress.success ? 200 : 500, progress);
+  try {
+    taskRun = await runAgentTasks();
+  } catch (err) {
+    taskRun = { success: false, error: String((err && err.message) || err || 'Agent task runner failed') };
+  }
+
+  try {
+    watchdog = await runDelegationWatchdog();
+  } catch (err) {
+    watchdog = { success: false, error: String((err && err.message) || err || 'Delegation watchdog failed') };
+  }
+
+  if (progressOnly || taskOnly || watchdogOnly) {
+    const payload = {
+      progress: progress,
+      tasks: taskRun,
+      watchdog: watchdog
+    };
+    const ok = [progress.success, taskRun.success, watchdog.success].every(Boolean);
+    return json(ok ? 200 : 500, payload);
   }
 
   const isCron = String(ev.httpMethod || 'GET').toUpperCase() === 'GET';
   if (isCron) {
     const minute = new Date().getUTCMinutes();
     if (minute % 20 !== 0) {
-      return json(progress.success ? 200 : 500, {
-        success: !!progress.success,
+      const ok = [progress.success, taskRun.success, watchdog.success].every(Boolean);
+      return json(ok ? 200 : 500, {
+        success: ok,
         progress: progress,
+        tasks: taskRun,
+        watchdog: watchdog,
         blog: { skipped: true, reason: 'blog_runs_every_20_minutes' }
       });
     }
@@ -62,6 +88,8 @@ exports.handler = async function handler(event) {
   try {
     const parsed = JSON.parse(String(blogResponse.body || '{}'));
     parsed.progress = progress;
+    parsed.tasks = taskRun;
+    parsed.watchdog = watchdog;
     blogResponse.body = JSON.stringify(parsed);
   } catch (_) {}
   return blogResponse;

@@ -13,7 +13,7 @@ const { sendCompliantEmail } = require('./_email-compliance');
 const { runCmoBlog } = require('./_cmo-blog-core');
 const { runAgentConversation } = require('./_agent-router-core');
 const accountantAgent = require('./accountant-agent');
-const { runAgentTasks } = require('./_agent-task-runner-core');
+const { runAgentTasks, runDelegationWatchdog } = require('./_agent-task-runner-core');
 
 const ALLOWED_TABLES = {
   submissions: new Set(['pending', 'approved', 'rejected']),
@@ -534,7 +534,7 @@ exports.handler = async (event) => {
     const filters = ['select=*', 'order=updated_at.desc', `limit=${safeLimit}`];
     if (statusFilter) {
       if (statusFilter === 'open_funnel') {
-        filters.push('status=in.(pending_assignment,delegated,in_progress)');
+        filters.push('status=in.(pending_assignment,delegated,in_progress,blocked)');
       } else {
         filters.push(`status=eq.${encodeURIComponent(statusFilter)}`);
       }
@@ -635,7 +635,7 @@ exports.handler = async (event) => {
       for (const sub of subs) {
         const ownerIdentity = String(sub.owner_identity || 'harold');
         const chatId = sub.target_chat_id || TELEGRAM_CHAT_ID;
-        const ordersOut = await sbRequest(`agent_orders?owner_identity=eq.${encodeURIComponent(ownerIdentity)}&status=in.(pending_assignment,delegated,in_progress)&select=*&order=updated_at.desc&limit=30`, {
+        const ordersOut = await sbRequest(`agent_orders?owner_identity=eq.${encodeURIComponent(ownerIdentity)}&status=in.(pending_assignment,delegated,in_progress,blocked)&select=*&order=updated_at.desc&limit=30`, {
           method: 'GET'
         });
         const tasksOut = await sbRequest(`agent_tasks?owner_identity=eq.${encodeURIComponent(ownerIdentity)}&status=in.(open,in_progress)&select=*&order=updated_at.desc&limit=30`, {
@@ -709,7 +709,8 @@ exports.handler = async (event) => {
   if (action === 'run_agent_tasks') {
     try {
       const result = await runAgentTasks();
-      return json(200, result);
+      const watchdog = await runDelegationWatchdog();
+      return json(200, { success: !!(result && result.success && watchdog && watchdog.success), tasks: result, watchdog: watchdog });
     } catch (err) {
       try {
         await sbRequest('agent_activity', {

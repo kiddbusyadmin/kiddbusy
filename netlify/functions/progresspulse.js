@@ -53,7 +53,7 @@ async function getProgressSubscriptions() {
 }
 
 async function getOwnerOrders(ownerIdentity) {
-  return sbRequest('agent_orders?owner_identity=eq.' + encodeURIComponent(ownerIdentity) + '&status=in.(pending_assignment,delegated,in_progress)&select=*&order=updated_at.desc&limit=30', {
+  return sbRequest('agent_orders?owner_identity=eq.' + encodeURIComponent(ownerIdentity) + '&status=in.(pending_assignment,delegated,in_progress,blocked)&select=*&order=updated_at.desc&limit=30', {
     method: 'GET',
     prefer: 'return=representation'
   });

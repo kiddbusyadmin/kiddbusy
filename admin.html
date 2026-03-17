@@ -2959,7 +2959,7 @@ function renderOfficeTaskLine(task) {
   var assigned = humanAgentName(task.assigned_agent_key);
   var requester = humanAgentName(task.requested_by_agent_key || 'president_agent');
   var status = String(task.status || 'open').toLowerCase();
-  var prefix = status === 'in_progress' ? 'is on it' : 'needs to pick this up';
+  var prefix = status === 'in_progress' ? 'is on it' : (status === 'blocked' ? 'is blocked and needs President attention' : 'needs to pick this up');
   return requester + ' to ' + assigned + ': ' + (task.title || 'Untitled task') + '. ' + assigned + ' ' + prefix + '.';
 }
 
@@ -3038,7 +3038,11 @@ async function loadAgentOffice() {
     var reports = results[4] || [];
     var rows7d = rows.filter(function(r) { return isWithinRange(r.created_at, '7d'); });
     var heldOrders = orders.filter(function(o) { return String(o.status || '') === 'pending_assignment'; });
-    var delegatedOrders = orders.filter(function(o) { return String(o.status || '') === 'delegated' || String(o.status || '') === 'in_progress'; });
+    var delegatedOrders = orders.filter(function(o) {
+      var s = String(o.status || '');
+      return s === 'delegated' || s === 'in_progress';
+    });
+    var blockedOrders = orders.filter(function(o) { return String(o.status || '') === 'blocked'; });
     var completedOrders = orders.filter(function(o) { return String(o.status || '') === 'completed'; });
     var speakers = {};
     rows7d.forEach(function(r) {
@@ -3092,6 +3096,10 @@ async function loadAgentOffice() {
               return String(((task.details || {}).order_id || '')) === String(order.order_id || '');
             }) || null;
             var assigned = linkedTask ? humanAgentName(linkedTask.assigned_agent_key) : 'Unassigned';
+            var orderDetails = order.details || {};
+            var watchline = order.status === 'blocked'
+              ? '<div style="margin-top:6px;font-size:.76rem;color:#ff8c6b;line-height:1.45">President escalation: stalled ' + (orderDetails.stalled_minutes || orderDetails.president_stalled_minutes || '--') + ' min' + (orderDetails.president_watchdog_attempts ? (' • attempts ' + orderDetails.president_watchdog_attempts) : '') + '</div>'
+              : '';
             return '<div style="padding:12px 0;border-bottom:1px solid var(--border)">' +
               '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">' +
                 '<div style="font-size:.82rem;font-weight:800;color:var(--text)">Order #' + String(order.order_id || '--') + ' • ' + officeStatusLabel(order.status) + '</div>' +
@@ -3105,6 +3113,7 @@ async function loadAgentOffice() {
               '<div style="margin-top:3px;font-size:.82rem;color:var(--text);line-height:1.5">' + (linkedTask
                 ? ('Assigned to ' + assigned + ': ' + compactText(linkedTask.title || 'Untitled task', 220) + (linkedTask.summary ? ' • ' + compactText(linkedTask.summary, 180) : ''))
                 : 'Not delegated yet.') + '</div>' +
+              watchline +
               '</div>';
           }).join('')
         : emptyHTML('No tracked owner orders yet');
@@ -3121,6 +3130,10 @@ async function loadAgentOffice() {
               return String(((task.details || {}).order_id || '')) === String(o.order_id || '');
             }) || null;
             var latest = latestActivityForTask(task, rows);
+            var taskDetails = task.details || {};
+            var watchdogLine = taskDetails.watchdog_attempts
+              ? '<div style="margin-top:4px;font-size:.74rem;color:#ffb36b;line-height:1.45">President watchdog: ' + taskDetails.watchdog_attempts + ' attempt' + (taskDetails.watchdog_attempts === 1 ? '' : 's') + (taskDetails.stalled_minutes ? (' • stalled ' + taskDetails.stalled_minutes + ' min') : '') + (taskDetails.president_attention_required ? ' • owner attention requested' : '') + '</div>'
+              : '';
             return '<div style="padding:12px 0;border-bottom:1px solid var(--border)">' +
               '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">' +
                 '<div style="font-size:.82rem;font-weight:800;color:var(--text)">' + humanAgentName(task.assigned_agent_key) + ' • ' + officeStatusLabel(task.status) + '</div>' +
@@ -3132,6 +3145,7 @@ async function loadAgentOffice() {
               '<div style="margin-top:3px;font-size:.82rem;color:var(--text);line-height:1.5">' + (latest
                 ? compactText(latest.summary || 'Progress logged.', 260)
                 : 'No subagent progress logged yet.') + '</div>' +
+              watchdogLine +
               '<div style="margin-top:4px;font-family:var(--mono);font-size:.68rem;color:var(--muted)">' + (latest ? formatLocalTimestamp(latest.created_at) : 'awaiting first update') + '</div>' +
               '</div>';
           }).join('')
@@ -3166,8 +3180,8 @@ async function loadAgentOffice() {
     document.getElementById('officekpi-orders-sub').textContent = 'last tracked: ' + (orders.length ? formatLocalTimestamp(orders[0].created_at) : '--');
     document.getElementById('officekpi-held').textContent = heldOrders.length;
     document.getElementById('officekpi-held-sub').textContent = orders.length ? (Math.round((heldOrders.length / Math.max(orders.length, 1)) * 100) + '% of total') : 'pending assignment';
-    document.getElementById('officekpi-delegated').textContent = delegatedOrders.length;
-    document.getElementById('officekpi-delegated-sub').textContent = openTasks.filter(function(t) { return String(t.status || '') === 'in_progress'; }).length + ' in progress';
+    document.getElementById('officekpi-delegated').textContent = delegatedOrders.length + blockedOrders.length;
+    document.getElementById('officekpi-delegated-sub').textContent = openTasks.filter(function(t) { return String(t.status || '') === 'in_progress'; }).length + ' in progress • ' + blockedOrders.length + ' escalated';
     document.getElementById('officekpi-completed').textContent = completedOrders.length;
     document.getElementById('officekpi-completed-sub').textContent = orders.length ? (Math.round((completedOrders.length / Math.max(orders.length, 1)) * 100) + '% completion') : 'performance funnel';
 
@@ -3175,11 +3189,13 @@ async function loadAgentOffice() {
       var totalOrders = Math.max(orders.length, 1);
       var heldPct = Math.round((heldOrders.length / totalOrders) * 100);
       var delegatedPct = Math.round((delegatedOrders.length / totalOrders) * 100);
+      var blockedPct = Math.round((blockedOrders.length / totalOrders) * 100);
       var completedPct = Math.round((completedOrders.length / totalOrders) * 100);
       funnelEl.innerHTML =
         '<div class="funnel-row start"><div class="funnel-label">Orders Received</div><div class="funnel-bar-bg"><div class="funnel-bar-fill" style="width:100%">' + orders.length + '</div></div><div class="funnel-pct">100%</div></div>' +
         '<div class="funnel-row abandon"><div class="funnel-label">Held By President</div><div class="funnel-bar-bg"><div class="funnel-bar-fill" style="width:' + heldPct + '%">' + heldOrders.length + '</div></div><div class="funnel-pct">' + heldPct + '%</div></div>' +
         '<div class="funnel-row submit"><div class="funnel-label">Delegated</div><div class="funnel-bar-bg"><div class="funnel-bar-fill" style="width:' + delegatedPct + '%">' + delegatedOrders.length + '</div></div><div class="funnel-pct">' + delegatedPct + '%</div></div>' +
+        '<div class="funnel-row abandon"><div class="funnel-label">Escalated By President</div><div class="funnel-bar-bg"><div class="funnel-bar-fill" style="width:' + blockedPct + '%">' + blockedOrders.length + '</div></div><div class="funnel-pct">' + blockedPct + '%</div></div>' +
         '<div class="funnel-row submit"><div class="funnel-label">Completed</div><div class="funnel-bar-bg"><div class="funnel-bar-fill" style="width:' + completedPct + '%">' + completedOrders.length + '</div></div><div class="funnel-pct">' + completedPct + '%</div></div>';
     }
 

@@ -1,12 +1,26 @@
 const { runCmoBlog } = require('./_cmo-blog-core');
 const { runAgentConversation } = require('./_agent-router-core');
 const accountantAgent = require('./accountant-agent');
+const { logAgentActivity } = require('./_agent-activity');
 
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
+
+const STALE_OPEN_MINUTES = Math.max(Number(process.env.AGENT_TASK_STALE_OPEN_MINUTES) || 20, 5);
+const STALE_IN_PROGRESS_MINUTES = Math.max(Number(process.env.AGENT_TASK_STALE_IN_PROGRESS_MINUTES) || 45, 10);
+const STALE_ESCALATE_MINUTES = Math.max(Number(process.env.AGENT_TASK_STALE_ESCALATE_MINUTES) || 90, 15);
+const WATCHDOG_ESCALATION_COOLDOWN_MINUTES = Math.max(Number(process.env.AGENT_TASK_ESCALATION_COOLDOWN_MINUTES) || 180, 30);
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function minutesSince(value) {
+  const ms = new Date(String(value || '')).getTime();
+  if (!Number.isFinite(ms)) return null;
+  return Math.max(0, Math.round((Date.now() - ms) / 60000));
 }
 
 function cleanCityName(value) {
@@ -51,6 +65,32 @@ async function patchTask(taskId, patch) {
     prefer: 'return=representation'
   });
   return Array.isArray(out.data) && out.data.length ? out.data[0] : null;
+}
+
+async function patchOrder(orderId, patch) {
+  const out = await sbRequest(`agent_orders?order_id=eq.${encodeURIComponent(String(orderId))}`, {
+    method: 'PATCH',
+    body: patch,
+    prefer: 'return=representation'
+  });
+  return Array.isArray(out.data) && out.data.length ? out.data[0] : null;
+}
+
+async function sendTelegram(text, chatId = TELEGRAM_CHAT_ID) {
+  if (!TELEGRAM_TOKEN || !chatId) return { ok: false, skipped: 'telegram_not_configured' };
+  const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: String(text || '').slice(0, 4000)
+    })
+  });
+  const bodyText = await response.text();
+  if (!response.ok) {
+    throw new Error('Telegram send failed (' + response.status + '): ' + bodyText);
+  }
+  return { ok: true };
 }
 
 async function runCmoBlogTask(body) {
@@ -125,6 +165,158 @@ async function listOpenTasksByAgent(agentKey) {
     '&status=in.(open,in_progress)&limit=50';
   const out = await sbRequest(query, { method: 'GET' });
   return Array.isArray(out.data) ? out.data : [];
+}
+
+async function loadOpenOrdersByIdMap() {
+  const out = await sbRequest('agent_orders?select=*&status=in.(pending_assignment,delegated,in_progress,blocked)&limit=200', {
+    method: 'GET'
+  });
+  const rows = Array.isArray(out.data) ? out.data : [];
+  const byId = new Map();
+  for (const row of rows) byId.set(String(row.order_id), row);
+  return byId;
+}
+
+function buildStallMessage(task, order, ageMinutes, attemptCount, level) {
+  const orderLabel = order ? ('Order #' + String(order.order_id)) : ('Task #' + String(task.task_id));
+  const agentLabel = String(task.assigned_agent_key || 'subagent').replace(/_agent$/, '');
+  const title = String(task.title || order?.title || 'Untitled task').trim();
+  const base = `President: ${orderLabel} delegated to ${agentLabel} has been stalled for about ${ageMinutes} minutes.`;
+  const detail = title ? ` Task: ${title}.` : '';
+  const attempt = attemptCount > 0 ? ` Watchdog attempts so far: ${attemptCount}.` : '';
+  if (level === 'escalate') {
+    return `${base}${detail}${attempt} I have already tried to keep it moving and I need your attention if this remains blocked.`;
+  }
+  return `${base}${detail}${attempt} I am re-checking this delegation and pushing it forward.`;
+}
+
+async function runDelegationWatchdog() {
+  const tasksOut = await sbRequest('agent_tasks?select=*&status=in.(open,in_progress)&order=updated_at.asc&limit=100', {
+    method: 'GET'
+  });
+  const tasks = Array.isArray(tasksOut.data) ? tasksOut.data : [];
+  const ordersById = await loadOpenOrdersByIdMap();
+  const inspected = [];
+  let stalledCount = 0;
+  let escalatedCount = 0;
+
+  for (const task of tasks) {
+    const status = String(task.status || '').toLowerCase();
+    const updatedMinutes = minutesSince(task.updated_at || task.created_at);
+    if (updatedMinutes == null) continue;
+
+    const staleThreshold = status === 'open' ? STALE_OPEN_MINUTES : STALE_IN_PROGRESS_MINUTES;
+    if (updatedMinutes < staleThreshold) continue;
+
+    const taskDetails = Object.assign({}, task.details || {});
+    const watchdogAttempts = Number(taskDetails.watchdog_attempts || 0);
+    const lastWatchdogMinutes = minutesSince(taskDetails.last_watchdog_at);
+    if (lastWatchdogMinutes != null && lastWatchdogMinutes < 10) continue;
+
+    const orderId = taskDetails.order_id || null;
+    const order = orderId ? (ordersById.get(String(orderId)) || null) : null;
+    const stalledSince = taskDetails.stalled_since || (task.updated_at || task.created_at || nowIso());
+    const stalledMinutes = minutesSince(stalledSince) || updatedMinutes;
+    const nextAttempts = watchdogAttempts + 1;
+    const shouldEscalate =
+      stalledMinutes >= STALE_ESCALATE_MINUTES ||
+      watchdogAttempts >= 2 ||
+      String(taskDetails.watchdog_status || '') === 'blocked';
+    const lastEscalatedMinutes = minutesSince(taskDetails.last_escalated_at);
+    const escalationAllowed = shouldEscalate && (lastEscalatedMinutes == null || lastEscalatedMinutes >= WATCHDOG_ESCALATION_COOLDOWN_MINUTES);
+
+    const patchedDetails = Object.assign({}, taskDetails, {
+      stalled_since: stalledSince,
+      stalled_minutes: stalledMinutes,
+      watchdog_attempts: nextAttempts,
+      last_watchdog_at: nowIso(),
+      watchdog_status: escalationAllowed ? 'escalated' : 'investigating',
+      president_attention_required: !!escalationAllowed,
+      watchdog_note: escalationAllowed
+        ? 'President escalated this stalled delegation to the owner.'
+        : 'President detected a stalled delegation and is attempting to recover it.'
+    });
+
+    const nextTaskStatus = escalationAllowed ? 'in_progress' : 'open';
+    await patchTask(task.task_id, {
+      status: nextTaskStatus,
+      updated_at: nowIso(),
+      details: Object.assign({}, patchedDetails, escalationAllowed ? { last_escalated_at: nowIso() } : {})
+    });
+
+    if (orderId) {
+      const orderDetails = Object.assign({}, (order && order.details) || {}, {
+        task_id: task.task_id,
+        delegated_agent_key: task.assigned_agent_key || null,
+        president_watchdog_status: escalationAllowed ? 'escalated' : 'investigating',
+        president_watchdog_attempts: nextAttempts,
+        stalled_minutes: stalledMinutes,
+        last_watchdog_at: nowIso(),
+        president_attention_required: !!escalationAllowed
+      });
+      await patchOrder(orderId, {
+        status: escalationAllowed ? 'blocked' : 'in_progress',
+        summary: escalationAllowed
+          ? ('President escalated a stalled delegation after ' + String(stalledMinutes) + ' minutes.')
+          : ('President is re-driving a stalled delegation after ' + String(stalledMinutes) + ' minutes.'),
+        details: orderDetails,
+        updated_at: nowIso()
+      });
+    }
+
+    const activitySummary = escalationAllowed
+      ? ('President escalated stalled delegation for ' + (orderId ? ('order #' + String(orderId)) : ('task #' + String(task.task_id))) + '.')
+      : ('President detected and retried stalled delegation for ' + (orderId ? ('order #' + String(orderId)) : ('task #' + String(task.task_id))) + '.');
+    await logAgentActivity({
+      agentKey: 'president_agent',
+      status: escalationAllowed ? 'warning' : 'info',
+      summary: activitySummary,
+      details: {
+        task_id: task.task_id,
+        order_id: orderId,
+        assigned_agent_key: task.assigned_agent_key || null,
+        task_title: task.title || '',
+        stalled_minutes: stalledMinutes,
+        watchdog_attempts: nextAttempts,
+        escalated: !!escalationAllowed
+      }
+    });
+
+    if (escalationAllowed) {
+      escalatedCount += 1;
+      try {
+        await sendTelegram(buildStallMessage(task, order, stalledMinutes, nextAttempts, 'escalate'));
+      } catch (err) {
+        await logAgentActivity({
+          agentKey: 'president_agent',
+          status: 'error',
+          summary: 'President failed to send stalled-delegation escalation on Telegram.',
+          details: {
+            task_id: task.task_id,
+            order_id: orderId,
+            error: String((err && err.message) || err || 'unknown error').slice(0, 500)
+          }
+        });
+      }
+    }
+
+    stalledCount += 1;
+    inspected.push({
+      task_id: task.task_id,
+      order_id: orderId,
+      assigned_agent_key: task.assigned_agent_key || null,
+      stalled_minutes: stalledMinutes,
+      attempts: nextAttempts,
+      escalated: !!escalationAllowed
+    });
+  }
+
+  return {
+    success: true,
+    stalled_count: stalledCount,
+    escalated_count: escalatedCount,
+    inspected
+  };
 }
 
 async function runAgentTasks() {
@@ -336,5 +528,6 @@ async function runAgentTasks() {
 }
 
 module.exports = {
-  runAgentTasks
+  runAgentTasks,
+  runDelegationWatchdog
 };

@@ -157,7 +157,7 @@ async function getOwnerOrders({ ownerIdentity = 'harold', limit = 50, status = '
     `limit=${safe}`
   ];
   if (status) {
-    if (status === 'open_funnel') filters.push('status=in.(pending_assignment,delegated,in_progress)');
+    if (status === 'open_funnel') filters.push('status=in.(pending_assignment,delegated,in_progress,blocked)');
     else filters.push(`status=eq.${encodeURIComponent(status)}`);
   }
   const out = await sbFetch(`agent_orders?${filters.join('&')}`);
