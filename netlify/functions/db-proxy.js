@@ -18,6 +18,7 @@ const { runAgentTasks, runDelegationWatchdog } = require('./_agent-task-runner-c
 const ALLOWED_TABLES = {
   submissions: new Set(['pending', 'approved', 'rejected']),
   reviews: new Set(['pending', 'approved', 'rejected']),
+  agent_tasks: new Set(['open', 'in_progress', 'completed', 'blocked']),
   sponsorships: new Set([
     'pending',
     'pending_review',
