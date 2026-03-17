@@ -1,15 +1,3 @@
-const { logAgentActivity } = require('./_agent-activity');
-const {
-  getProgressSubscriptions,
-  updateProgressSubscription,
-  createProgressReport,
-  getOwnerOrders,
-  getOpenTasks
-} = require('./_agent-memory');
-
-const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
-
 function json(statusCode, payload) {
   return {
     statusCode,
@@ -36,6 +24,7 @@ function humanAgentName(key) {
 }
 
 async function sendTelegram(chatId, text) {
+  const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
   if (!TELEGRAM_TOKEN || !chatId) throw new Error('Telegram not configured');
   const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
     method: 'POST',
@@ -80,6 +69,15 @@ function buildProgressText(subscription, orders, tasks) {
 
 exports.handler = async () => {
   try {
+    const { logAgentActivity } = require('./_agent-activity');
+    const {
+      getProgressSubscriptions,
+      updateProgressSubscription,
+      createProgressReport,
+      getOwnerOrders,
+      getOpenTasks
+    } = require('./_agent-memory');
+    const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
     const subs = await getProgressSubscriptions({ ownerIdentity: '', status: 'active', dueOnly: true, limit: 50 });
     const sent = [];
     for (const sub of subs) {
@@ -119,12 +117,20 @@ exports.handler = async () => {
     }
     return json(200, { success: true, due: subs.length, sent });
   } catch (err) {
-    await logAgentActivity({
-      agentKey: 'president_agent',
-      status: 'error',
-      summary: `Progress pulse failed: ${String(err.message || 'unknown error').slice(0, 800)}`,
-      details: { run_type: 'agent_progress_pulse' }
+    try {
+      const { logAgentActivity } = require('./_agent-activity');
+      await logAgentActivity({
+        agentKey: 'president_agent',
+        status: 'error',
+        summary: `Progress pulse failed: ${String(err.message || 'unknown error').slice(0, 800)}`,
+        details: { run_type: 'agent_progress_pulse' }
+      });
+    } catch (_) {
+      // ignore secondary logging failures
+    }
+    return json(500, {
+      error: err && err.message ? err.message : 'Progress pulse failed',
+      type: err && err.name ? err.name : 'Error'
     });
-    return json(500, { error: err.message || 'Progress pulse failed' });
   }
 };
