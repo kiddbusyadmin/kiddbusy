@@ -720,13 +720,23 @@ function replyImpliesFollowUp(reply) {
   if (!text) return false;
   return (
     /\bi(?:'|’)ll\s+(track|update|follow up|get back|report back|let you know)\b/.test(text) ||
-    /\byou(?:'|’)ll hear from me\b/.test(text) ||
+    /\byou(?:'|’)ll\s+(hear from me|receive|get|see)\b/.test(text) ||
+    /\bon telegram\b/.test(text) ||
     /\bonce [^.]{0,120}\b(delivers|finishes|completes)\b/.test(text)
   );
 }
 
+function textRequestsFollowUp(text) {
+  var raw = String(text || '').toLowerCase();
+  if (!raw) return false;
+  return (
+    /\b(get back to me|keep me posted|follow up|update me|let me know|report back)\b/.test(raw) ||
+    (/\btelegram\b/.test(raw) && /\b(done|complete|finished|when it is done|when complete|once complete|once done)\b/.test(raw))
+  );
+}
+
 async function ensureProgressFollowUp(reply, execContext) {
-  if (!replyImpliesFollowUp(reply)) return null;
+  if (!replyImpliesFollowUp(reply) && !textRequestsFollowUp(execContext.userMessage || '')) return null;
   if (execContext.progressSubscriptionId) return execContext.progressSubscriptionId;
   if (execContext.channel !== 'telegram') return null;
   if (!execContext.currentOrderId) return null;
@@ -761,6 +771,21 @@ function appendTrackedFollowUp(reply, subscriptionId) {
   var base = String(reply || '').trim();
   if (base.indexOf(footer) >= 0) return base;
   return (base ? (base + '\n\n') : '') + footer;
+}
+
+function sanitizeDelegationText(reply) {
+  var lines = String(reply || '').split('\n');
+  var out = [];
+  var sawTrackedDelegation = false;
+  for (var i = 0; i < lines.length; i += 1) {
+    var line = lines[i];
+    if (/^tracked delegation:/i.test(String(line || '').trim())) {
+      if (sawTrackedDelegation) continue;
+      sawTrackedDelegation = true;
+    }
+    out.push(line);
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 async function runAgentConversation({ role = '', userMessage = '', history = [], channel = 'dashboard', threadKey = '', ownerIdentity = 'harold' } = {}) {
@@ -822,7 +847,8 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
     orderUpdated: false,
     channel,
     threadKey: resolvedThreadKey,
-    targetChatId: channel === 'telegram' ? (process.env.TELEGRAM_CHAT_ID || '') : ''
+    targetChatId: channel === 'telegram' ? (process.env.TELEGRAM_CHAT_ID || '') : '',
+    userMessage: text
   };
   try {
     if (!ANTHROPIC_API_KEY) throw new Error('Anthropic not configured');
@@ -882,11 +908,25 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
         await ensurePresidentDelegation(text, reply, execContext);
       } catch (_) {}
     }
+    reply = sanitizeDelegationText(reply);
     if (execContext.createdTaskCount > 0) {
       try {
         var followUpId = await ensureProgressFollowUp(reply, execContext);
         if (followUpId) reply = appendTrackedFollowUp(reply, followUpId);
-      } catch (_) {}
+      } catch (followUpErr) {
+        try {
+          await logAgentActivity({
+            agentKey: 'president_agent',
+            status: 'error',
+            summary: 'President failed to create promised Telegram follow-up subscription.',
+            details: {
+              order_id: currentOrder.order_id,
+              thread_key: resolvedThreadKey,
+              error: String((followUpErr && followUpErr.message) || followUpErr || 'unknown error').slice(0, 500)
+            }
+          });
+        } catch (_) {}
+      }
       reply = appendTrackedDelegationSummary(reply, execContext.createdTasks);
       await updateOwnerOrder({
         orderId: currentOrder.order_id,
