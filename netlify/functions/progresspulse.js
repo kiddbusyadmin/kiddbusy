@@ -1,19 +1,19 @@
 function json(statusCode, payload) {
   return {
-    statusCode,
+    statusCode: statusCode,
     headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
     body: JSON.stringify(payload)
   };
 }
 
 function isoAfterMinutes(minutes) {
-  const d = new Date();
-  d.setMinutes(d.getMinutes() + minutes);
+  var d = new Date();
+  d.setMinutes(d.getMinutes() + Number(minutes || 5));
   return d.toISOString();
 }
 
 function humanAgentName(key) {
-  const k = String(key || '').trim();
+  var k = String(key || '').trim();
   if (k === 'president_agent') return 'President';
   if (k === 'operations_agent') return 'Operations';
   if (k === 'cmo_agent') return 'CMO';
@@ -24,9 +24,9 @@ function humanAgentName(key) {
 }
 
 async function sendTelegram(chatId, text) {
-  const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
-  if (!TELEGRAM_TOKEN || !chatId) throw new Error('Telegram not configured');
-  const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+  var telegramToken = process.env.TELEGRAM_BOT_TOKEN || '';
+  if (!telegramToken || !chatId) throw new Error('Telegram not configured');
+  var res = await fetch('https://api.telegram.org/bot' + telegramToken + '/sendMessage', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -34,34 +34,48 @@ async function sendTelegram(chatId, text) {
       text: String(text || '').slice(0, 4000)
     })
   });
-  const body = await res.text();
-  if (!res.ok) throw new Error(`Telegram HTTP ${res.status}: ${body}`);
+  var body = await res.text();
+  if (!res.ok) throw new Error('Telegram HTTP ' + res.status + ': ' + body);
   return body;
 }
 
 function buildProgressText(subscription, orders, tasks) {
-  const held = orders.filter((o) => String(o.status || '') === 'pending_assignment');
-  const delegated = orders.filter((o) => ['delegated', 'in_progress'].includes(String(o.status || '')));
-  const completed = orders.filter((o) => String(o.status || '') === 'completed');
-  const lines = [];
-  lines.push(`President update (${subscription.interval_minutes} min cadence)`);
-  lines.push(`Open orders: ${held.length + delegated.length} | Held: ${held.length} | Delegated: ${delegated.length} | Completed tracked: ${completed.length}`);
+  var held = orders.filter(function(o) { return String(o.status || '') === 'pending_assignment'; });
+  var delegated = orders.filter(function(o) {
+    var status = String(o.status || '');
+    return status === 'delegated' || status === 'in_progress';
+  });
+  var completed = orders.filter(function(o) { return String(o.status || '') === 'completed'; });
+  var lines = [];
+  lines.push('President update (' + String(subscription.interval_minutes || 5) + ' min cadence)');
+  lines.push('Open orders: ' + String(held.length + delegated.length) + ' | Held: ' + String(held.length) + ' | Delegated: ' + String(delegated.length) + ' | Completed tracked: ' + String(completed.length));
   if (held.length) {
-    const h = held[0];
-    lines.push(`Held: #${h.order_id} ${h.summary || h.title}`);
+    lines.push('Held: #' + String(held[0].order_id || '') + ' ' + String(held[0].summary || held[0].title || ''));
   } else {
     lines.push('Held: no orders waiting with President.');
   }
   if (delegated.length) {
-    const d = delegated[0];
-    const relatedTask = tasks.find((t) => String(((t.details || {}).order_id || '')) === String(d.order_id || ''));
-    if (relatedTask) lines.push(`Delegated: ${humanAgentName(relatedTask.assigned_agent_key)} on "${relatedTask.title}" [${relatedTask.status}]`);
-    else lines.push(`Delegated: #${d.order_id} ${d.summary || d.title}`);
+    var d = delegated[0];
+    var relatedTask = null;
+    for (var i = 0; i < tasks.length; i += 1) {
+      var orderId = ((tasks[i].details || {}).order_id || '');
+      if (String(orderId) === String(d.order_id || '')) {
+        relatedTask = tasks[i];
+        break;
+      }
+    }
+    if (relatedTask) {
+      lines.push('Delegated: ' + humanAgentName(relatedTask.assigned_agent_key) + ' on "' + String(relatedTask.title || '') + '" [' + String(relatedTask.status || '') + ']');
+    } else {
+      lines.push('Delegated: #' + String(d.order_id || '') + ' ' + String(d.summary || d.title || ''));
+    }
   } else {
     lines.push('Delegated: no open delegated work.');
   }
-  const activeTasks = tasks.slice(0, 2).map((t) => `${humanAgentName(t.assigned_agent_key)}: ${t.title} [${t.status}]`);
-  if (activeTasks.length) lines.push(`Team pulse: ${activeTasks.join(' | ')}`);
+  var activeTasks = tasks.slice(0, 2).map(function(t) {
+    return humanAgentName(t.assigned_agent_key) + ': ' + String(t.title || '') + ' [' + String(t.status || '') + ']';
+  });
+  if (activeTasks.length) lines.push('Team pulse: ' + activeTasks.join(' | '));
   else lines.push('Team pulse: no active specialist tasks.');
   lines.push('Reply to the President on Telegram to adjust cadence, pause updates, or ask for detail on any order.');
   return lines.join('\n');
@@ -69,35 +83,40 @@ function buildProgressText(subscription, orders, tasks) {
 
 exports.handler = async function handler() {
   try {
-    const { logAgentActivity } = require('./_agent-activity');
-    const {
-      getProgressSubscriptions,
-      updateProgressSubscription,
-      createProgressReport,
-      getOwnerOrders,
-      getOpenTasks
-    } = require('./_agent-memory');
-    const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
-    const subs = await getProgressSubscriptions({ ownerIdentity: '', status: 'active', dueOnly: true, limit: 50 });
-    const sent = [];
-    for (const sub of subs) {
-      const chatId = sub.target_chat_id || TELEGRAM_CHAT_ID;
-      const ownerIdentity = sub.owner_identity || 'harold';
-      const orders = await getOwnerOrders({ ownerIdentity, limit: 30, status: 'open_funnel' });
-      const tasks = await getOpenTasks({ ownerIdentity, limit: 30 });
-      const reportText = buildProgressText(sub, orders, tasks);
+    var agentActivityModule = require('./_agent-activity');
+    var memoryModule = require('./_agent-memory');
+    var logAgentActivity = agentActivityModule.logAgentActivity;
+    var getProgressSubscriptions = memoryModule.getProgressSubscriptions;
+    var updateProgressSubscription = memoryModule.updateProgressSubscription;
+    var createProgressReport = memoryModule.createProgressReport;
+    var getOwnerOrders = memoryModule.getOwnerOrders;
+    var getOpenTasks = memoryModule.getOpenTasks;
+    var telegramChatId = process.env.TELEGRAM_CHAT_ID || '';
+    var subs = await getProgressSubscriptions({ ownerIdentity: '', status: 'active', dueOnly: true, limit: 50 });
+    var sent = [];
+
+    for (var s = 0; s < subs.length; s += 1) {
+      var sub = subs[s];
+      var chatId = sub.target_chat_id || telegramChatId;
+      var ownerIdentity = sub.owner_identity || 'harold';
+      var orders = await getOwnerOrders({ ownerIdentity: ownerIdentity, limit: 30, status: 'open_funnel' });
+      var tasks = await getOpenTasks({ ownerIdentity: ownerIdentity, limit: 30 });
+      var reportText = buildProgressText(sub, orders, tasks);
       await sendTelegram(chatId, reportText);
       await createProgressReport({
         subscriptionId: sub.subscription_id,
-        ownerIdentity,
+        ownerIdentity: ownerIdentity,
         agentKey: sub.agent_key || 'president_agent',
         channel: 'telegram',
         targetChatId: chatId,
-        reportText,
+        reportText: reportText,
         reportMeta: {
           open_orders: orders.length,
-          held_orders: orders.filter((o) => String(o.status || '') === 'pending_assignment').length,
-          delegated_orders: orders.filter((o) => ['delegated', 'in_progress'].includes(String(o.status || ''))).length,
+          held_orders: orders.filter(function(o) { return String(o.status || '') === 'pending_assignment'; }).length,
+          delegated_orders: orders.filter(function(o) {
+            var status = String(o.status || '');
+            return status === 'delegated' || status === 'in_progress';
+          }).length,
           open_tasks: tasks.length
         }
       });
@@ -105,12 +124,12 @@ exports.handler = async function handler() {
         subscriptionId: sub.subscription_id,
         lastSentAt: new Date().toISOString(),
         nextDueAt: isoAfterMinutes(sub.interval_minutes || 5),
-        summary: `Last sent with ${orders.length} open orders and ${tasks.length} open tasks.`
+        summary: 'Last sent with ' + String(orders.length) + ' open orders and ' + String(tasks.length) + ' open tasks.'
       });
       await logAgentActivity({
         agentKey: sub.agent_key || 'president_agent',
         status: 'success',
-        summary: `Progress update sent to Telegram for subscription ${sub.subscription_id}.`,
+        summary: 'Progress update sent to Telegram for subscription ' + String(sub.subscription_id) + '.',
         details: {
           subscription_id: sub.subscription_id,
           channel: 'telegram',
@@ -119,22 +138,21 @@ exports.handler = async function handler() {
       });
       sent.push({ subscription_id: sub.subscription_id, chat_id: chatId });
     }
-    return json(200, { success: true, due: subs.length, sent });
+
+    return json(200, { success: true, due: subs.length, sent: sent });
   } catch (err) {
     try {
-      const { logAgentActivity } = require('./_agent-activity');
-      await logAgentActivity({
+      var fallbackActivityModule = require('./_agent-activity');
+      await fallbackActivityModule.logAgentActivity({
         agentKey: 'president_agent',
         status: 'error',
-        summary: `Progress pulse failed: ${String(err && err.message || 'unknown error').slice(0, 800)}`,
+        summary: 'Progress pulse failed: ' + String((err && err.message) || 'unknown error').slice(0, 800),
         details: { run_type: 'progresspulse' }
       });
-    } catch (_) {
-      // ignore secondary failures
-    }
+    } catch (_) {}
     return json(500, {
-      error: err && err.message ? err.message : 'Progress pulse failed',
-      type: err && err.name ? err.name : 'Error'
+      error: (err && err.message) ? err.message : 'Progress pulse failed',
+      type: (err && err.name) ? err.name : 'Error'
     });
   }
 };
