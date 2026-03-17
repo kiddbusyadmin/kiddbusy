@@ -323,7 +323,22 @@ async function runAgentTasks() {
   const tasksOut = await sbRequest('agent_tasks?select=*&status=in.(open,in_progress)&order=created_at.asc&limit=12', {
     method: 'GET'
   });
-  const tasks = Array.isArray(tasksOut.data) ? tasksOut.data : [];
+  const tasks = Array.isArray(tasksOut.data) ? tasksOut.data.slice() : [];
+  const priorityRank = { critical: 4, high: 3, normal: 2, low: 1 };
+  tasks.sort((a, b) => {
+    const aStatus = String(a.status || '').toLowerCase();
+    const bStatus = String(b.status || '').toLowerCase();
+    if (aStatus !== bStatus) {
+      if (aStatus === 'open') return -1;
+      if (bStatus === 'open') return 1;
+    }
+    const aPriority = priorityRank[String(a.priority || 'normal').toLowerCase()] || 0;
+    const bPriority = priorityRank[String(b.priority || 'normal').toLowerCase()] || 0;
+    if (aPriority !== bPriority) return bPriority - aPriority;
+    const aTime = new Date(a.updated_at || a.created_at || 0).getTime();
+    const bTime = new Date(b.updated_at || b.created_at || 0).getTime();
+    return aTime - bTime;
+  });
   const processed = [];
 
   for (const task of tasks) {
