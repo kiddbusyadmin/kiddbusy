@@ -593,6 +593,19 @@ function buildAutoDelegationPlan(text, reply) {
   var combinedClaimed = collectClaimedAgents(raw + '\n' + replyText);
   var isExecution = shouldAutoDelegateExecutionRequest(lower);
   if (!isExecution && !combinedClaimed.length) return [];
+  var isResearchIntent = /\b(research|analyze|analysis|audit|investigate|identify|rank)\b/.test(lower);
+  if (isResearchIntent) {
+    return [{
+      assigned_agent_key: 'research_agent',
+      title: raw.slice(0, 180),
+      summary: 'Auto-delegated by President because this request needs specialist research and a real deliverable.',
+      details: {
+        auto_delegated: true,
+        research_request: true
+      },
+      priority: 'high'
+    }];
+  }
   if (/\b(blog|post|article|seo)\b/.test(lower)) {
     var city = inferCityFromRequest(raw);
     var isTeen = /\bteen|teens|older kids|high school|middle school\b/.test(lower);

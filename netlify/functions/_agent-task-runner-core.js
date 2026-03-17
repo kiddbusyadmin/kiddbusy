@@ -36,6 +36,19 @@ function extractCityFromText(value) {
   return '';
 }
 
+function inferTaskTargetCount(task, details) {
+  const explicit = Number(details.article_count) || Number(details.target_count);
+  if (Number.isFinite(explicit) && explicit > 0) return Math.min(Math.max(Math.round(explicit), 1), 25);
+  const hay = [String((task && task.title) || ''), String((task && task.summary) || '')].join(' ').toLowerCase();
+  const qty = hay.match(/\b(\d{1,2})\b/);
+  if (qty && qty[1]) {
+    const parsed = Number(qty[1]);
+    if (Number.isFinite(parsed) && parsed > 0) return Math.min(Math.max(Math.round(parsed), 1), 25);
+  }
+  if (/\bbatch\b|\barticles\b|\bposts\b/.test(hay)) return 5;
+  return 1;
+}
+
 async function sbRequest(path, { method = 'GET', body = null, prefer = null } = {}) {
   const headers = {
     apikey: SUPABASE_SERVICE_KEY,
@@ -375,7 +388,7 @@ async function runAgentTasks() {
 
     if (String(task.assigned_agent_key || '') === 'cmo_agent') {
       const city = cleanCityName(taskDetails.city || extractCityFromText(taskContext) || '');
-      const articleCount = Math.min(Math.max(Number(taskDetails.article_count) || Number(taskDetails.target_count) || 5, 1), 25);
+      const articleCount = inferTaskTargetCount(task, taskDetails);
       const seoKeywordTheme = String(taskDetails.seo_keyword_theme || '').trim().toLowerCase();
       const beforePosts = await listCityCmoPosts(city, ['draft', 'published']);
       const beforePublished = beforePosts.filter((row) => String(row.status || '') === 'published').length;
@@ -426,7 +439,7 @@ async function runAgentTasks() {
       }
     } else if (String(task.assigned_agent_key || '') === 'operations_agent') {
       const city = cleanCityName(taskDetails.city || extractCityFromText(taskContext) || '');
-      const articleCount = Math.min(Math.max(Number(taskDetails.article_count) || Number(taskDetails.target_count) || 5, 1), 25);
+      const articleCount = inferTaskTargetCount(task, taskDetails);
       const seoKeywordTheme = String(taskDetails.seo_keyword_theme || '').trim().toLowerCase();
       const cityPosts = await listCityCmoPosts(city, ['draft', 'published']);
       const publishedCount = cityPosts.filter((row) => String(row.status || '') === 'published').length;
