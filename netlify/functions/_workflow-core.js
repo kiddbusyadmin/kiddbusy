@@ -4,6 +4,12 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function normalizeOwnerIdentity(value) {
+  const raw = String(value || 'harold').trim().toLowerCase();
+  if (['harold', 'owner', 'president', 'president_agent'].includes(raw)) return 'harold';
+  return raw || 'harold';
+}
+
 function normalizeStatus(status) {
   const raw = String(status || '').trim().toLowerCase();
   if (['queued', 'running', 'waiting', 'completed', 'blocked', 'failed'].includes(raw)) return raw;
@@ -37,7 +43,7 @@ async function createWorkflow(input = {}) {
   const out = await sbFetch('workflow_runs', {
     method: 'POST',
     body: {
-      owner_identity: String(input.ownerIdentity || 'harold').slice(0, 120),
+      owner_identity: normalizeOwnerIdentity(input.ownerIdentity || 'harold'),
       order_id: input.orderId || null,
       thread_id: input.threadId || null,
       workflow_key: String(input.workflowKey || 'ops_investigation').slice(0, 120),
@@ -170,5 +176,6 @@ module.exports = {
   getWorkflows,
   appendWorkflowEvent,
   projectWorkflowAsTask,
-  nowIso
+  nowIso,
+  normalizeOwnerIdentity
 };

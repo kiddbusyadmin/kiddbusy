@@ -7,7 +7,8 @@ const {
   updateWorkflow,
   appendWorkflowEvent,
   projectWorkflowAsTask,
-  nowIso
+  nowIso,
+  normalizeOwnerIdentity
 } = require('./_workflow-core');
 const { sbFetch } = require('./_accounting-core');
 
@@ -130,21 +131,31 @@ async function runDelegatedMemoWorkflow(workflow, order) {
 
 async function runResearchWorkflow(workflow, order) {
   const result = await runDelegatedMemoWorkflow(workflow, order);
-  await upsertResearchArtifact({
-    ownerIdentity: workflow.owner_identity || 'harold',
-    orderId: workflow.order_id || null,
-    agentKey: 'research_agent',
-    question: workflow.title || (order && order.request_text) || 'Research workflow',
-    summary: result.summary,
-    fullNotes: ((result.output || {}).reply) || '',
-    status: result.status,
-    city: cleanCity((workflow.input || {}).city || ''),
-    tags: ['workflow_research'],
-    metadata: {
-      workflow_id: workflow.workflow_id,
-      workflow_key: workflow.workflow_key
-    }
-  });
+  try {
+    await upsertResearchArtifact({
+      ownerIdentity: normalizeOwnerIdentity(workflow.owner_identity || 'harold'),
+      orderId: workflow.order_id || null,
+      agentKey: 'research_agent',
+      question: workflow.title || (order && order.request_text) || 'Research workflow',
+      summary: result.summary,
+      fullNotes: ((result.output || {}).reply) || '',
+      status: result.status,
+      city: cleanCity((workflow.input || {}).city || ''),
+      tags: ['workflow_research'],
+      metadata: {
+        workflow_id: workflow.workflow_id,
+        workflow_key: workflow.workflow_key
+      }
+    });
+  } catch (err) {
+    await appendWorkflowEvent({
+      workflowId: workflow.workflow_id,
+      eventType: 'warning',
+      status: 'warning',
+      summary: 'Research artifact persistence failed, but workflow result is preserved.',
+      details: { error: String((err && err.message) || err || 'artifact failure').slice(0, 500) }
+    });
+  }
   return result;
 }
 
