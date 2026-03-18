@@ -128,6 +128,10 @@ async function getWorkflows({ ownerIdentity = 'harold', status = '', limit = 50,
   if (status) {
     if (status === 'active') filters.push('status=in.(queued,running,waiting,blocked)');
     else if (status === 'open_or_in_progress') filters.push('status=in.(queued,running,waiting)');
+    else if (status === 'ready') {
+      filters.push('status=in.(queued,waiting)');
+      filters.push(`next_run_at=lte.${encodeURIComponent(nowIso())}`);
+    }
     else filters.push(`status=eq.${encodeURIComponent(status)}`);
   }
   const out = await sbFetch(`workflow_runs?${filters.join('&')}`);

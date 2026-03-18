@@ -131,28 +131,44 @@ async function runStructuredMemoWorkflow(workflow, order) {
   const replyText = String((reply && reply.reply) || '');
 
   // Attempt to extract the JSON evidence block from the reply.
-  let evidence = { provider: (reply && reply.provider) || '' };
-  let outcome = 'completed';
-  let blockedReason = null;
+  let evidence = null;
+  let outcome = 'blocked';
+  let blockedReason = 'Agent response did not include a valid structured evidence block.';
   const jsonMatch = replyText.match(/```json\s*([\s\S]*?)```/);
   if (jsonMatch) {
     try {
       const parsed = JSON.parse(jsonMatch[1]);
-      evidence = Object.assign({}, parsed, { provider: (reply && reply.provider) || '' });
-      if (String(parsed.outcome || '').toLowerCase() === 'blocked') {
+      const parsedOutcome = String(parsed.outcome || '').toLowerCase();
+      const actionsTaken = Array.isArray(parsed.actions_taken)
+        ? parsed.actions_taken.map((item) => String(item || '').trim()).filter(Boolean)
+        : [];
+      const findings = String(parsed.findings || '').trim();
+      const validOutcome = ['completed', 'partial', 'blocked'].includes(parsedOutcome);
+      if (validOutcome && actionsTaken.length && findings) {
+        evidence = Object.assign({}, parsed, {
+          actions_taken: actionsTaken,
+          findings,
+          provider: (reply && reply.provider) || ''
+        });
+        outcome = parsedOutcome === 'partial' ? 'waiting' : parsedOutcome;
+        blockedReason = parsedOutcome === 'blocked'
+          ? String(parsed.blocked_reason || 'Agent reported blocked.').slice(0, 1200)
+          : null;
+      } else {
+        blockedReason = 'Structured evidence block was present but incomplete or invalid.';
+      }
+      if (parsedOutcome === 'blocked' && evidence) {
         outcome = 'blocked';
         blockedReason = String(parsed.blocked_reason || 'Agent reported blocked.').slice(0, 1200);
-      } else if (String(parsed.outcome || '').toLowerCase() === 'partial') {
-        outcome = 'waiting';
       }
     } catch (_) {}
   }
 
   return {
     status: outcome,
-    summary: replyText.replace(/```json[\s\S]*?```/g, '').trim().slice(0, 1200) || 'Workflow completed.',
+    summary: replyText.replace(/```json[\s\S]*?```/g, '').trim().slice(0, 1200) || (outcome === 'blocked' ? 'Workflow blocked.' : 'Workflow completed.'),
     output: { reply: replyText, provider: (reply && reply.provider) || '' },
-    evidence,
+    evidence: evidence || { provider: (reply && reply.provider) || '', validation_error: blockedReason },
     blocked_reason: blockedReason
   };
 }
@@ -296,7 +312,7 @@ async function runSingleWorkflow(workflow) {
 }
 
 async function runWorkflowEngine(limit = 12) {
-  const workflows = await getWorkflows({ ownerIdentity: '', status: 'open_or_in_progress', limit });
+  const workflows = await getWorkflows({ ownerIdentity: '', status: 'ready', limit });
   const processed = [];
   for (const workflow of workflows) {
     try {
