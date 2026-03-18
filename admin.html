@@ -67,12 +67,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 .hub-section-copy{font-size:.8rem;color:var(--muted);line-height:1.5;}
 .hub-section-body > .locations-inner,
 .hub-section-body > .dash-inner{padding:0;max-width:none;}
-.agent-shell{display:flex;min-height:760px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface);}
 
 /* ===================== DASHBOARD ===================== */
 #view-dash{overflow-y:auto;}
 #view-locations{overflow-y:auto;}
-#view-agent{overflow:hidden;}
 .dash-inner{padding:24px 32px;max-width:1400px;margin:0 auto;}
 .locations-inner{padding:24px 32px;max-width:1400px;margin:0 auto;}
 .date-banner{font-family:var(--mono);font-size:.68rem;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:20px;}
@@ -179,19 +177,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 .act-btn.reject:hover{border-color:var(--accent);color:var(--accent);}
 
 /* ===================== AGENT ===================== */
-#view-agent{flex-direction:row;}
-.agent-sidebar{width:240px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;}
-.sidebar-sec{padding:12px 14px;border-bottom:1px solid var(--border);}
-.sidebar-lbl{font-family:var(--mono);font-size:.62rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:9px;}
-.q-cmd{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:.74rem;color:var(--muted);cursor:pointer;font-family:var(--mono);text-align:left;transition:all .15s;margin-bottom:5px;display:block;}
-.q-cmd:hover{border-color:var(--accent2);color:var(--text);}
 .agent-log{flex:1;overflow-y:auto;padding:10px 12px;}
 .log-line{font-size:.65rem;color:var(--muted);padding:2px 4px;font-family:var(--mono);line-height:1.5;margin-bottom:1px;word-break:break-all;}
 .log-line.tool{color:var(--blue);}
 .log-line.ok{color:var(--green);}
 .log-line.err{color:var(--accent);}
-
-.agent-main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
 .chat-msgs{flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:14px;}
 .msg{display:flex;gap:10px;max-width:740px;animation:fadeUp .2s ease;}
 .msg.user{flex-direction:row-reverse;align-self:flex-end;}
@@ -227,7 +217,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
   .hub-inner{padding:16px 16px 42px;}
   .panels{grid-template-columns:1fr;}
   .stats-row{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));}
-  .agent-shell{flex-direction:column;min-height:auto;}
 }
 
 /* Status Board (view-agents hub) */
@@ -244,15 +233,33 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 .sb-evidence{font-size:.78rem;color:var(--green);margin:4px 0 0 20px;line-height:1.4;}
 .sb-blocked{font-size:.78rem;color:#ff8c6b;margin:4px 0 0 20px;line-height:1.4;}
 .sb-agent{font-size:.74rem;color:var(--muted);margin:4px 0 0 20px;}
-.sb-cta{margin-top:28px;text-align:center;}
-.sb-cta-btn{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 22px;border-radius:8px;font-family:var(--mono);font-size:.74rem;letter-spacing:1px;cursor:pointer;transition:all .15s;}
-.sb-cta-btn:hover{border-color:var(--accent);color:var(--accent);}
-/* Sidebar active workflows widget */
-.sw-row{padding:7px 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:7px;}
-.sw-row:last-child{border-bottom:none;}
-.sw-dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;margin-top:4px;}
-.sw-title{font-size:.72rem;color:var(--text);line-height:1.35;flex:1;}
-.sw-status{font-family:var(--mono);font-size:.6rem;text-transform:uppercase;color:var(--muted);white-space:nowrap;}
+
+/* ===== AGENTS SPLIT PANE ===== */
+#view-agents.active{overflow:hidden;}
+.agents-layout{display:flex;height:100%;overflow:hidden;}
+.agents-chat-pane{width:340px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid var(--border);background:var(--surface);overflow:hidden;}
+.agents-chat-header{padding:14px 16px 10px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.agents-chat-header select{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-family:var(--mono);font-size:.74rem;margin-bottom:6px;}
+.agents-org-sub{font-size:.72rem;color:var(--muted);line-height:1.4;margin-bottom:8px;}
+#agent-roster{display:none;}
+.agents-quick-row{display:flex;flex-wrap:wrap;gap:5px;}
+.aq-btn{background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--muted);padding:4px 9px;font-size:.68rem;font-family:var(--mono);cursor:pointer;transition:all .15s;}
+.aq-btn:hover{border-color:var(--accent2);color:var(--text);}
+.agents-log-strip{height:52px;flex-shrink:0;border-top:1px solid var(--border);overflow:hidden;}
+.agents-log-strip .agent-log{padding:5px 14px;height:100%;overflow:hidden;}
+.agents-board-pane{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+.agents-board-header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px 12px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.agents-board-kicker{font-family:var(--mono);font-size:.68rem;color:var(--muted);letter-spacing:2px;text-transform:uppercase;}
+.agents-board-filters{display:flex;gap:6px;}
+.agents-board-list{flex:1;overflow-y:auto;padding:0 24px 40px;}
+.sb-row-detail{margin:8px 0 6px 20px;padding:12px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);}
+.sb-event{display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--border);}
+.sb-event:last-child{border-bottom:none;}
+.sb-event-dot{width:6px;height:6px;border-radius:50%;flex:0 0 auto;margin-top:5px;}
+.sb-event-type{font-family:var(--mono);font-size:.62rem;color:var(--muted);text-transform:uppercase;}
+.sb-event-text{font-size:.76rem;color:var(--text);line-height:1.4;margin-top:1px;}
+.sb-event-time{font-family:var(--mono);font-size:.62rem;color:var(--muted);margin-top:2px;}
+@media(max-width:900px){.agents-layout{flex-direction:column;}.agents-chat-pane{width:100%;height:340px;border-right:none;border-bottom:1px solid var(--border);}}
 </style>
 </head>
 <body>
@@ -1006,160 +1013,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 </div>
 </div><!-- /view-finance -->
 
-<!-- AGENT SUMMARY VIEW -->
-<div class="view" id="view-agentsummary">
-<div class="locations-inner">
-  <div class="date-banner">// HISTORY</div>
-
-  <div class="panels full">
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Workflow History</div>
-        <div class="panel-badge" id="badge-workflow-history">all workflows</div>
-      </div>
-      <div class="panel-body" id="body-workflow-history">
-        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="stats-row" style="margin-bottom:16px">
-    <div class="stat-card blue">
-      <div class="stat-label">Entries (7d)</div>
-      <div class="stat-value" id="agentkpi-total">--</div>
-      <div class="stat-sub" id="agentkpi-total-sub">all time: --</div>
-    </div>
-    <div class="stat-card green">
-      <div class="stat-label">Success (7d)</div>
-      <div class="stat-value" id="agentkpi-success">--</div>
-      <div class="stat-sub" id="agentkpi-success-rate">success rate: --</div>
-    </div>
-    <div class="stat-card red">
-      <div class="stat-label">Errors (7d)</div>
-      <div class="stat-value" id="agentkpi-error">--</div>
-      <div class="stat-sub" id="agentkpi-error-rate">error rate: --</div>
-    </div>
-    <div class="stat-card purple">
-      <div class="stat-label">Active Agents (7d)</div>
-      <div class="stat-value" id="agentkpi-agents">--</div>
-      <div class="stat-sub">distinct agent keys</div>
-    </div>
-  </div>
-
-  <div class="panels">
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Runs by Agent</div>
-        <div class="panel-badge">last 7 days</div>
-      </div>
-      <div class="panel-body" id="body-agent-summary-by-agent">
-        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
-      </div>
-    </div>
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Status Mix</div>
-        <div class="panel-badge">last 7 days</div>
-      </div>
-      <div class="panel-body" id="body-agent-summary-status">
-        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="panels full">
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">What Agents Have Been Doing</div>
-        <div class="panel-badge" id="badge-agent-summary">recent runs</div>
-      </div>
-      <div class="panel-body" id="body-agent-summary">
-        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
-      </div>
-    </div>
-  </div>
-</div>
-</div><!-- /view-agentsummary -->
-
-<!-- AGENT OFFICE VIEW -->
-<div class="view" id="view-agentoffice">
-<div class="locations-inner">
-  <div class="date-banner">// WORK QUEUE</div>
-  <div class="stats-row" style="margin-bottom:16px">
-    <div class="stat-card blue">
-      <div class="stat-label">Active Workflows</div>
-      <div class="stat-value" id="officekpi-active">--</div>
-      <div class="stat-sub" id="officekpi-active-sub">queued + running + waiting</div>
-    </div>
-    <div class="stat-card purple">
-      <div class="stat-label">Running Now</div>
-      <div class="stat-value" id="officekpi-running">--</div>
-      <div class="stat-sub" id="officekpi-running-sub">currently executing</div>
-    </div>
-    <div class="stat-card yellow">
-      <div class="stat-label">Blocked</div>
-      <div class="stat-value" id="officekpi-blocked">--</div>
-      <div class="stat-sub" id="officekpi-blocked-sub">needs attention</div>
-    </div>
-    <div class="stat-card green">
-      <div class="stat-label">Completed (7d)</div>
-      <div class="stat-value" id="officekpi-completed">--</div>
-      <div class="stat-sub" id="officekpi-completed-sub">finished with evidence</div>
-    </div>
-  </div>
-  <div class="panels">
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Active Workflows</div>
-        <div class="panel-badge" id="badge-agent-office-active">loading</div>
-      </div>
-      <div class="panel-body" id="body-agent-office-active">
-        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
-      </div>
-    </div>
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Needs Attention</div>
-        <div class="panel-badge" id="badge-agent-office-blocked">loading</div>
-      </div>
-      <div class="panel-body" id="body-agent-office-blocked">
-        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
-      </div>
-    </div>
-  </div>
-  <div class="panels">
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Progress Update Feeds</div>
-        <div class="panel-badge" id="badge-agent-office-progress">loading</div>
-      </div>
-      <div class="panel-body" id="body-agent-office-progress">
-        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
-      </div>
-    </div>
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Recent Progress Reports</div>
-        <div class="panel-badge" id="badge-agent-office-reports">loading</div>
-      </div>
-      <div class="panel-body" id="body-agent-office-reports">
-        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
-      </div>
-    </div>
-  </div>
-  <div class="panels full">
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Workflow Timeline</div>
-        <div class="panel-badge" id="badge-agent-office-timeline">recent events</div>
-      </div>
-      <div class="panel-body" id="body-agent-office-timeline">
-        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
-      </div>
-    </div>
-  </div>
-</div>
-</div><!-- /view-agentoffice -->
 
 <!-- CACHE VIEW -->
 <div class="view" id="view-cache">
@@ -1259,79 +1112,61 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 </div>
 </div><!-- /view-integrity -->
 
-<!-- AGENTS HUB -->
+<!-- AGENTS SPLIT PANE -->
 <div class="view" id="view-agents">
-  <div class="locations-inner">
-    <div class="date-banner">// REQUEST STATUS BOARD</div>
+  <div class="agents-layout">
 
-    <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center">
-      <button class="sb-filter active" onclick="filterStatusBoard('all',this)">All</button>
-      <button class="sb-filter" onclick="filterStatusBoard('active',this)">Active</button>
-      <button class="sb-filter" onclick="filterStatusBoard('blocked',this)">Blocked</button>
-      <button class="sb-filter" onclick="filterStatusBoard('completed',this)">Completed</button>
-      <div style="margin-left:auto">
-        <div class="hub-nav" id="agents-nav"></div>
-      </div>
-    </div>
-
-    <div id="body-status-board"><div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div></div>
-
-    <div class="sb-cta">
-      <button class="sb-cta-btn" onclick="switchToConsole()">Talk to President &rarr;</button>
-    </div>
-
-    <div id="agents-sections"></div>
-  </div>
-</div><!-- /view-agents -->
-
-<!-- AGENT VIEW -->
-<div class="view" id="view-agent">
-  <div class="agent-sidebar">
-    <div class="sidebar-sec">
-      <div class="sidebar-lbl">Agent Org</div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-        <select id="agent-role-select" onchange="onAgentRoleChanged()" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-family:var(--mono);font-size:.74rem">
+    <!-- LEFT: President Console -->
+    <div class="agents-chat-pane">
+      <div class="agents-chat-header">
+        <select id="agent-role-select" onchange="onAgentRoleChanged()">
           <option value="president_agent">President</option>
         </select>
+        <div id="agent-org-summary" class="agents-org-sub">President is the default manager.</div>
+        <div id="agent-roster"></div>
+        <div class="agents-quick-row">
+          <button class="aq-btn" onclick="sendQuick('What is pending right now? Give me counts.')">Pending</button>
+          <button class="aq-btn" onclick="sendQuick('Full status summary.')">Summary</button>
+          <button class="aq-btn" onclick="sendQuick('/cmo Best traffic moves right now?')">CMO</button>
+          <button class="aq-btn" onclick="sendQuick('/accountant Revenue, burn, 30d projection.')">P&amp;L</button>
+          <button class="aq-btn" onclick="sendQuick('/ops Any broken workflows or approval queues?')">Ops</button>
+        </div>
       </div>
-      <div id="agent-org-summary" style="font-size:.76rem;color:var(--muted);line-height:1.45">President is the default manager. Specialists report up but remain directly accessible.</div>
-      <div id="agent-roster" style="margin-top:10px;display:flex;flex-direction:column;gap:8px"></div>
-    </div>
-    <div class="sidebar-sec">
-      <div class="sidebar-lbl">Quick Commands</div>
-      <button class="q-cmd" onclick="sendQuick('What is pending right now? Give me counts for submissions and reviews.')">Pending items</button>
-      <button class="q-cmd" onclick="sendQuick('Give me a full status summary of the site through the President lens.')">President summary</button>
-      <button class="q-cmd" onclick="sendQuick('/cmo What are our best traffic and SEO moves right now?')">CMO traffic</button>
-      <button class="q-cmd" onclick="sendQuick('/accountant What is current revenue, burn, and 30 day projection?')">Accountant P&amp;L</button>
-      <button class="q-cmd" onclick="sendQuick('/ops Any broken workflows, stale data, or approval queues need attention?')">Ops health</button>
-      <button class="q-cmd" onclick="sendQuick('President, create a Support agent who monitors contact issues and summarizes customer pain points.')">Create agent</button>
-    </div>
-    <div class="sidebar-sec">
-      <div class="sidebar-lbl">Active Work</div>
-      <div id="sidebar-active-workflows"><div class="log-line">Loading...</div></div>
-    </div>
-    <div class="sidebar-sec" style="flex:1;overflow:hidden;display:flex;flex-direction:column;border-bottom:none;">
-      <div class="sidebar-lbl">Agent Log</div>
-      <div class="agent-log" id="agent-log">
-        <div class="log-line">Ready.</div>
+      <div class="chat-msgs" id="chat-msgs">
+        <div class="msg agent">
+          <div class="msg-av">K</div>
+          <div class="msg-bubble">Hey Harold &mdash; I&rsquo;m your KiddBusy agent. What do you need?</div>
+        </div>
+      </div>
+      <div class="agents-log-strip">
+        <div class="agent-log" id="agent-log"><div class="log-line">Ready.</div></div>
+      </div>
+      <div class="chat-input-bar">
+        <textarea class="chat-ta" id="chat-ta" placeholder="Ask the President anything..." rows="1"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"
+          oninput="autoResize(this)"></textarea>
+        <button class="chat-send" id="chat-send" onclick="sendMsg()">&#8593;</button>
       </div>
     </div>
+
+    <!-- RIGHT: Request Board -->
+    <div class="agents-board-pane">
+      <div class="agents-board-header">
+        <div class="agents-board-kicker">// REQUESTS</div>
+        <div class="agents-board-filters">
+          <button class="sb-filter active" onclick="filterStatusBoard('all',this)">All</button>
+          <button class="sb-filter" onclick="filterStatusBoard('active',this)">Active</button>
+          <button class="sb-filter" onclick="filterStatusBoard('blocked',this)">Blocked</button>
+          <button class="sb-filter" onclick="filterStatusBoard('completed',this)">Done</button>
+        </div>
+      </div>
+      <div id="body-status-board" class="agents-board-list">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+
   </div>
-  <div class="agent-main">
-    <div class="chat-msgs" id="chat-msgs">
-      <div class="msg agent">
-        <div class="msg-av">K</div>
-        <div class="msg-bubble">Hey Harold -- I'm your KiddBusy agent. I have full access to submissions, reviews, sponsorships, listings, analytics events, and the email list. What do you need?</div>
-      </div>
-    </div>
-    <div class="chat-input-bar">
-      <textarea class="chat-ta" id="chat-ta" placeholder="Ask the agent anything..." rows="1"
-        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"
-        oninput="autoResize(this)"></textarea>
-      <button class="chat-send" id="chat-send" onclick="sendMsg()">&#8593;</button>
-    </div>
-  </div>
-</div>
+</div><!-- /view-agents -->
 
 <script>
 // ===== CONFIG =====
@@ -1434,9 +1269,6 @@ function switchTab(name, el) {
   if (name === 'agents') {
     loadAgentOrg();
     loadStatusBoard();
-    loadSidebarWorkflows();
-    loadAgentSummary();
-    loadAgentOffice();
   }
 }
 
@@ -1499,19 +1331,11 @@ function mountHubSections() {
     { source:'view-ownerkpi', label:'Owner Funnel', short:'claims', anchor:'growth-owner', copy:'Track owner claim performance, contact volume, and verified accounts.' },
     { source:'view-cmo', label:'CMO Console', short:'traffic', anchor:'growth-cmo', copy:'Run SEO, blog distribution, and marketing controls from one place.' }
   ];
-  var agents = [
-    { source:'view-agent', label:'Console', short:'direct control', anchor:'agents-console', copy:'Talk directly to the President or any specialist agent.' },
-    { source:'view-agentoffice', label:'Work Queue', short:'work queue', anchor:'agents-office', copy:'Active, blocked, and recent workflows. Owner-attention items surface here.' },
-    { source:'view-agentsummary', label:'History', short:'history', anchor:'agents-summary', copy:'Full workflow history and agent activity log.' }
-  ];
-
   createHubNav('operations-nav', operations);
   createHubNav('growth-nav', growth);
-  createHubNav('agents-nav', agents);
 
   operations.forEach(function(item) { mountViewIntoHub(item.source, 'operations-sections', item); });
   growth.forEach(function(item) { mountViewIntoHub(item.source, 'growth-sections', item); });
-  agents.forEach(function(item) { mountViewIntoHub(item.source, 'agents-sections', item); });
 
   document.getElementById('view-operations').setAttribute('data-mounted', '1');
 }
@@ -1709,9 +1533,6 @@ async function loadAll() {
   if (document.getElementById('view-agents').classList.contains('active')) {
     loadAgentOrg();
     loadStatusBoard();
-    loadSidebarWorkflows();
-    loadAgentSummary();
-    loadAgentOffice();
   }
 
   document.getElementById('last-updated').textContent =
@@ -3202,6 +3023,7 @@ function relativeTime(ts) {
 }
 
 function renderStatusRow(w) {
+  var wid = String(w.workflow_id || '');
   var status = String(w.status || 'queued').toLowerCase();
   var color = workflowStatusColor(status);
   var dotStyle = 'background:' + color + ';';
@@ -3222,7 +3044,7 @@ function renderStatusRow(w) {
   } else if (w.summary) {
     evidenceHtml = '<div class="sb-evidence" style="color:var(--muted)">' + compactText(w.summary, 180) + '</div>';
   }
-  return '<div class="sb-row">' +
+  return '<div class="sb-row" onclick="toggleWorkflowDetail(\'' + wid + '\')">' +
     '<div class="sb-row-head">' +
       '<div class="sb-dot" style="' + dotStyle + '"></div>' +
       '<span class="sb-status" style="color:' + color + '">' + status + '</span>' +
@@ -3232,7 +3054,41 @@ function renderStatusRow(w) {
     '<div class="sb-title">' + title + '</div>' +
     evidenceHtml +
     '<div class="sb-agent">' + agentName + '</div>' +
+    '<div class="sb-row-detail" id="wfd-' + wid + '" style="display:none"></div>' +
     '</div>';
+}
+
+function toggleWorkflowDetail(workflowId) {
+  var detailEl = document.getElementById('wfd-' + workflowId);
+  if (!detailEl) return;
+  var isOpen = detailEl.style.display !== 'none';
+  document.querySelectorAll('.sb-row-detail').forEach(function(el) { el.style.display = 'none'; });
+  if (!isOpen) {
+    detailEl.style.display = 'block';
+    loadWorkflowDetail(workflowId, detailEl);
+  }
+}
+
+async function loadWorkflowDetail(workflowId, el) {
+  el.innerHTML = loadingHTML();
+  try {
+    var events = await fetchWorkflowEvents(workflowId, 10);
+    if (!events.length) {
+      el.innerHTML = '<div style="font-size:.75rem;color:var(--muted);padding:4px 0">No events recorded yet.</div>';
+      return;
+    }
+    el.innerHTML =
+      '<div style="font-family:var(--mono);font-size:.62rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">EVENTS</div>' +
+      events.map(function(ev) {
+        var color = ev.status==='error' ? 'var(--accent)' : ev.status==='success' ? 'var(--green)' : ev.status==='warning' ? 'var(--yellow)' : 'var(--blue)';
+        return '<div class="sb-event"><div class="sb-event-dot" style="background:'+color+'"></div>' +
+          '<div style="flex:1"><div class="sb-event-type">'+(ev.event_type||'note')+'</div>' +
+          '<div class="sb-event-text">'+compactText(ev.summary||'',300)+'</div>' +
+          '<div class="sb-event-time">'+relativeTime(ev.created_at)+'</div></div></div>';
+      }).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="font-size:.75rem;color:var(--accent)">Events unavailable</div>';
+  }
 }
 
 function filterStatusBoard(filter, btn) {
@@ -3275,11 +3131,6 @@ async function loadStatusBoard() {
 function switchToConsole() {
   var tab = document.getElementById('tab-agents');
   if (tab) switchTab('agents', tab);
-  // Mount hub sections first, then navigate to console anchor
-  setTimeout(function() {
-    var consoleLink = document.querySelector('a[href="#agents-console"]');
-    if (consoleLink) consoleLink.click();
-  }, 100);
 }
 
 async function loadSidebarWorkflows() {
@@ -4410,7 +4261,7 @@ async function runAgent(userText) {
       renderAgentOrg();
     }
     addLog('Done via ' + (data.provider || 'agent') + '.', 'ok');
-    loadSidebarWorkflows();
+    loadStatusBoard();
     loadAll();
 
   } catch(err) {
@@ -4443,7 +4294,6 @@ async function runWorkflowQueue() {
       addLog('Queue run error: ' + (data.tasks && data.tasks.error || data.error || 'unknown'), 'err');
     }
     loadStatusBoard();
-    loadSidebarWorkflows();
     loadAll();
   } catch(e) {
     addLog('Failed to reach queue runner: ' + e.message, 'err');
