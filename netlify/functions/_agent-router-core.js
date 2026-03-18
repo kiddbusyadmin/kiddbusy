@@ -905,6 +905,7 @@ function buildAutoDelegationPlan(text, reply) {
 }
 
 async function ensurePresidentDelegation(text, reply, execContext) {
+  if ((execContext.createdWorkflowCount || 0) > 0) return [];
   var plan = buildAutoDelegationPlan(text, reply);
   if (!Array.isArray(plan) || !plan.length) return [];
   var created = [];
