@@ -4310,15 +4310,26 @@ async function runWorkflowQueue() {
   addLog('Running workflow queue...');
 
   try {
-    var res = await fetch('/.netlify/functions/agent-task-runner', {
-      headers: { 'X-Requested-From': 'kiddbusy-hq' }
+    var res = await fetch('/.netlify/functions/db-proxy', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-From': 'kiddbusy-hq'
+      },
+      body: JSON.stringify({ action: 'run_agent_tasks' })
     });
-    var data = await res.json();
-    var processed = (data.tasks && data.tasks.processed_count) || 0;
-    if (data.success) {
+    var raw = await res.text();
+    var data = {};
+    try {
+      data = raw ? JSON.parse(raw) : {};
+    } catch (_) {
+      throw new Error(raw || ('HTTP ' + res.status));
+    }
+    var processed = (data.workflows && data.workflows.processed_count) || 0;
+    if (res.ok && data.success) {
       addLog('Queue run complete. ' + processed + ' workflow(s) processed.', 'ok');
     } else {
-      addLog('Queue run error: ' + (data.tasks && data.tasks.error || data.error || 'unknown'), 'err');
+      addLog('Queue run error: ' + ((data.workflows && data.workflows.error) || (data.tasks && data.tasks.error) || data.error || ('HTTP ' + res.status)), 'err');
     }
     loadStatusBoard();
     loadAll();
