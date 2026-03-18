@@ -52,6 +52,22 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 /* VIEWS */
 .view{display:none;flex:1;overflow:hidden;}
 .view.active{display:flex;flex-direction:column;overflow-y:auto;}
+.hub-inner{padding:24px 32px 60px;max-width:1480px;margin:0 auto;width:100%;}
+.hub-hero{margin-bottom:18px;}
+.hub-kicker{font-family:var(--mono);font-size:.68rem;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;}
+.hub-title{font-size:1.55rem;font-weight:700;letter-spacing:-.02em;margin-bottom:6px;}
+.hub-copy{font-size:.9rem;color:var(--muted);line-height:1.6;max-width:860px;}
+.hub-nav{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 24px;}
+.hub-link{display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:8px 12px;color:var(--text);text-decoration:none;font-family:var(--mono);font-size:.68rem;letter-spacing:.8px;text-transform:uppercase;}
+.hub-link:hover{border-color:var(--accent2);color:var(--accent2);}
+.hub-link span{color:var(--muted);font-size:.62rem;}
+.hub-section{margin-bottom:26px;}
+.hub-section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:12px;}
+.hub-section-title{font-family:var(--mono);font-size:.86rem;letter-spacing:1.4px;text-transform:uppercase;color:var(--text);}
+.hub-section-copy{font-size:.8rem;color:var(--muted);line-height:1.5;}
+.hub-section-body > .locations-inner,
+.hub-section-body > .dash-inner{padding:0;max-width:none;}
+.agent-shell{display:flex;min-height:760px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface);}
 
 /* ===================== DASHBOARD ===================== */
 #view-dash{overflow-y:auto;}
@@ -208,8 +224,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 
 @media(max-width:900px){
   .dash-inner{padding:16px;}
+  .hub-inner{padding:16px 16px 42px;}
   .panels{grid-template-columns:1fr;}
   .stats-row{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));}
+  .agent-shell{flex-direction:column;min-height:auto;}
 }
 </style>
 </head>
@@ -230,19 +248,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 <div class="topbar">
   <div class="topbar-logo">Kidd<span>Busy</span></div>
   <div class="tabs">
-    <div class="tab active" onclick="switchTab('dash',this)" id="tab-dash">Dashboard</div>
-    <div class="tab" onclick="switchTab('submissions',this)" id="tab-submissions">Submissions</div>
-    <div class="tab" onclick="switchTab('locations',this)" id="tab-locations">Locations</div>
-    <div class="tab" onclick="switchTab('photos',this)" id="tab-photos">Photos</div>
-    <div class="tab" onclick="switchTab('ownerkpi',this)" id="tab-ownerkpi">Owner KPI</div>
-    <div class="tab" onclick="switchTab('cmo',this)" id="tab-cmo">CMO</div>
+    <div class="tab active" onclick="switchTab('overview',this)" id="tab-overview">Overview</div>
+    <div class="tab" onclick="switchTab('operations',this)" id="tab-operations">Operations</div>
+    <div class="tab" onclick="switchTab('growth',this)" id="tab-growth">Growth</div>
     <div class="tab" onclick="switchTab('finance',this)" id="tab-finance">Finance</div>
-    <div class="tab" onclick="switchTab('agentsummary',this)" id="tab-agentsummary">Agent Summary</div>
-    <div class="tab" onclick="switchTab('agentoffice',this)" id="tab-agentoffice">Agent Office</div>
-    <div class="tab" onclick="switchTab('cache',this)" id="tab-cache">Cache</div>
-    <div class="tab" onclick="switchTab('activity',this)" id="tab-activity">Activity</div>
-    <div class="tab" onclick="switchTab('integrity',this)" id="tab-integrity">Integrity</div>
-    <div class="tab" onclick="switchTab('agent',this)" id="tab-agent">Agent</div>
+    <div class="tab" onclick="switchTab('agents',this)" id="tab-agents">Agents</div>
   </div>
   <div class="topbar-right">
     <div class="pulse"></div>
@@ -433,6 +443,32 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 
 </div>
 </div><!-- /view-dash -->
+
+<!-- OPERATIONS HUB -->
+<div class="view" id="view-operations">
+  <div class="hub-inner">
+    <div class="hub-hero">
+      <div class="hub-kicker">// OPERATIONS</div>
+      <div class="hub-title">Run the approval queues, listings, and site health.</div>
+      <div class="hub-copy">This is the day-to-day operating surface: review what came in, manage sponsor inventory, and watch for stale or broken data.</div>
+    </div>
+    <div class="hub-nav" id="operations-nav"></div>
+    <div id="operations-sections"></div>
+  </div>
+</div><!-- /view-operations -->
+
+<!-- GROWTH HUB -->
+<div class="view" id="view-growth">
+  <div class="hub-inner">
+    <div class="hub-hero">
+      <div class="hub-kicker">// GROWTH</div>
+      <div class="hub-title">Watch owner conversion, SEO, and marketing execution.</div>
+      <div class="hub-copy">Everything tied to traffic, owner claims, email growth, and the CMO workflow lives here.</div>
+    </div>
+    <div class="hub-nav" id="growth-nav"></div>
+    <div id="growth-sections"></div>
+  </div>
+</div><!-- /view-growth -->
 
 <!-- SUBMISSIONS VIEW -->
 <div class="view" id="view-submissions">
@@ -1226,6 +1262,19 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 </div>
 </div><!-- /view-integrity -->
 
+<!-- AGENTS HUB -->
+<div class="view" id="view-agents">
+  <div class="hub-inner">
+    <div class="hub-hero">
+      <div class="hub-kicker">// AGENTS</div>
+      <div class="hub-title">Manage the President, monitor delegations, and work directly with specialists.</div>
+      <div class="hub-copy">Chat, agent office telemetry, and execution summaries are grouped here so agent operations are visible in one place.</div>
+    </div>
+    <div class="hub-nav" id="agents-nav"></div>
+    <div id="agents-sections"></div>
+  </div>
+</div><!-- /view-agents -->
+
 <!-- AGENT VIEW -->
 <div class="view" id="view-agent">
   <div class="agent-sidebar">
@@ -1293,6 +1342,13 @@ var _cmoConfig = null;
 var includeInternalTraffic = false;
 var _agentRegistry = null;
 var _agentRole = 'president_agent';
+var PRIMARY_VIEWS = {
+  overview: 'view-dash',
+  operations: 'view-operations',
+  growth: 'view-growth',
+  finance: 'view-finance',
+  agents: 'view-agents'
+};
 
 var EVENT_COLORS = {
   city_search:'#4d9fff', multi_city_session:'#7c5cbf',
@@ -1334,6 +1390,7 @@ function unlockDashboard() {
   var internalToggle = document.getElementById('toggle-internal-traffic');
   if (internalToggle) internalToggle.checked = includeInternalTraffic;
   if (!sb) sb = supabase.createClient(SUPABASE_URL, ANON_KEY);
+  mountHubSections();
   loadAll();
   if (!refreshTimer) refreshTimer = setInterval(loadAll, 60000);
 }
@@ -1341,34 +1398,107 @@ function unlockDashboard() {
 // ===== TABS =====
 function switchTab(name, el) {
   document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
-  document.querySelectorAll('.view').forEach(function(v) { v.classList.remove('active'); });
+  Object.keys(PRIMARY_VIEWS).forEach(function(key) {
+    var view = document.getElementById(PRIMARY_VIEWS[key]);
+    if (view) view.classList.remove('active');
+  });
   el.classList.add('active');
-  document.getElementById('view-' + name).classList.add('active');
-  if (name === 'locations' && sb) {
+  var targetId = PRIMARY_VIEWS[name] || ('view-' + name);
+  var target = document.getElementById(targetId);
+  if (target) target.classList.add('active');
+  if (name === 'operations' && sb) {
+    loadPhotoQueue();
     if (!locationsLoaded) loadSponsorListings();
     if (!sponsorBannersLoaded) loadSponsorBanners();
   }
-  if (name === 'photos' && sb) {
-    loadPhotoQueue();
-  }
-  if (name === 'ownerkpi' && sb) {
+  if (name === 'growth' && sb) {
     loadOwnerKpis();
-  }
-  if (name === 'cmo') {
     loadCmoDashboard();
   }
   if (name === 'finance') {
     loadFinanceDashboard();
   }
-  if (name === 'agent') {
+  if (name === 'agents') {
     loadAgentOrg();
-  }
-  if (name === 'agentsummary') {
     loadAgentSummary();
-  }
-  if (name === 'agentoffice') {
     loadAgentOffice();
   }
+}
+
+function createHubNav(containerId, sections) {
+  var el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = sections.map(function(section) {
+    return '<a class="hub-link" href="#' + section.anchor + '">' + section.label + ' <span>' + section.short + '</span></a>';
+  }).join('');
+}
+
+function mountViewIntoHub(sourceId, targetId, meta) {
+  var sourceView = document.getElementById(sourceId);
+  var target = document.getElementById(targetId);
+  if (!sourceView || !target || sourceView.getAttribute('data-mounted') === '1') return;
+
+  var section = document.createElement('section');
+  section.className = 'hub-section';
+  section.id = meta.anchor;
+  section.innerHTML =
+    '<div class="hub-section-head">' +
+      '<div>' +
+        '<div class="hub-section-title">' + meta.label + '</div>' +
+        '<div class="hub-section-copy">' + meta.copy + '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="hub-section-body"></div>';
+
+  var body = section.querySelector('.hub-section-body');
+  if (sourceId === 'view-agent') {
+    var shell = document.createElement('div');
+    shell.className = 'agent-shell';
+    while (sourceView.firstChild) shell.appendChild(sourceView.firstChild);
+    body.appendChild(shell);
+  } else {
+    var inner = sourceView.firstElementChild;
+    if (inner) {
+      var banner = inner.querySelector('.date-banner');
+      if (banner) banner.remove();
+      body.appendChild(inner);
+    }
+  }
+
+  sourceView.setAttribute('data-mounted', '1');
+  target.appendChild(section);
+}
+
+function mountHubSections() {
+  if (document.getElementById('view-operations').getAttribute('data-mounted') === '1') return;
+
+  var operations = [
+    { source:'view-submissions', label:'Submissions Inbox', short:'moderation', anchor:'ops-submissions', copy:'Human-submitted listings waiting for review and decision.' },
+    { source:'view-photos', label:'Photo Queue', short:'approval', anchor:'ops-photos', copy:'Moderate listing and owner-submitted images.' },
+    { source:'view-locations', label:'Listings & Sponsorships', short:'inventory', anchor:'ops-listings', copy:'Manage sponsor status, listing placement, and banner creatives.' },
+    { source:'view-activity', label:'Live Activity', short:'behavior', anchor:'ops-activity', copy:'See what visitors are doing and where activity is concentrating.' },
+    { source:'view-integrity', label:'Data Integrity', short:'quality', anchor:'ops-integrity', copy:'Spot listing-source issues and data quality drift.' },
+    { source:'view-cache', label:'Cache Health', short:'performance', anchor:'ops-cache', copy:'Check stale cities and overall cache freshness.' }
+  ];
+  var growth = [
+    { source:'view-ownerkpi', label:'Owner Funnel', short:'claims', anchor:'growth-owner', copy:'Track owner claim performance, contact volume, and verified accounts.' },
+    { source:'view-cmo', label:'CMO Console', short:'traffic', anchor:'growth-cmo', copy:'Run SEO, blog distribution, and marketing controls from one place.' }
+  ];
+  var agents = [
+    { source:'view-agent', label:'President Console', short:'direct control', anchor:'agents-console', copy:'Talk directly to the President or any specialist agent.' },
+    { source:'view-agentoffice', label:'Agent Office', short:'delegations', anchor:'agents-office', copy:'See held work, open delegations, and subagent responses.' },
+    { source:'view-agentsummary', label:'Execution Summary', short:'audit trail', anchor:'agents-summary', copy:'Review what the agent team has been doing and how often it succeeds.' }
+  ];
+
+  createHubNav('operations-nav', operations);
+  createHubNav('growth-nav', growth);
+  createHubNav('agents-nav', agents);
+
+  operations.forEach(function(item) { mountViewIntoHub(item.source, 'operations-sections', item); });
+  growth.forEach(function(item) { mountViewIntoHub(item.source, 'growth-sections', item); });
+  agents.forEach(function(item) { mountViewIntoHub(item.source, 'agents-sections', item); });
+
+  document.getElementById('view-operations').setAttribute('data-mounted', '1');
 }
 
 // ===== HELPERS =====
@@ -1550,23 +1680,20 @@ async function loadAll() {
     loadOwnerKpis()
   ]);
 
-  if (document.getElementById('view-photos').classList.contains('active')) {
+  if (document.getElementById('view-operations').classList.contains('active')) {
     loadPhotoQueue();
-  }
-  if (document.getElementById('view-locations').classList.contains('active')) {
     loadSponsorListings();
     loadSponsorBanners();
   }
-  if (document.getElementById('view-cmo').classList.contains('active')) {
+  if (document.getElementById('view-growth').classList.contains('active')) {
     loadCmoDashboard();
   }
   if (document.getElementById('view-finance').classList.contains('active')) {
     loadFinanceDashboard();
   }
-  if (document.getElementById('view-agentsummary').classList.contains('active')) {
+  if (document.getElementById('view-agents').classList.contains('active')) {
+    loadAgentOrg();
     loadAgentSummary();
-  }
-  if (document.getElementById('view-agentoffice').classList.contains('active')) {
     loadAgentOffice();
   }
 
@@ -2543,7 +2670,7 @@ async function saveCmoConfig() {
     blog_publish_rate_per_day: blogRate,
     blog_queue_target_per_day: blogTarget
   };
-  var btns = Array.from(document.querySelectorAll('#view-cmo .topbar-btn'));
+  var btns = Array.from(document.querySelectorAll('button[onclick="saveCmoConfig()"], button[onclick="runCmoBlogNow()"], button[onclick="loadCmoDashboard()"]'));
   btns.forEach(function(b) { b.disabled = true; });
   try {
     var res = await fetch('/api/cmo-config', {
@@ -2567,7 +2694,7 @@ async function runCmoInstagramOpsNow() {
 }
 
 async function runCmoBlogNow() {
-  var btns = Array.from(document.querySelectorAll('#view-cmo .topbar-btn'));
+  var btns = Array.from(document.querySelectorAll('button[onclick="saveCmoConfig()"], button[onclick="runCmoBlogNow()"], button[onclick="loadCmoDashboard()"]'));
   btns.forEach(function(b) { b.disabled = true; });
   try {
     var res = await fetch('/api/cmo-blog-run', {
@@ -4117,13 +4244,8 @@ function sendMsg() {
 }
 
 function sendQuick(text) {
-  // Switch to agent tab
-  document.querySelectorAll('.tab').forEach(function(t) {
-    t.classList.toggle('active', t.id === 'tab-agent');
-  });
-  document.querySelectorAll('.view').forEach(function(v) {
-    v.classList.toggle('active', v.id === 'view-agent');
-  });
+  var tab = document.getElementById('tab-agents');
+  if (tab) switchTab('agents', tab);
   loadAgentOrg();
   runAgent(text);
 }
