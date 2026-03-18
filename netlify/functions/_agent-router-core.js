@@ -167,7 +167,8 @@ async function executeTool(name, input = {}, context = {}) {
     }
     case 'create_agent_task': {
       const requestedBy = input.requested_by_agent_key || 'president_agent';
-      if (String(requestedBy) === 'president_agent' && !input.force_legacy_task) {
+      if (String(requestedBy) === 'president_agent') {
+        // President always creates typed workflows — agent_tasks are frozen for new President work.
         const guessedWorkflowKey = String((input.details || {}).workflow_key || '').trim() ||
           (String(input.assigned_agent_key || '') === 'research_agent' ? 'research_request' :
             /\b(blog|post|article|seo|title)\b/i.test(String(input.title || '') + ' ' + String(input.summary || '')) ? 'publish_city_blog_batch' :
@@ -185,6 +186,16 @@ async function executeTool(name, input = {}, context = {}) {
           order_id: input.order_id || context.currentOrderId || null
         }, context);
       }
+      // Non-President agents may still use this path for internal tracking,
+      // but new work should use create_workflow. Log a warning so this is visible.
+      try {
+        await logAgentActivity({
+          agentKey: requestedBy,
+          status: 'warning',
+          summary: `Legacy create_agent_task called by non-President agent (${requestedBy}). Prefer create_workflow for new work.`,
+          details: { title: input.title, assigned_agent_key: input.assigned_agent_key }
+        });
+      } catch (_) {}
       const task = await createTask({
         ownerIdentity: input.owner_identity || 'harold',
         requestedByAgentKey: requestedBy,
@@ -1173,11 +1184,9 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
     }
   }
   if (currentOrder) {
-    if (agent.key === 'president_agent') {
-      try {
-        await ensurePresidentDelegation(text, reply, execContext);
-      } catch (_) {}
-    }
+    // Post-reply auto-delegation via ensurePresidentDelegation() is removed.
+    // The President must call create_workflow explicitly via tool use to delegate.
+    // This eliminates ghost workflows created from keyword regex scanning of prose replies.
     reply = sanitizeDelegationText(reply);
     if (execContext.createdWorkflowCount > 0 || execContext.createdTaskCount > 0) {
       try {

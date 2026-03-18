@@ -229,6 +229,30 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
   .stats-row{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));}
   .agent-shell{flex-direction:column;min-height:auto;}
 }
+
+/* Status Board (view-agents hub) */
+.sb-filter{font-family:var(--mono);font-size:.7rem;letter-spacing:1px;text-transform:uppercase;padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;transition:all .15s;}
+.sb-filter.active,.sb-filter:hover{border-color:var(--accent);color:var(--text);}
+.sb-row{padding:16px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s;}
+.sb-row:hover{background:var(--surface2);}
+.sb-row-head{display:flex;align-items:center;gap:10px;}
+.sb-dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;}
+.sb-status{font-family:var(--mono);font-size:.68rem;letter-spacing:1px;text-transform:uppercase;}
+.sb-type{font-family:var(--mono);font-size:.68rem;color:var(--muted);}
+.sb-time{margin-left:auto;font-family:var(--mono);font-size:.68rem;color:var(--muted);white-space:nowrap;}
+.sb-title{font-size:.86rem;font-weight:600;color:var(--text);margin:6px 0 0 20px;line-height:1.4;}
+.sb-evidence{font-size:.78rem;color:var(--green);margin:4px 0 0 20px;line-height:1.4;}
+.sb-blocked{font-size:.78rem;color:#ff8c6b;margin:4px 0 0 20px;line-height:1.4;}
+.sb-agent{font-size:.74rem;color:var(--muted);margin:4px 0 0 20px;}
+.sb-cta{margin-top:28px;text-align:center;}
+.sb-cta-btn{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 22px;border-radius:8px;font-family:var(--mono);font-size:.74rem;letter-spacing:1px;cursor:pointer;transition:all .15s;}
+.sb-cta-btn:hover{border-color:var(--accent);color:var(--accent);}
+/* Sidebar active workflows widget */
+.sw-row{padding:7px 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:7px;}
+.sw-row:last-child{border-bottom:none;}
+.sw-dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;margin-top:4px;}
+.sw-title{font-size:.72rem;color:var(--text);line-height:1.35;flex:1;}
+.sw-status{font-family:var(--mono);font-size:.6rem;text-transform:uppercase;color:var(--muted);white-space:nowrap;}
 </style>
 </head>
 <body>
@@ -985,7 +1009,20 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 <!-- AGENT SUMMARY VIEW -->
 <div class="view" id="view-agentsummary">
 <div class="locations-inner">
-  <div class="date-banner">// AGENT EXECUTION SUMMARY</div>
+  <div class="date-banner">// HISTORY</div>
+
+  <div class="panels full">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Workflow History</div>
+        <div class="panel-badge" id="badge-workflow-history">all workflows</div>
+      </div>
+      <div class="panel-body" id="body-workflow-history">
+        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      </div>
+    </div>
+  </div>
+
   <div class="stats-row" style="margin-bottom:16px">
     <div class="stat-card blue">
       <div class="stat-label">Entries (7d)</div>
@@ -1047,85 +1084,45 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 <!-- AGENT OFFICE VIEW -->
 <div class="view" id="view-agentoffice">
 <div class="locations-inner">
-  <div class="date-banner">// AGENT OFFICE</div>
+  <div class="date-banner">// WORK QUEUE</div>
   <div class="stats-row" style="margin-bottom:16px">
     <div class="stat-card blue">
-      <div class="stat-label">Orders Received</div>
-      <div class="stat-value" id="officekpi-orders">--</div>
-      <div class="stat-sub" id="officekpi-orders-sub">all tracked orders</div>
+      <div class="stat-label">Active Workflows</div>
+      <div class="stat-value" id="officekpi-active">--</div>
+      <div class="stat-sub" id="officekpi-active-sub">queued + running + waiting</div>
     </div>
     <div class="stat-card purple">
-      <div class="stat-label">Held By President</div>
-      <div class="stat-value" id="officekpi-held">--</div>
-      <div class="stat-sub" id="officekpi-held-sub">pending assignment</div>
+      <div class="stat-label">Running Now</div>
+      <div class="stat-value" id="officekpi-running">--</div>
+      <div class="stat-sub" id="officekpi-running-sub">currently executing</div>
     </div>
     <div class="stat-card yellow">
-      <div class="stat-label">Open Delegations</div>
-      <div class="stat-value" id="officekpi-delegated">--</div>
-      <div class="stat-sub" id="officekpi-delegated-sub">assigned out</div>
+      <div class="stat-label">Blocked</div>
+      <div class="stat-value" id="officekpi-blocked">--</div>
+      <div class="stat-sub" id="officekpi-blocked-sub">needs attention</div>
     </div>
     <div class="stat-card green">
-      <div class="stat-label">Completed</div>
+      <div class="stat-label">Completed (7d)</div>
       <div class="stat-value" id="officekpi-completed">--</div>
-      <div class="stat-sub" id="officekpi-completed-sub">performance funnel</div>
+      <div class="stat-sub" id="officekpi-completed-sub">finished with evidence</div>
     </div>
   </div>
   <div class="panels">
     <div class="panel">
       <div class="panel-header">
-        <div class="panel-title">Order Funnel</div>
-        <div class="panel-badge">President performance</div>
+        <div class="panel-title">Active Workflows</div>
+        <div class="panel-badge" id="badge-agent-office-active">loading</div>
       </div>
-      <div class="panel-body" id="body-agent-office-funnel">
+      <div class="panel-body" id="body-agent-office-active">
         <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
       </div>
     </div>
     <div class="panel">
       <div class="panel-header">
-        <div class="panel-title">Held By President</div>
-        <div class="panel-badge" id="badge-agent-office-held">loading</div>
+        <div class="panel-title">Needs Attention</div>
+        <div class="panel-badge" id="badge-agent-office-blocked">loading</div>
       </div>
-      <div class="panel-body" id="body-agent-office-held">
-        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
-      </div>
-    </div>
-  </div>
-  <div class="panels">
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Open Delegations</div>
-        <div class="panel-badge" id="badge-agent-office-tasks">loading</div>
-      </div>
-      <div class="panel-body" id="body-agent-office-tasks">
-        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
-      </div>
-    </div>
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Who Is Talking</div>
-        <div class="panel-badge">last 7 days</div>
-      </div>
-      <div class="panel-body" id="body-agent-office-by-agent">
-        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
-      </div>
-    </div>
-  </div>
-  <div class="panels">
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Order Detail</div>
-        <div class="panel-badge" id="badge-agent-office-order-detail">latest requests</div>
-      </div>
-      <div class="panel-body" id="body-agent-office-order-detail">
-        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
-      </div>
-    </div>
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Subagent Responses</div>
-        <div class="panel-badge" id="badge-agent-office-subagent">latest progress</div>
-      </div>
-      <div class="panel-body" id="body-agent-office-subagent">
+      <div class="panel-body" id="body-agent-office-blocked">
         <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
       </div>
     </div>
@@ -1153,10 +1150,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
   <div class="panels full">
     <div class="panel">
       <div class="panel-header">
-        <div class="panel-title">What It Sounds Like In The Office</div>
-        <div class="panel-badge" id="badge-agent-office">recent conversation</div>
+        <div class="panel-title">Workflow Timeline</div>
+        <div class="panel-badge" id="badge-agent-office-timeline">recent events</div>
       </div>
-      <div class="panel-body" id="body-agent-office">
+      <div class="panel-body" id="body-agent-office-timeline">
         <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
       </div>
     </div>
@@ -1264,13 +1261,25 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 
 <!-- AGENTS HUB -->
 <div class="view" id="view-agents">
-  <div class="hub-inner">
-    <div class="hub-hero">
-      <div class="hub-kicker">// AGENTS</div>
-      <div class="hub-title">Manage the President, monitor delegations, and work directly with specialists.</div>
-      <div class="hub-copy">Chat, agent office telemetry, and execution summaries are grouped here so agent operations are visible in one place.</div>
+  <div class="locations-inner">
+    <div class="date-banner">// REQUEST STATUS BOARD</div>
+
+    <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center">
+      <button class="sb-filter active" onclick="filterStatusBoard('all',this)">All</button>
+      <button class="sb-filter" onclick="filterStatusBoard('active',this)">Active</button>
+      <button class="sb-filter" onclick="filterStatusBoard('blocked',this)">Blocked</button>
+      <button class="sb-filter" onclick="filterStatusBoard('completed',this)">Completed</button>
+      <div style="margin-left:auto">
+        <div class="hub-nav" id="agents-nav"></div>
+      </div>
     </div>
-    <div class="hub-nav" id="agents-nav"></div>
+
+    <div id="body-status-board"><div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div></div>
+
+    <div class="sb-cta">
+      <button class="sb-cta-btn" onclick="switchToConsole()">Talk to President &rarr;</button>
+    </div>
+
     <div id="agents-sections"></div>
   </div>
 </div><!-- /view-agents -->
@@ -1296,6 +1305,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
       <button class="q-cmd" onclick="sendQuick('/accountant What is current revenue, burn, and 30 day projection?')">Accountant P&amp;L</button>
       <button class="q-cmd" onclick="sendQuick('/ops Any broken workflows, stale data, or approval queues need attention?')">Ops health</button>
       <button class="q-cmd" onclick="sendQuick('President, create a Support agent who monitors contact issues and summarizes customer pain points.')">Create agent</button>
+    </div>
+    <div class="sidebar-sec">
+      <div class="sidebar-lbl">Active Work</div>
+      <div id="sidebar-active-workflows"><div class="log-line">Loading...</div></div>
     </div>
     <div class="sidebar-sec" style="flex:1;overflow:hidden;display:flex;flex-direction:column;border-bottom:none;">
       <div class="sidebar-lbl">Agent Log</div>
@@ -1420,6 +1433,8 @@ function switchTab(name, el) {
   }
   if (name === 'agents') {
     loadAgentOrg();
+    loadStatusBoard();
+    loadSidebarWorkflows();
     loadAgentSummary();
     loadAgentOffice();
   }
@@ -1485,9 +1500,9 @@ function mountHubSections() {
     { source:'view-cmo', label:'CMO Console', short:'traffic', anchor:'growth-cmo', copy:'Run SEO, blog distribution, and marketing controls from one place.' }
   ];
   var agents = [
-    { source:'view-agent', label:'President Console', short:'direct control', anchor:'agents-console', copy:'Talk directly to the President or any specialist agent.' },
-    { source:'view-agentoffice', label:'Agent Office', short:'delegations', anchor:'agents-office', copy:'See held work, open delegations, and subagent responses.' },
-    { source:'view-agentsummary', label:'Execution Summary', short:'audit trail', anchor:'agents-summary', copy:'Review what the agent team has been doing and how often it succeeds.' }
+    { source:'view-agent', label:'Console', short:'direct control', anchor:'agents-console', copy:'Talk directly to the President or any specialist agent.' },
+    { source:'view-agentoffice', label:'Work Queue', short:'work queue', anchor:'agents-office', copy:'Active, blocked, and recent workflows. Owner-attention items surface here.' },
+    { source:'view-agentsummary', label:'History', short:'history', anchor:'agents-summary', copy:'Full workflow history and agent activity log.' }
   ];
 
   createHubNav('operations-nav', operations);
@@ -1693,6 +1708,8 @@ async function loadAll() {
   }
   if (document.getElementById('view-agents').classList.contains('active')) {
     loadAgentOrg();
+    loadStatusBoard();
+    loadSidebarWorkflows();
     loadAgentSummary();
     loadAgentOffice();
   }
@@ -3023,6 +3040,28 @@ async function fetchOwnerOrders(status, limit) {
   return out.orders || [];
 }
 
+async function fetchWorkflows(status, limit) {
+  var res = await fetch('/.netlify/functions/db-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
+    body: JSON.stringify({ action: 'query_workflows', status: status || '', limit: limit || 120 })
+  });
+  var out = await res.json();
+  if (!res.ok) throw new Error(out.error || 'Failed to load workflows');
+  return out.workflows || [];
+}
+
+async function fetchWorkflowEvents(workflowId, limit) {
+  var res = await fetch('/.netlify/functions/db-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-From': 'kiddbusy-hq' },
+    body: JSON.stringify({ action: 'query_workflow_events', workflow_id: workflowId || '', limit: limit || 60 })
+  });
+  var out = await res.json();
+  if (!res.ok) throw new Error(out.error || 'Failed to load workflow events');
+  return out.events || [];
+}
+
 async function fetchProgressSubscriptions(status, limit) {
   var res = await fetch('/.netlify/functions/db-proxy', {
     method: 'POST',
@@ -3131,178 +3170,240 @@ function compactText(value, maxLen) {
   return s.slice(0, Math.max(0, maxLen - 1)).trim() + '...';
 }
 
+function workflowStatusColor(status) {
+  var s = String(status || '').toLowerCase();
+  if (s === 'completed') return 'var(--green)';
+  if (s === 'running') return 'var(--blue)';
+  if (s === 'blocked' || s === 'failed') return 'var(--accent)';
+  if (s === 'waiting') return 'var(--yellow)';
+  return 'var(--muted)';
+}
+
+function workflowStatusBadge(status) {
+  var s = String(status || '').toLowerCase();
+  var color = workflowStatusColor(s);
+  return '<span style="font-family:var(--mono);font-size:.65rem;text-transform:uppercase;color:' + color + ';letter-spacing:.5px">' + (s || 'unknown') + '</span>';
+}
+
+// ===== STATUS BOARD =====
+var _sbAllWorkflows = [];
+var _sbFilter = 'all';
+
+function relativeTime(ts) {
+  if (!ts) return '';
+  var diff = Date.now() - new Date(ts).getTime();
+  if (diff < 0) return 'just now';
+  var m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return m + 'm ago';
+  var h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  return Math.floor(h / 24) + 'd ago';
+}
+
+function renderStatusRow(w) {
+  var status = String(w.status || 'queued').toLowerCase();
+  var color = workflowStatusColor(status);
+  var dotStyle = 'background:' + color + ';';
+  if (status === 'running' || status === 'queued' || status === 'waiting') {
+    dotStyle += 'border:2px solid ' + color + ';background:transparent;';
+  }
+  var agentName = humanAgentName(w.assigned_agent_key);
+  var wfType = String(w.workflow_key || '').replace(/_/g, ' ');
+  var ts = relativeTime(w.updated_at || w.created_at);
+  var title = compactText(w.title || 'Untitled request', 180);
+  var evidenceHtml = '';
+  if (status === 'completed') {
+    var evSummary = compactText(w.summary || '', 240);
+    evidenceHtml = evSummary ? '<div class="sb-evidence">' + evSummary + '</div>' : '';
+  } else if (status === 'blocked' || status === 'failed') {
+    var blockedMsg = compactText(w.blocked_reason || w.summary || 'Needs attention', 240);
+    evidenceHtml = '<div class="sb-blocked">' + blockedMsg + '</div>';
+  } else if (w.summary) {
+    evidenceHtml = '<div class="sb-evidence" style="color:var(--muted)">' + compactText(w.summary, 180) + '</div>';
+  }
+  return '<div class="sb-row">' +
+    '<div class="sb-row-head">' +
+      '<div class="sb-dot" style="' + dotStyle + '"></div>' +
+      '<span class="sb-status" style="color:' + color + '">' + status + '</span>' +
+      '<span class="sb-type">&nbsp;&middot;&nbsp;' + wfType + '</span>' +
+      '<span class="sb-time">' + ts + '</span>' +
+    '</div>' +
+    '<div class="sb-title">' + title + '</div>' +
+    evidenceHtml +
+    '<div class="sb-agent">' + agentName + '</div>' +
+    '</div>';
+}
+
+function filterStatusBoard(filter, btn) {
+  _sbFilter = filter || 'all';
+  document.querySelectorAll('.sb-filter').forEach(function(b) { b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  renderStatusBoardRows();
+}
+
+function renderStatusBoardRows() {
+  var el = document.getElementById('body-status-board');
+  if (!el) return;
+  var rows = _sbAllWorkflows;
+  if (_sbFilter === 'active') {
+    rows = rows.filter(function(w) { return ['queued','running','waiting'].includes(String(w.status || '')); });
+  } else if (_sbFilter === 'blocked') {
+    rows = rows.filter(function(w) { return ['blocked','failed'].includes(String(w.status || '')); });
+  } else if (_sbFilter === 'completed') {
+    rows = rows.filter(function(w) { return String(w.status || '') === 'completed'; });
+  }
+  if (!rows.length) {
+    el.innerHTML = '<div style="padding:32px 0;text-align:center;font-family:var(--mono);font-size:.76rem;color:var(--muted)">No ' + (_sbFilter !== 'all' ? _sbFilter + ' ' : '') + 'workflows found.</div>';
+    return;
+  }
+  el.innerHTML = rows.map(renderStatusRow).join('');
+}
+
+async function loadStatusBoard() {
+  var el = document.getElementById('body-status-board');
+  if (!el) return;
+  el.innerHTML = '<div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>';
+  try {
+    _sbAllWorkflows = await fetchWorkflows('', 80);
+    renderStatusBoardRows();
+  } catch (e) {
+    el.innerHTML = '<div style="padding:24px;color:var(--accent);font-size:.8rem">Status board unavailable: ' + e.message + '</div>';
+  }
+}
+
+function switchToConsole() {
+  var tab = document.getElementById('tab-agents');
+  if (tab) switchTab('agents', tab);
+  // Mount hub sections first, then navigate to console anchor
+  setTimeout(function() {
+    var consoleLink = document.querySelector('a[href="#agents-console"]');
+    if (consoleLink) consoleLink.click();
+  }, 100);
+}
+
+async function loadSidebarWorkflows() {
+  var el = document.getElementById('sidebar-active-workflows');
+  if (!el) return;
+  try {
+    var wfs = await fetchWorkflows('active', 6);
+    if (!wfs.length) {
+      el.innerHTML = '<div class="log-line" style="color:var(--muted)">Team is idle.</div>';
+      return;
+    }
+    el.innerHTML = wfs.map(function(w) {
+      var status = String(w.status || 'queued').toLowerCase();
+      var color = workflowStatusColor(status);
+      return '<div class="sw-row">' +
+        '<div class="sw-dot" style="background:' + color + '"></div>' +
+        '<div class="sw-title">' + compactText(w.title || 'Untitled', 60) + '</div>' +
+        '<div class="sw-status" style="color:' + color + '">' + status + '</div>' +
+        '</div>';
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '<div class="log-line" style="color:var(--muted)">Unavailable</div>';
+  }
+}
+
 async function loadAgentOffice() {
-  var body = document.getElementById('body-agent-office');
-  var badge = document.getElementById('badge-agent-office');
-  var byAgentEl = document.getElementById('body-agent-office-by-agent');
-  var tasksEl = document.getElementById('body-agent-office-tasks');
-  var heldEl = document.getElementById('body-agent-office-held');
-  var heldBadge = document.getElementById('badge-agent-office-held');
-  var funnelEl = document.getElementById('body-agent-office-funnel');
-  var tasksBadge = document.getElementById('badge-agent-office-tasks');
-  var orderDetailEl = document.getElementById('body-agent-office-order-detail');
-  var orderDetailBadge = document.getElementById('badge-agent-office-order-detail');
-  var subagentEl = document.getElementById('body-agent-office-subagent');
-  var subagentBadge = document.getElementById('badge-agent-office-subagent');
+  var timelineEl = document.getElementById('body-agent-office-timeline');
+  var timelineBadge = document.getElementById('badge-agent-office-timeline');
+  var activeEl = document.getElementById('body-agent-office-active');
+  var activeBadge = document.getElementById('badge-agent-office-active');
+  var blockedEl = document.getElementById('body-agent-office-blocked');
+  var blockedBadge = document.getElementById('badge-agent-office-blocked');
   var progressEl = document.getElementById('body-agent-office-progress');
   var progressBadge = document.getElementById('badge-agent-office-progress');
   var reportsEl = document.getElementById('body-agent-office-reports');
   var reportsBadge = document.getElementById('badge-agent-office-reports');
-  if (!body) return;
-  body.innerHTML = loadingHTML();
-  if (byAgentEl) byAgentEl.innerHTML = loadingHTML();
-  if (tasksEl) tasksEl.innerHTML = loadingHTML();
-  if (heldEl) heldEl.innerHTML = loadingHTML();
-  if (funnelEl) funnelEl.innerHTML = loadingHTML();
-  if (orderDetailEl) orderDetailEl.innerHTML = loadingHTML();
-  if (subagentEl) subagentEl.innerHTML = loadingHTML();
-  if (progressEl) progressEl.innerHTML = loadingHTML();
-  if (reportsEl) reportsEl.innerHTML = loadingHTML();
+  if (!timelineEl) return;
+
+  [timelineEl, activeEl, blockedEl, progressEl, reportsEl].forEach(function(el) {
+    if (el) el.innerHTML = loadingHTML();
+  });
+
   try {
     var results = await Promise.all([
-      fetchAgentActivity(240),
-      fetchAgentTasks('', 120),
-      fetchOwnerOrders('', 120),
+      fetchWorkflows('', 120),
+      fetchWorkflowEvents('', 60),
       fetchProgressSubscriptions('active', 40),
       fetchProgressReports(30)
     ]);
-    var rows = results[0] || [];
-    var tasks = results[1] || [];
-    var openTasks = tasks.filter(function(t) {
-      var s = String(t.status || '').toLowerCase();
-      return s === 'open' || s === 'in_progress';
-    });
-    var orders = results[2] || [];
-    var subs = results[3] || [];
-    var reports = results[4] || [];
-    var rows7d = rows.filter(function(r) { return isWithinRange(r.created_at, '7d'); });
-    var heldOrders = orders.filter(function(o) { return String(o.status || '') === 'pending_assignment'; });
-    var delegatedOrders = orders.filter(function(o) {
-      var s = String(o.status || '');
-      return s === 'delegated' || s === 'in_progress';
-    });
-    var blockedOrders = orders.filter(function(o) { return String(o.status || '') === 'blocked'; });
-    var completedOrders = orders.filter(function(o) { return String(o.status || '') === 'completed'; });
-    var speakers = {};
-    rows7d.forEach(function(r) {
-      var key = String(r.agent_key || 'unknown');
-      speakers[key] = (speakers[key] || 0) + 1;
-    });
-    var sortedSpeakers = Object.entries(speakers).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 8);
-    var maxSpeaker = sortedSpeakers[0] ? sortedSpeakers[0][1] : 1;
-    if (byAgentEl) {
-      byAgentEl.innerHTML = sortedSpeakers.length
-        ? sortedSpeakers.map(function(entry) {
-            var pct = Math.round((entry[1] / maxSpeaker) * 100);
-            return '<div class="city-bar-wrap">' +
-              '<div class="city-bar-label">' + humanAgentName(entry[0]) + '<span>' + entry[1] + '</span></div>' +
-              '<div class="city-bar-bg"><div class="city-bar-fill" style="width:' + pct + '%"></div></div>' +
-              '</div>';
-          }).join('')
-        : emptyHTML('No agent conversations yet');
-    }
+    var workflows = results[0] || [];
+    var events = results[1] || [];
+    var subs = results[2] || [];
+    var reports = results[3] || [];
 
-    if (heldBadge) heldBadge.textContent = heldOrders.length + ' waiting';
-    if (heldEl) {
-      heldEl.innerHTML = heldOrders.length
-        ? heldOrders.slice(0, 8).map(function(order) {
+    // Segment workflows by status
+    var now = Date.now();
+    var sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+    var activeWfs = workflows.filter(function(w) { return ['queued','running','waiting'].includes(String(w.status || '')); });
+    var runningWfs = workflows.filter(function(w) { return String(w.status || '') === 'running'; });
+    var blockedWfs = workflows.filter(function(w) { return ['blocked','failed'].includes(String(w.status || '')); });
+    var completedWfs7d = workflows.filter(function(w) {
+      return String(w.status || '') === 'completed' && new Date(w.updated_at || w.created_at).getTime() >= sevenDaysAgo;
+    });
+
+    // KPI bar
+    document.getElementById('officekpi-active').textContent = activeWfs.length;
+    document.getElementById('officekpi-active-sub').textContent = activeWfs.length === 1 ? '1 in queue or running' : activeWfs.length + ' in queue or running';
+    document.getElementById('officekpi-running').textContent = runningWfs.length;
+    document.getElementById('officekpi-running-sub').textContent = runningWfs.length ? humanAgentName((runningWfs[0] || {}).assigned_agent_key || '') + ' is executing' : 'nothing running';
+    document.getElementById('officekpi-blocked').textContent = blockedWfs.length;
+    document.getElementById('officekpi-blocked-sub').textContent = blockedWfs.length ? 'owner input needed' : 'all clear';
+    document.getElementById('officekpi-completed').textContent = completedWfs7d.length;
+    document.getElementById('officekpi-completed-sub').textContent = completedWfs7d.length + ' in last 7 days';
+
+    // Active Workflows
+    if (activeBadge) activeBadge.textContent = activeWfs.length + ' active';
+    if (activeEl) {
+      activeEl.innerHTML = activeWfs.length
+        ? activeWfs.slice(0, 8).map(function(w) {
             return '<div style="padding:10px 0;border-bottom:1px solid var(--border)">' +
-              '<div style="font-size:.8rem;color:var(--text);line-height:1.45">President is still holding: ' + (order.title || 'Untitled order') + '</div>' +
-              '<div style="margin-top:4px;font-family:var(--mono);font-size:.7rem;color:var(--muted)">' + formatLocalTimestamp(order.updated_at || order.created_at) + '</div>' +
+              '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">' +
+                '<div style="font-size:.82rem;font-weight:700;color:var(--text)">' + compactText(w.title || 'Untitled workflow', 180) + '</div>' +
+                workflowStatusBadge(w.status) +
+              '</div>' +
+              '<div style="margin-top:4px;font-size:.74rem;color:var(--muted)">Assigned: ' + humanAgentName(w.assigned_agent_key) + ' &nbsp;|&nbsp; Type: ' + (w.workflow_key || '--') + '</div>' +
+              (w.summary ? '<div style="margin-top:4px;font-size:.76rem;color:var(--text);line-height:1.4">' + compactText(w.summary, 220) + '</div>' : '') +
+              '<div style="margin-top:4px;font-family:var(--mono);font-size:.68rem;color:var(--muted)">' + formatLocalTimestamp(w.updated_at || w.created_at) + '</div>' +
               '</div>';
           }).join('')
-        : emptyHTML('Nothing is currently waiting on President triage');
+        : emptyHTML('No active workflows — team is idle');
     }
 
-    if (tasksBadge) tasksBadge.textContent = openTasks.length + ' open';
-    if (tasksEl) {
-      tasksEl.innerHTML = openTasks.length
-        ? openTasks.slice(0, 8).map(function(task) {
+    // Needs Attention (blocked/failed)
+    if (blockedBadge) blockedBadge.textContent = blockedWfs.length ? blockedWfs.length + ' blocked' : 'all clear';
+    if (blockedEl) {
+      blockedEl.innerHTML = blockedWfs.length
+        ? blockedWfs.slice(0, 8).map(function(w) {
             return '<div style="padding:10px 0;border-bottom:1px solid var(--border)">' +
-              '<div style="font-size:.8rem;color:var(--text);line-height:1.45">' + renderOfficeTaskLine(task) + '</div>' +
-              '<div style="margin-top:6px;color:var(--muted);font-size:.74rem;line-height:1.45">' + compactText(task.summary || ((task.details || {}).task_summary || ''), 220) + '</div>' +
-              '<div style="margin-top:4px;font-family:var(--mono);font-size:.7rem;color:var(--muted)">' + formatLocalTimestamp(task.updated_at || task.created_at) + '</div>' +
-              '</div>';
-          }).join('')
-        : emptyHTML('No open delegations');
-    }
-
-    if (orderDetailBadge) orderDetailBadge.textContent = orders.length + ' tracked';
-    if (orderDetailEl) {
-      orderDetailEl.innerHTML = orders.length
-        ? orders.slice(0, 8).map(function(order) {
-            var linkedTask = tasks.find(function(task) {
-              return String(((task.details || {}).order_id || '')) === String(order.order_id || '');
-            }) || null;
-            var assigned = linkedTask ? humanAgentName(linkedTask.assigned_agent_key) : 'Unassigned';
-            var orderDetails = order.details || {};
-            var watchline = order.status === 'blocked'
-              ? '<div style="margin-top:6px;font-size:.76rem;color:#ff8c6b;line-height:1.45">President escalation: stalled ' + (orderDetails.stalled_minutes || orderDetails.president_stalled_minutes || '--') + ' min' + (orderDetails.president_watchdog_attempts ? (' • attempts ' + orderDetails.president_watchdog_attempts) : '') + '</div>'
-              : '';
-            return '<div style="padding:12px 0;border-bottom:1px solid var(--border)">' +
               '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">' +
-                '<div style="font-size:.82rem;font-weight:800;color:var(--text)">Order #' + String(order.order_id || '--') + ' • ' + officeStatusLabel(order.status) + '</div>' +
-                '<div style="font-family:var(--mono);font-size:.68rem;color:var(--muted)">' + formatLocalTimestamp(order.updated_at || order.created_at) + '</div>' +
+                '<div style="font-size:.82rem;font-weight:700;color:var(--accent)">' + compactText(w.title || 'Untitled workflow', 180) + '</div>' +
+                workflowStatusBadge(w.status) +
               '</div>' +
-              '<div style="margin-top:8px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Owner request</div>' +
-              '<div style="margin-top:3px;font-size:.82rem;color:var(--text);line-height:1.5">' + compactText(order.request_text || order.title || 'Untitled order', 360) + '</div>' +
-              '<div style="margin-top:8px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">President summary</div>' +
-              '<div style="margin-top:3px;font-size:.82rem;color:var(--text);line-height:1.5">' + compactText(order.summary || 'No President summary saved yet.', 240) + '</div>' +
-              '<div style="margin-top:8px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Delegation</div>' +
-              '<div style="margin-top:3px;font-size:.82rem;color:var(--text);line-height:1.5">' + (linkedTask
-                ? ('Assigned to ' + assigned + ': ' + compactText(linkedTask.title || 'Untitled task', 220) + (linkedTask.summary ? ' • ' + compactText(linkedTask.summary, 180) : ''))
-                : 'Not delegated yet.') + '</div>' +
-              watchline +
+              '<div style="margin-top:4px;font-size:.74rem;color:var(--muted)">Assigned: ' + humanAgentName(w.assigned_agent_key) + ' &nbsp;|&nbsp; Type: ' + (w.workflow_key || '--') + '</div>' +
+              (w.blocked_reason ? '<div style="margin-top:6px;font-size:.76rem;color:#ff8c6b;line-height:1.4">' + compactText(w.blocked_reason, 300) + '</div>' : '') +
+              '<div style="margin-top:4px;font-family:var(--mono);font-size:.68rem;color:var(--muted)">' + formatLocalTimestamp(w.updated_at || w.created_at) + '</div>' +
               '</div>';
           }).join('')
-        : emptyHTML('No tracked owner orders yet');
+        : emptyHTML('Nothing blocked — all workflows progressing');
     }
 
-    if (subagentBadge) subagentBadge.textContent = openTasks.length + ' tracked';
-    if (subagentEl) {
-      var delegatedForProgress = tasks.filter(function(task) {
-        return String(task.assigned_agent_key || '').toLowerCase() !== 'president_agent';
-      });
-      subagentEl.innerHTML = delegatedForProgress.length
-        ? delegatedForProgress.slice(0, 8).map(function(task) {
-            var order = orders.find(function(o) {
-              return String(((task.details || {}).order_id || '')) === String(o.order_id || '');
-            }) || null;
-            var latest = latestActivityForTask(task, rows);
-            var taskDetails = task.details || {};
-            var watchdogLine = taskDetails.watchdog_attempts
-              ? '<div style="margin-top:4px;font-size:.74rem;color:#ffb36b;line-height:1.45">President watchdog: ' + taskDetails.watchdog_attempts + ' attempt' + (taskDetails.watchdog_attempts === 1 ? '' : 's') + (taskDetails.stalled_minutes ? (' • stalled ' + taskDetails.stalled_minutes + ' min') : '') + (taskDetails.president_attention_required ? ' • owner attention requested' : '') + '</div>'
-              : '';
-            return '<div style="padding:12px 0;border-bottom:1px solid var(--border)">' +
-              '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">' +
-                '<div style="font-size:.82rem;font-weight:800;color:var(--text)">' + humanAgentName(task.assigned_agent_key) + ' • ' + officeStatusLabel(task.status) + '</div>' +
-                '<div style="font-family:var(--mono);font-size:.68rem;color:var(--muted)">' + formatLocalTimestamp(task.updated_at || task.created_at) + '</div>' +
-              '</div>' +
-              '<div style="margin-top:6px;font-size:.8rem;color:var(--text);line-height:1.45">Task: ' + compactText(task.title || 'Untitled task', 220) + '</div>' +
-              '<div style="margin-top:4px;font-size:.76rem;color:var(--muted);line-height:1.45">From order #' + String(((task.details || {}).order_id || (order && order.order_id) || '--')) + (order ? (': ' + compactText(order.request_text || order.title || '', 180)) : '') + '</div>' +
-              '<div style="margin-top:8px;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Latest response</div>' +
-              '<div style="margin-top:3px;font-size:.82rem;color:var(--text);line-height:1.5">' + (latest
-                ? compactText(latest.summary || 'Progress logged.', 260)
-                : 'No subagent progress logged yet.') + '</div>' +
-              watchdogLine +
-              '<div style="margin-top:4px;font-family:var(--mono);font-size:.68rem;color:var(--muted)">' + (latest ? formatLocalTimestamp(latest.created_at) : 'awaiting first update') + '</div>' +
-              '</div>';
-          }).join('')
-        : emptyHTML('No delegated subagent work to track yet');
-    }
-
+    // Progress Update Feeds (subscriptions)
     if (progressBadge) progressBadge.textContent = subs.length + ' active';
     if (progressEl) {
       progressEl.innerHTML = subs.length
         ? subs.slice(0, 6).map(function(sub) {
             return '<div style="padding:10px 0;border-bottom:1px solid var(--border)">' +
-              '<div style="font-size:.8rem;color:var(--text);line-height:1.45">President is sending updates every ' + (sub.interval_minutes || 5) + ' min via ' + (sub.channel || 'telegram') + '.</div>' +
+              '<div style="font-size:.8rem;color:var(--text);line-height:1.45">Updates every ' + (sub.interval_minutes || 5) + ' min via ' + (sub.channel || 'telegram') + '.</div>' +
               '<div style="margin-top:4px;font-family:var(--mono);font-size:.7rem;color:var(--muted)">next due ' + formatLocalTimestamp(sub.next_due_at) + ' | last sent ' + formatLocalTimestamp(sub.last_sent_at) + '</div>' +
               '</div>';
           }).join('')
         : emptyHTML('No active progress feeds');
     }
 
+    // Recent Progress Reports
     if (reportsBadge) reportsBadge.textContent = reports.length + ' recent';
     if (reportsEl) {
       reportsEl.innerHTML = reports.length
@@ -3312,85 +3413,31 @@ async function loadAgentOffice() {
               '<div style="margin-top:4px;font-family:var(--mono);font-size:.7rem;color:var(--muted)">' + formatLocalTimestamp(report.created_at) + '</div>' +
               '</div>';
           }).join('')
-        : emptyHTML('No progress reports have been sent yet');
+        : emptyHTML('No progress reports sent yet');
     }
 
-    document.getElementById('officekpi-orders').textContent = orders.length;
-    document.getElementById('officekpi-orders-sub').textContent = 'last tracked: ' + (orders.length ? formatLocalTimestamp(orders[0].created_at) : '--');
-    document.getElementById('officekpi-held').textContent = heldOrders.length;
-    document.getElementById('officekpi-held-sub').textContent = orders.length ? (Math.round((heldOrders.length / Math.max(orders.length, 1)) * 100) + '% of total') : 'pending assignment';
-    document.getElementById('officekpi-delegated').textContent = delegatedOrders.length + blockedOrders.length;
-    document.getElementById('officekpi-delegated-sub').textContent = openTasks.filter(function(t) { return String(t.status || '') === 'in_progress'; }).length + ' in progress • ' + blockedOrders.length + ' escalated';
-    document.getElementById('officekpi-completed').textContent = completedOrders.length;
-    document.getElementById('officekpi-completed-sub').textContent = orders.length ? (Math.round((completedOrders.length / Math.max(orders.length, 1)) * 100) + '% completion') : 'performance funnel';
-
-    if (funnelEl) {
-      var totalOrders = Math.max(orders.length, 1);
-      var heldPct = Math.round((heldOrders.length / totalOrders) * 100);
-      var delegatedPct = Math.round((delegatedOrders.length / totalOrders) * 100);
-      var blockedPct = Math.round((blockedOrders.length / totalOrders) * 100);
-      var completedPct = Math.round((completedOrders.length / totalOrders) * 100);
-      funnelEl.innerHTML =
-        '<div class="funnel-row start"><div class="funnel-label">Orders Received</div><div class="funnel-bar-bg"><div class="funnel-bar-fill" style="width:100%">' + orders.length + '</div></div><div class="funnel-pct">100%</div></div>' +
-        '<div class="funnel-row abandon"><div class="funnel-label">Held By President</div><div class="funnel-bar-bg"><div class="funnel-bar-fill" style="width:' + heldPct + '%">' + heldOrders.length + '</div></div><div class="funnel-pct">' + heldPct + '%</div></div>' +
-        '<div class="funnel-row submit"><div class="funnel-label">Delegated</div><div class="funnel-bar-bg"><div class="funnel-bar-fill" style="width:' + delegatedPct + '%">' + delegatedOrders.length + '</div></div><div class="funnel-pct">' + delegatedPct + '%</div></div>' +
-        '<div class="funnel-row abandon"><div class="funnel-label">Escalated By President</div><div class="funnel-bar-bg"><div class="funnel-bar-fill" style="width:' + blockedPct + '%">' + blockedOrders.length + '</div></div><div class="funnel-pct">' + blockedPct + '%</div></div>' +
-        '<div class="funnel-row submit"><div class="funnel-label">Completed</div><div class="funnel-bar-bg"><div class="funnel-bar-fill" style="width:' + completedPct + '%">' + completedOrders.length + '</div></div><div class="funnel-pct">' + completedPct + '%</div></div>';
+    // Workflow Timeline (chronological event feed)
+    if (timelineBadge) timelineBadge.textContent = events.length + ' events';
+    if (timelineEl) {
+      timelineEl.innerHTML = events.length
+        ? events.map(function(ev) {
+            var color = ev.status === 'error' ? 'var(--accent)' : (ev.status === 'success' ? 'var(--green)' : (ev.status === 'warning' ? 'var(--yellow)' : 'var(--blue)'));
+            return '<div style="display:flex;gap:12px;padding:14px 0;border-bottom:1px solid var(--border)">' +
+              '<div style="min-width:118px;font-family:var(--mono);font-size:.7rem;color:var(--muted);white-space:nowrap">' + formatLocalTimestamp(ev.created_at) + '</div>' +
+              '<div style="width:10px;height:10px;border-radius:50%;background:' + color + ';margin-top:5px;flex:0 0 auto"></div>' +
+              '<div style="flex:1">' +
+                '<div style="font-size:.76rem;font-family:var(--mono);color:var(--muted);text-transform:uppercase;margin-bottom:3px">' + (ev.event_type || 'note') + (ev.step_key ? ' · ' + ev.step_key : '') + '</div>' +
+                '<div style="font-size:.84rem;line-height:1.55;color:var(--text)">' + compactText(ev.summary || '', 320) + '</div>' +
+              '</div>' +
+            '</div>';
+          }).join('')
+        : emptyHTML('No workflow events yet — send a command to the President to get started');
     }
 
-    badge.textContent = rows.length + ' moments';
-    if (!rows.length && !tasks.length && !orders.length) {
-      body.innerHTML = emptyHTML('No office conversation yet');
-      return;
-    }
-
-    var officeLines = [];
-    openTasks.slice(0, 4).forEach(function(task) {
-      officeLines.push({
-        created_at: task.updated_at || task.created_at,
-        speaker: humanAgentName(task.requested_by_agent_key || 'president_agent'),
-        line: renderOfficeTaskLine(task),
-        type: 'task'
-      });
-    });
-    rows.slice(0, 24).forEach(function(r) {
-      officeLines.push({
-        created_at: r.created_at,
-        speaker: humanAgentName(r.agent_key),
-        line: officeSay(r.agent_key, r.summary, r.status),
-        type: 'activity',
-        status: r.status
-      });
-    });
-    heldOrders.slice(0, 4).forEach(function(order) {
-      officeLines.push({
-        created_at: order.updated_at || order.created_at,
-        speaker: 'President',
-        line: 'President: I am still holding this one before assigning it out: ' + (order.title || 'Untitled order') + '.',
-        type: 'held'
-      });
-    });
-    officeLines.sort(function(a, b) { return new Date(b.created_at).getTime() - new Date(a.created_at).getTime(); });
-
-    body.innerHTML = officeLines.map(function(item) {
-      var accent = item.type === 'task' ? 'var(--yellow)' : (item.type === 'held' ? 'var(--purple)' : (String(item.status || '').toLowerCase() === 'error' ? 'var(--accent)' : 'var(--blue)'));
-      return '<div style="display:flex;gap:12px;padding:14px 0;border-bottom:1px solid var(--border)">' +
-        '<div style="min-width:118px;font-family:var(--mono);font-size:.7rem;color:var(--muted);white-space:nowrap">' + formatLocalTimestamp(item.created_at) + '</div>' +
-        '<div style="width:10px;height:10px;border-radius:50%;background:' + accent + ';margin-top:6px;flex:0 0 auto"></div>' +
-        '<div style="flex:1">' +
-          '<div style="font-size:.83rem;font-weight:600;color:var(--text);margin-bottom:4px">' + item.speaker + '</div>' +
-          '<div style="font-size:.84rem;line-height:1.55;color:var(--text)">' + item.line + '</div>' +
-        '</div>' +
-      '</div>';
-    }).join('');
   } catch (e) {
-    body.innerHTML = '<div class="empty" style="color:var(--accent)">Agent office unavailable: ' + e.message + '</div>';
-    if (byAgentEl) byAgentEl.innerHTML = emptyHTML('Could not load speakers');
-    if (tasksEl) tasksEl.innerHTML = emptyHTML('Could not load tasks');
-    if (orderDetailEl) orderDetailEl.innerHTML = emptyHTML('Could not load order detail');
-    if (subagentEl) subagentEl.innerHTML = emptyHTML('Could not load subagent responses');
-    if (progressEl) progressEl.innerHTML = emptyHTML('Could not load update feeds');
-    if (reportsEl) reportsEl.innerHTML = emptyHTML('Could not load progress reports');
+    [timelineEl, activeEl, blockedEl, progressEl, reportsEl].forEach(function(el) {
+      if (el) el.innerHTML = '<div class="empty" style="color:var(--accent)">Unavailable: ' + e.message + '</div>';
+    });
   }
 }
 
@@ -3399,12 +3446,38 @@ async function loadAgentSummary() {
   var badge = document.getElementById('badge-agent-summary');
   var byAgentEl = document.getElementById('body-agent-summary-by-agent');
   var byStatusEl = document.getElementById('body-agent-summary-status');
+  var wfHistoryEl = document.getElementById('body-workflow-history');
+  var wfHistoryBadge = document.getElementById('badge-workflow-history');
   if (!body) return;
   body.innerHTML = loadingHTML();
   if (byAgentEl) byAgentEl.innerHTML = loadingHTML();
   if (byStatusEl) byStatusEl.innerHTML = loadingHTML();
+  if (wfHistoryEl) wfHistoryEl.innerHTML = loadingHTML();
   try {
-    var rows = await fetchAgentActivity(120);
+    var fetchResults = await Promise.all([fetchAgentActivity(120), fetchWorkflows('', 60)]);
+    var rows = fetchResults[0];
+    var wfRows = fetchResults[1] || [];
+
+    // Workflow History — rendered first (top of view)
+    if (wfHistoryEl) {
+      if (wfHistoryBadge) wfHistoryBadge.textContent = wfRows.length + ' workflows';
+      wfHistoryEl.innerHTML = wfRows.length
+        ? '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+          '<th>Updated</th><th>Type</th><th>Agent</th><th>Status</th><th>Summary</th>' +
+          '</tr></thead><tbody>' +
+          wfRows.map(function(w) {
+            var color = workflowStatusColor(w.status);
+            return '<tr>' +
+              '<td style="font-family:var(--mono);font-size:.72rem;color:var(--muted);white-space:nowrap">' + formatLocalTimestamp(w.updated_at || w.created_at) + '</td>' +
+              '<td style="font-family:var(--mono);font-size:.72rem;color:var(--text)">' + (w.workflow_key || '--') + '</td>' +
+              '<td style="font-family:var(--mono);font-size:.72rem;color:var(--text)">' + humanAgentName(w.assigned_agent_key) + '</td>' +
+              '<td style="font-family:var(--mono);font-size:.7rem;color:' + color + ';text-transform:uppercase">' + String(w.status || '--') + '</td>' +
+              '<td style="color:var(--text);line-height:1.45;white-space:normal">' + compactText(w.summary || '--', 200) + '</td>' +
+              '</tr>';
+          }).join('') +
+          '</tbody></table></div>'
+        : emptyHTML('No workflows on record yet');
+    }
     var rows7d = rows.filter(function(r) { return isWithinRange(r.created_at, '7d'); });
     badge.textContent = rows.length + ' entries';
 
@@ -3485,6 +3558,7 @@ async function loadAgentSummary() {
           '</tr>';
       }).join('') +
       '</tbody></table></div>';
+
   } catch (e) {
     badge.textContent = 'unavailable';
     body.innerHTML = '<div class="empty" style="padding:24px;color:var(--accent)">Agent summary unavailable: ' + e.message + '</div>';
@@ -4336,6 +4410,7 @@ async function runAgent(userText) {
       renderAgentOrg();
     }
     addLog('Done via ' + (data.provider || 'agent') + '.', 'ok');
+    loadSidebarWorkflows();
     loadAll();
 
   } catch(err) {

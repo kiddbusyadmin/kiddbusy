@@ -2,6 +2,7 @@ const { runCmoBlog } = require('./_cmo-blog-core');
 const { runAgentConversation } = require('./_agent-router-core');
 const { upsertResearchArtifact } = require('./_research-memory');
 const { logAgentActivity } = require('./_agent-activity');
+const { getTrafficSummary, getActivitySummary } = require('./_analytics-core');
 const {
   getWorkflows,
   updateWorkflow,
@@ -106,31 +107,92 @@ async function runBlogPublishWorkflow(workflow, order) {
   };
 }
 
-async function runDelegatedMemoWorkflow(workflow, order) {
+// Structured memo workflow: replaces freeform runDelegatedMemoWorkflow.
+// Agents are prompted to return a JSON-structured evidence block.
+// If no evidence is extractable, the workflow is blocked rather than silently "completed".
+async function runStructuredMemoWorkflow(workflow, order) {
+  const workflowKey = String(workflow.workflow_key || 'ops_investigation');
   const reply = await runAgentConversation({
     role: workflow.assigned_agent_key,
     userMessage:
       'Complete this typed workflow from President.\n' +
-      'Workflow: ' + String(workflow.workflow_key || '') +
+      'Workflow type: ' + workflowKey +
       '\nTitle: ' + String(workflow.title || '') +
       '\nSummary: ' + String(workflow.summary || '') +
+      '\nInput: ' + JSON.stringify(workflow.input || {}) +
       '\nOwner request: ' + String((order && order.request_text) || '') +
-      '\nReturn a concrete completion memo with findings, actions taken, and evidence.',
+      '\n\nRequired: End your response with a JSON evidence block in this exact format:\n' +
+      '```json\n{"actions_taken":["..."],"findings":"...","outcome":"completed|partial|blocked","blocked_reason":""}\n```',
     history: [],
     channel: 'dashboard',
     threadKey: 'workflow:' + String(workflow.workflow_id),
     ownerIdentity: workflow.owner_identity || 'harold'
   });
+  const replyText = String((reply && reply.reply) || '');
+
+  // Attempt to extract the JSON evidence block from the reply.
+  let evidence = { provider: (reply && reply.provider) || '' };
+  let outcome = 'completed';
+  let blockedReason = null;
+  const jsonMatch = replyText.match(/```json\s*([\s\S]*?)```/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[1]);
+      evidence = Object.assign({}, parsed, { provider: (reply && reply.provider) || '' });
+      if (String(parsed.outcome || '').toLowerCase() === 'blocked') {
+        outcome = 'blocked';
+        blockedReason = String(parsed.blocked_reason || 'Agent reported blocked.').slice(0, 1200);
+      } else if (String(parsed.outcome || '').toLowerCase() === 'partial') {
+        outcome = 'waiting';
+      }
+    } catch (_) {}
+  }
+
+  return {
+    status: outcome,
+    summary: replyText.replace(/```json[\s\S]*?```/g, '').trim().slice(0, 1200) || 'Workflow completed.',
+    output: { reply: replyText, provider: (reply && reply.provider) || '' },
+    evidence,
+    blocked_reason: blockedReason
+  };
+}
+
+// Analytics workflow: answers deterministic questions from the analytics core directly.
+// Avoids LLM for known data queries, writes structured evidence.
+async function runAnalyticsWorkflow(workflow, order) {
+  const payload = Object.assign({}, workflow.input || {});
+  const question = String(payload.question || workflow.title || (order && order.request_text) || '').trim();
+  let trafficData = null;
+  let activityData = null;
+  try {
+    trafficData = await getTrafficSummary({ range: payload.range || '7d' });
+  } catch (_) {}
+  try {
+    activityData = await getActivitySummary({ range: payload.range || '7d' });
+  } catch (_) {}
+  if (!trafficData && !activityData) {
+    return {
+      status: 'blocked',
+      summary: 'Analytics data unavailable — Supabase query failed.',
+      output: {},
+      evidence: {},
+      blocked_reason: 'Could not fetch traffic or activity data from database.'
+    };
+  }
+  const summary = [
+    trafficData ? `Sessions (${payload.range || '7d'}): ${trafficData.total_sessions || '--'} | Manual searches: ${trafficData.manual_searches || '--'} | Auto geo: ${trafficData.auto_geo_searches || '--'}` : null,
+    activityData ? `Events (${payload.range || '7d'}): ${activityData.total_events || '--'} | Top city: ${activityData.top_city || '--'}` : null
+  ].filter(Boolean).join('\n');
   return {
     status: 'completed',
-    summary: String((reply && reply.reply) || '').slice(0, 1200) || 'Workflow completed.',
-    output: { reply: (reply && reply.reply) || '', provider: (reply && reply.provider) || '' },
-    evidence: { provider: (reply && reply.provider) || '' }
+    summary: summary || 'Analytics data retrieved.',
+    output: { question, traffic: trafficData || {}, activity: activityData || {} },
+    evidence: { traffic: trafficData || {}, activity: activityData || {}, question }
   };
 }
 
 async function runResearchWorkflow(workflow, order) {
-  const result = await runDelegatedMemoWorkflow(workflow, order);
+  const result = await runStructuredMemoWorkflow(workflow, order);
   try {
     await upsertResearchArtifact({
       ownerIdentity: normalizeOwnerIdentity(workflow.owner_identity || 'harold'),
@@ -172,12 +234,17 @@ async function runSingleWorkflow(workflow) {
   });
 
   let result;
-  if (workflow.workflow_key === 'publish_city_blog_batch') {
+  const wfKey = String(workflow.workflow_key || '');
+  if (wfKey === 'publish_city_blog_batch' || wfKey === 'publish_blog_post') {
     result = await runBlogPublishWorkflow(workflow, order);
-  } else if (workflow.workflow_key === 'research_request') {
+  } else if (wfKey === 'research_request') {
     result = await runResearchWorkflow(workflow, order);
+  } else if (wfKey === 'answer_analytics_question') {
+    result = await runAnalyticsWorkflow(workflow, order);
   } else {
-    result = await runDelegatedMemoWorkflow(workflow, order);
+    // Handles: ops_investigation, review_submission, process_owner_claim,
+    // process_sponsorship, fix_content_quality_issue, and any future typed keys.
+    result = await runStructuredMemoWorkflow(workflow, order);
   }
 
   const nextStatus = String(result.status || 'completed');
