@@ -29,6 +29,10 @@ function inferTargetCount(payload) {
   return 1;
 }
 
+function requestImpliesPublication(text) {
+  return /\b(publish|published|article|blog post|listicle|post)\b/i.test(String(text || ''));
+}
+
 async function loadOrder(orderId) {
   if (!orderId) return null;
   const out = await sbFetch(`agent_orders?order_id=eq.${encodeURIComponent(String(orderId))}&select=*&limit=1`);
@@ -212,6 +216,24 @@ async function runAnalyticsWorkflow(workflow, order) {
 
 async function runResearchWorkflow(workflow, order) {
   const result = await runStructuredMemoWorkflow(workflow, order);
+  const publishRequested = requestImpliesPublication(workflow.title || '') ||
+    requestImpliesPublication((order && order.request_text) || '');
+  const evidence = result && result.evidence && typeof result.evidence === 'object' ? result.evidence : {};
+  const hasPublicationEvidence = !!(
+    evidence.post_id ||
+    evidence.post_ids ||
+    evidence.published_url ||
+    evidence.slug
+  );
+  if (publishRequested && !hasPublicationEvidence) {
+    return {
+      status: 'blocked',
+      summary: 'Research completed, but no blog post evidence was produced. Publish requests must run through a publish workflow and prove the resulting article exists.',
+      output: Object.assign({}, result.output || {}, { research_only: true }),
+      evidence: Object.assign({}, evidence, { validation_error: 'missing_publication_evidence' }),
+      blocked_reason: 'This request asked for publication, but the research workflow returned no published post evidence.'
+    };
+  }
   try {
     await upsertResearchArtifact({
       ownerIdentity: normalizeOwnerIdentity(workflow.owner_identity || 'harold'),
