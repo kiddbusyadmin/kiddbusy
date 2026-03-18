@@ -3394,6 +3394,7 @@ async function onCitySelected(city, options) {
   const isAutoDetected = !!opts.autoDetected;
 
   const cityName = cityBaseName(city);
+  try { localStorage.setItem('kb_last_city', city); } catch (_) {}
 
   // ── INSTANT RENDER from in-memory cache (zero network) ──
   if (_memCache[cityName] && _memCache[cityName].rows.length >= 5 && _memCache[cityName].ranked) {
