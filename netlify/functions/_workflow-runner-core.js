@@ -61,6 +61,7 @@ async function runBlogPublishWorkflow(workflow, order) {
   const payload = Object.assign({}, workflow.input || {}, workflow.details || {});
   const city = cleanCity(payload.city || extractCity(workflow.title || (order && order.request_text) || ''));
   const targetCount = inferTargetCount(payload);
+  const keywordTarget = String(payload.keyword_target || '').trim();
   const before = await listCityPosts(city);
   const beforePublished = before.filter((row) => String(row.status || '') === 'published').length;
   const remaining = Math.max(targetCount - beforePublished, 0);
@@ -82,7 +83,8 @@ async function runBlogPublishWorkflow(workflow, order) {
       max_generate_per_run: batchSize,
       publish_rate: batchSize,
       force_publish_generated: true,
-      distribution_enabled: true
+      distribution_enabled: true,
+      keyword_target: keywordTarget || undefined
     })
   });
   const parsed = JSON.parse((result && result.body) || '{}');
@@ -97,6 +99,7 @@ async function runBlogPublishWorkflow(workflow, order) {
     summary: 'CMO workflow' + (city ? (' for ' + city) : '') + ': published ' + String(afterPublished) + '/' + String(targetCount) + '.',
     output: {
       city,
+      keyword_target: keywordTarget || null,
       generated_count: Number(parsed.generated_count || 0),
       published_count: afterPublished,
       remaining_count: remainingAfter

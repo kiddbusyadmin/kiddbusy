@@ -852,26 +852,13 @@ function buildAutoDelegationPlan(text, reply) {
   var isExecution = shouldAutoDelegateExecutionRequest(lower);
   if (!isExecution && !combinedClaimed.length) return [];
   var isResearchIntent = /\b(research|analyze|analysis|audit|investigate|identify|rank)\b/.test(lower);
-  if (isResearchIntent) {
-    return [{
-      workflow_key: 'research_request',
-      assigned_agent_key: 'research_agent',
-      title: raw.slice(0, 180),
-      summary: 'Auto-delegated by President because this request needs specialist research and a real deliverable.',
-      input: {
-        research_request: true,
-        city: inferCityFromRequest(raw) || ''
-      },
-      details: {
-        auto_delegated: true,
-        research_request: true
-      },
-      priority: 'high'
-    }];
-  }
-  if (/\b(blog|post|article|seo)\b/.test(lower)) {
-    var city = inferCityFromRequest(raw);
+  var isBlogIntent = /\b(blog|post|article|seo|listicle|content|publish)\b/.test(lower);
+  var city = inferCityFromRequest(raw);
+  if (isBlogIntent) {
     var isTitleFix = /\btitle|titles|capitalization|lowercase|formatting|style guide|style\b/.test(lower);
+    var explicitKeyword = '';
+    if (/\bindoor playground/.test(lower)) explicitKeyword = 'indoor playgrounds ' + (city || '').trim();
+    else if (/\bindoor play/.test(lower)) explicitKeyword = 'indoor play areas ' + (city || '').trim();
     var blogPlan = [{
       workflow_key: isTitleFix ? 'blog_title_qc' : 'publish_city_blog_batch',
       assigned_agent_key: 'cmo_agent',
@@ -882,13 +869,34 @@ function buildAutoDelegationPlan(text, reply) {
         article_count: 1,
         target_count: 1,
         seo_keyword_theme: /\bteen|teens|older kids|high school|middle school\b/.test(lower) ? 'local_teen' : 'local_toddler',
-        title_qc: !!isTitleFix
+        title_qc: !!isTitleFix,
+        keyword_target: explicitKeyword || undefined
       },
       details: {
-        auto_delegated: true
+        auto_delegated: true,
+        publish_requested: true,
+        research_requested: isResearchIntent
       },
       priority: 'high'
     }];
+    if (isResearchIntent) {
+      blogPlan.push({
+        workflow_key: 'research_request',
+        assigned_agent_key: 'research_agent',
+        title: 'Research support for ' + raw.slice(0, 150),
+        summary: 'President requested supporting research for a publish workflow.',
+        input: {
+          research_request: true,
+          city: city || ''
+        },
+        details: {
+          auto_delegated: true,
+          research_request: true,
+          supporting_publish_workflow: true
+        },
+        priority: 'normal'
+      });
+    }
     if (combinedClaimed.indexOf('operations_agent') >= 0) {
       blogPlan.push({
         workflow_key: isTitleFix ? 'blog_title_qc' : 'publish_city_blog_batch',
@@ -901,7 +909,8 @@ function buildAutoDelegationPlan(text, reply) {
           target_count: 1,
           seo_keyword_theme: /\bteen|teens|older kids|high school|middle school\b/.test(lower) ? 'local_teen' : 'local_toddler',
           title_qc: !!isTitleFix,
-          dependent_on_agent_key: 'cmo_agent'
+          dependent_on_agent_key: 'cmo_agent',
+          keyword_target: explicitKeyword || undefined
         },
         details: {
           auto_delegated: true,
@@ -911,6 +920,23 @@ function buildAutoDelegationPlan(text, reply) {
       });
     }
     return blogPlan;
+  }
+  if (isResearchIntent) {
+    return [{
+      workflow_key: 'research_request',
+      assigned_agent_key: 'research_agent',
+      title: raw.slice(0, 180),
+      summary: 'Auto-delegated by President because this request needs specialist research and a real deliverable.',
+      input: {
+        research_request: true,
+        city: city || ''
+      },
+      details: {
+        auto_delegated: true,
+        research_request: true
+      },
+      priority: 'high'
+    }];
   }
 
   return [{

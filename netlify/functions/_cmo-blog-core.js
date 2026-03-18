@@ -1081,6 +1081,12 @@ async function runCmoBlog(event) {
     );
     var targetCity = Object.prototype.hasOwnProperty.call(body, 'target_city') ? String(body.target_city || '').trim() : '';
     var seoKeywordTheme = String(body.seo_keyword_theme || '').trim().toLowerCase();
+    var customKeywordTargets = Array.isArray(body.keyword_targets)
+      ? body.keyword_targets.map(function (v) { return String(v || '').trim(); }).filter(Boolean)
+      : [];
+    if (!customKeywordTargets.length && body.keyword_target) {
+      customKeywordTargets = [String(body.keyword_target || '').trim()].filter(Boolean);
+    }
 
     var cities = await getCities();
     if (targetCity) {
@@ -1190,7 +1196,10 @@ async function runCmoBlog(event) {
       var batchSize = plannedCityRotation.length ? 1 : (remaining > 5 ? 5 : remaining);
       var batch = [];
       var batchKeywords = [];
-      if (keywordPlan.length) {
+      if (customKeywordTargets.length) {
+        batchKeywords = customKeywordTargets.slice(keywordCursor, keywordCursor + batchSize);
+        keywordCursor += batchKeywords.length;
+      } else if (keywordPlan.length) {
         batchKeywords = keywordPlan.slice(keywordCursor, keywordCursor + batchSize);
         keywordCursor += batchKeywords.length;
       }
