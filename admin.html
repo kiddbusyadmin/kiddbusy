@@ -3148,7 +3148,7 @@ async function loadStatusBoard() {
   if (!el) return;
   el.innerHTML = '<div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>';
   try {
-    _sbAllWorkflows = await fetchWorkflows('', 80);
+    _sbAllWorkflows = await fetchWorkflows('all', 120);
     renderStatusBoardRows();
   } catch (e) {
     el.innerHTML = '<div style="padding:24px;color:var(--accent);font-size:.8rem">Status board unavailable: ' + e.message + '</div>';
@@ -3202,7 +3202,7 @@ async function loadAgentOffice() {
 
   try {
     var results = await Promise.all([
-      fetchWorkflows('', 120),
+      fetchWorkflows('all', 120),
       fetchWorkflowEvents('', 60),
       fetchProgressSubscriptions('active', 40),
       fetchProgressReports(30)
@@ -3332,7 +3332,7 @@ async function loadAgentSummary() {
   if (byStatusEl) byStatusEl.innerHTML = loadingHTML();
   if (wfHistoryEl) wfHistoryEl.innerHTML = loadingHTML();
   try {
-    var fetchResults = await Promise.all([fetchAgentActivity(120), fetchWorkflows('', 60)]);
+    var fetchResults = await Promise.all([fetchAgentActivity(120), fetchWorkflows('all', 120)]);
     var rows = fetchResults[0];
     var wfRows = fetchResults[1] || [];
 
