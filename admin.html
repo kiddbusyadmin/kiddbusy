@@ -282,7 +282,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
     <div class="pulse"></div>
     <div class="topbar-time" id="last-updated">loading...</div>
     <button class="topbar-btn" onclick="loadAll()">&#8635; Refresh</button>
-    <button class="topbar-btn primary" id="run-btn" onclick="runScheduledAgent()">&#9654; Run Agent</button>
+    <button class="topbar-btn primary" id="run-btn" onclick="runWorkflowQueue()">&#9654; Run Queue</button>
   </div>
 </div>
 
@@ -4425,27 +4425,32 @@ async function runAgent(userText) {
 }
 
 // ===== RUN SCHEDULED AGENT =====
-async function runScheduledAgent() {
+async function runWorkflowQueue() {
   var btn = document.getElementById('run-btn');
   btn.disabled = true;
   btn.textContent = 'Running...';
-  addLog('Triggering scheduled agent...');
+  addLog('Running workflow queue...');
 
   try {
-    var res = await fetch('/.netlify/functions/agent-scheduled');
+    var res = await fetch('/.netlify/functions/agent-task-runner', {
+      headers: { 'X-Requested-From': 'kiddbusy-hq' }
+    });
     var data = await res.json();
+    var processed = (data.tasks && data.tasks.processed_count) || 0;
     if (data.success) {
-      addLog('Agent complete.', 'ok');
+      addLog('Queue run complete. ' + processed + ' workflow(s) processed.', 'ok');
     } else {
-      addLog('Error: ' + (data.error || 'unknown'), 'err');
+      addLog('Queue run error: ' + (data.tasks && data.tasks.error || data.error || 'unknown'), 'err');
     }
+    loadStatusBoard();
+    loadSidebarWorkflows();
     loadAll();
   } catch(e) {
-    addLog('Failed to reach agent: ' + e.message, 'err');
+    addLog('Failed to reach queue runner: ' + e.message, 'err');
   }
 
   btn.disabled = false;
-  btn.textContent = 'Run Agent';
+  btn.textContent = 'Run Queue';
 }
 
 // ===== AUTO RESIZE TEXTAREA =====
