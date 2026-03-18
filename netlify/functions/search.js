@@ -33,6 +33,47 @@ const ACTIVITY_CATEGORIES = new Set([
 
 const AGE_SET = new Set(['toddler', 'school', 'teens']);
 const TAG_SET = new Set(['indoor', 'outdoor', 'free', 'paid']);
+const CATEGORY_ALIASES = {
+  indoor: 'Indoor Play',
+  'indoor play': 'Indoor Play',
+  outdoors: 'Outdoor',
+  outdoor: 'Outdoor',
+  museum: "Children's Museum",
+  "children's museum": "Children's Museum",
+  'childrens museum': "Children's Museum",
+  library: 'Library / Education',
+  education: 'Library / Education',
+  educational: 'Library / Education',
+  'library / education': 'Library / Education',
+  swimming: 'Swimming',
+  pool: 'Swimming',
+  'arts and crafts': 'Arts & Crafts',
+  'arts & crafts': 'Arts & Crafts',
+  crafts: 'Arts & Crafts',
+  arcade: 'Arcade / Gaming',
+  gaming: 'Arcade / Gaming',
+  'arcade / gaming': 'Arcade / Gaming',
+  sports: 'Sports',
+  zoo: 'Zoo / Animals',
+  animals: 'Zoo / Animals',
+  'zoo / animals': 'Zoo / Animals',
+  food: 'Food & Treats',
+  treats: 'Food & Treats',
+  'food & treats': 'Food & Treats',
+  dance: 'Dance / Music',
+  music: 'Dance / Music',
+  'dance / music': 'Dance / Music',
+  theater: 'Theater / Shows',
+  theatre: 'Theater / Shows',
+  shows: 'Theater / Shows',
+  'theater / shows': 'Theater / Shows',
+  park: 'Parks',
+  parks: 'Parks',
+  playground: 'Playgrounds',
+  playgrounds: 'Playgrounds',
+  'splash pad': 'Splash Pads',
+  'splash pads': 'Splash Pads'
+};
 
 function json(statusCode, payload) {
   return {
@@ -44,6 +85,14 @@ function json(statusCode, payload) {
 
 function safeString(v, maxLen) {
   return String(v == null ? '' : v).trim().slice(0, maxLen || 400);
+}
+
+function canonicalizeCategory(value) {
+  const raw = safeString(value, 80);
+  if (!raw) return '';
+  if (ACTIVITY_CATEGORIES.has(raw)) return raw;
+  const key = raw.toLowerCase().replace(/&/g, 'and');
+  return CATEGORY_ALIASES[key] || '';
 }
 
 function parseJsonArrayFromText(raw) {
@@ -68,20 +117,25 @@ function normalizeActivities(items) {
   for (let i = 0; i < items.length; i += 1) {
     const row = items[i] || {};
     const name = safeString(row.name, 140);
-    const category = safeString(row.category, 60);
+    const category = canonicalizeCategory(row.category || row.type || row.kind);
     const emoji = safeString(row.emoji, 8);
-    const desc = safeString(row.desc, 420);
-    const addr = safeString(row.addr, 180);
+    const desc = safeString(row.desc || row.description || row.summary, 420);
+    const addr = safeString(row.addr || row.address || row.location, 180);
     if (!name || !category || !desc || !addr) continue;
-    if (!ACTIVITY_CATEGORIES.has(category)) continue;
     const ages = Array.isArray(row.ages) ? row.ages.map(function (a) { return safeString(a, 20).toLowerCase(); }).filter(function (a) { return AGE_SET.has(a); }) : [];
     const tags = Array.isArray(row.tags) ? row.tags.map(function (t) { return safeString(t, 20).toLowerCase(); }).filter(function (t) { return TAG_SET.has(t); }) : [];
+    if (!ages.length) {
+      const ageText = safeString(row.age_group || row.age || row.audience, 40).toLowerCase();
+      if (ageText.includes('toddler')) ages.push('toddler');
+      if (ageText.includes('school')) ages.push('school');
+      if (ageText.includes('teen')) ages.push('teens');
+    }
     if (!ages.length) continue;
     let rating = Number(row.rating);
     if (!Number.isFinite(rating)) rating = 4.5;
     if (rating < 4) rating = 4;
     if (rating > 5) rating = 5;
-    let reviewCount = Number(row.reviewCount);
+    let reviewCount = Number(row.reviewCount != null ? row.reviewCount : row.review_count);
     if (!Number.isFinite(reviewCount) || reviewCount < 1) reviewCount = 1;
     reviewCount = Math.floor(reviewCount);
     const open = row.open !== false;
