@@ -1826,7 +1826,7 @@ async function upsertListing(activity, city, source = 'ai_generated') {
       is_open: activity.open ?? true,
       is_sponsored: false,
       rating: activity.rating || 0,
-      review_count: activity.reviewCount || 0,
+      review_count: 0,
       status: 'active',
       source: source,
       last_refreshed: now,
@@ -1888,6 +1888,30 @@ let currentListings = []; // tracks whatever city is currently loaded
 
 // Ratings store (persisted in memory)
 let userRatings = {};
+const LOCAL_CITY_CACHE_PREFIX = 'kb_city_cache:';
+
+function readLocalCitySnapshot(cityName) {
+  try {
+    const raw = localStorage.getItem(LOCAL_CITY_CACHE_PREFIX + String(cityName || '').toLowerCase());
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.rows) || !parsed.rows.length) return null;
+    const ts = Number(parsed.ts || 0);
+    if (!Number.isFinite(ts) || (Date.now() - ts) > CACHE_TTL_MS) return null;
+    return { ts, rows: parsed.rows };
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeLocalCitySnapshot(cityName, rows) {
+  try {
+    localStorage.setItem(
+      LOCAL_CITY_CACHE_PREFIX + String(cityName || '').toLowerCase(),
+      JSON.stringify({ ts: Date.now(), rows: Array.isArray(rows) ? rows.slice(0, 20) : [] })
+    );
+  } catch (_) {}
+}
 
 function sortListingsForDisplay(rows) {
   return [...(rows || [])].sort((a, b) => {
@@ -1897,8 +1921,8 @@ function sortListingsForDisplay(rows) {
     const aRealUserReviews = Number(a && a.user_review_count ? a.user_review_count : 0);
     const bRealUserReviews = Number(b && b.user_review_count ? b.user_review_count : 0);
     if (bRealUserReviews !== aRealUserReviews) return bRealUserReviews - aRealUserReviews;
-    const aReviewCount = Number(a && (a.review_count || a.reviewCount) ? (a.review_count || a.reviewCount) : 0);
-    const bReviewCount = Number(b && (b.review_count || b.reviewCount) ? (b.review_count || b.reviewCount) : 0);
+    const aReviewCount = Number(a && (a.real_review_count || a.verified_review_count || 0) ? (a.real_review_count || a.verified_review_count || 0) : 0);
+    const bReviewCount = Number(b && (b.real_review_count || b.verified_review_count || 0) ? (b.real_review_count || b.verified_review_count || 0) : 0);
     if (bReviewCount !== aReviewCount) return bReviewCount - aReviewCount;
     const aRating = Number(a && a.rating ? a.rating : 0);
     const bRating = Number(b && b.rating ? b.rating : 0);
@@ -1949,6 +1973,8 @@ async function hydrateListingsWithReviewStats(rows) {
       rating: Number.isFinite(displayRating) ? Math.round(displayRating * 10) / 10 : (Number(r && r.rating) || 0),
       review_count: displayCount,
       reviewCount: displayCount,
+      real_review_count: displayCount,
+      verified_review_count: displayCount,
       user_review_count: Number(stats.user_count || 0)
     });
   });
@@ -2808,6 +2834,7 @@ async function loadTopPicksForCity(cityLabel, source = 'ai_generated') {
 
     // Store as current listings for filter operations
     currentListings = enriched;
+    writeLocalCitySnapshot(cityBaseName(cityLabel), enriched);
 
     // Render them with full review support
     const gridEl = document.getElementById('activitiesGrid');
@@ -2918,6 +2945,7 @@ async function openDynamicReviewSummary(id) {
 function renderCachedListings(rows) {
   const sortedRows = sortListingsForDisplay(rows);
   currentListings = sortedRows;
+  writeLocalCitySnapshot(cityBaseName(document.getElementById('topPicksCity') && document.getElementById('topPicksCity').textContent), sortedRows);
   const bg = { '🏃':'#FFE8E8','🌳':'#E8FFE8','🎨':'#E8EAFF','🎮':'#FFF3E0','🦁':'#FFF8E0','💦':'#E0F7FF','🎭':'#FFF0F5','📚':'#FFFBE0','🍦':'#FFF0E0','🏆':'#E8FFEF','💃':'#F9E8FF','🔬':'#E8F4FF' };
   document.getElementById('activitiesGrid').innerHTML = sortedRows.map(a => {
     const stars = renderDynamicStars(a.rating || 0, a.review_count || 0, a.listing_id);
@@ -3415,12 +3443,27 @@ async function onCitySelected(city, options) {
     return;
   }
 
-  // Hide splash, show loader
-  document.getElementById('splashState').style.display = 'none';
-  document.getElementById('activities').style.display = 'none';
-  document.getElementById('loaderArea').classList.add('visible');
-  document.getElementById('activitiesGrid').innerHTML = '';
-  document.getElementById('topPicksCity').textContent = city;
+  let servedFromLocalSnapshot = false;
+  const localSnapshot = readLocalCitySnapshot(cityName);
+  if (localSnapshot && localSnapshot.rows.length >= 5) {
+    _memCache[cityName] = { rows: localSnapshot.rows, ts: localSnapshot.ts, ranked: true };
+    document.getElementById('splashState').style.display = 'none';
+    document.getElementById('loaderArea').classList.remove('visible');
+    document.getElementById('topPicksCity').textContent = city;
+    renderCachedListings(localSnapshot.rows);
+    loadSponsoredCityBanner(city);
+    document.getElementById('activities').style.display = 'block';
+    servedFromLocalSnapshot = true;
+  }
+
+  if (!servedFromLocalSnapshot) {
+    // Hide splash, show loader
+    document.getElementById('splashState').style.display = 'none';
+    document.getElementById('activities').style.display = 'none';
+    document.getElementById('loaderArea').classList.add('visible');
+    document.getElementById('activitiesGrid').innerHTML = '';
+    document.getElementById('topPicksCity').textContent = city;
+  }
 
   // Track this city search for the edge function to refresh
   sb.from('city_searches').upsert({ city, last_searched: new Date().toISOString() }, { onConflict: 'city' }).then(() => {});
