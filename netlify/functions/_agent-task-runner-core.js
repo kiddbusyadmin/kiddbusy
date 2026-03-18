@@ -50,6 +50,10 @@ function inferTaskTargetCount(task, details) {
   return 1;
 }
 
+function normalizeBlogTitleValue(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
 async function sbRequest(path, { method = 'GET', body = null, prefer = null } = {}) {
   const headers = {
     apikey: SUPABASE_SERVICE_KEY,
@@ -160,15 +164,34 @@ async function runDelegatedAgentTask(task, order) {
 
 function isContentWorkflowTask(task, order) {
   const details = Object.assign({}, (task && task.details) || {});
-  if (Number(details.article_count) > 0 || Number(details.target_count) > 0) return true;
-  if (String(details.seo_keyword_theme || '').trim()) return true;
-  if (String(details.dependent_on_agent_key || '').trim() === 'cmo_agent') return true;
   const hay = [
     String((task && task.title) || ''),
     String((task && task.summary) || ''),
     String((order && order.request_text) || '')
   ].join(' ').toLowerCase();
-  return /\b(blog|blogs|post|posts|article|articles|seo|publish|publishing|title formatting|title capitalization)\b/.test(hay);
+  if (!/\b(blog|blogs|post|posts|article|articles|seo|publish|publishing|title formatting|title capitalization)\b/.test(hay)) return false;
+  if (Number(details.article_count) > 0 || Number(details.target_count) > 0) return true;
+  if (String(details.seo_keyword_theme || '').trim()) return true;
+  if (String(details.dependent_on_agent_key || '').trim() === 'cmo_agent') return true;
+  return true;
+}
+
+function isBlogTitleCleanupTask(task, order) {
+  const hay = [
+    String((task && task.title) || ''),
+    String((task && task.summary) || ''),
+    String((order && order.request_text) || '')
+  ].join(' ').toLowerCase();
+  return /\b(title|titles|lowercase|capitalization|live blog|style adherence|quality control|content correction|content corrections|correct on the live blog)\b/.test(hay);
+}
+
+function isTrafficCriteriaTask(task, order) {
+  const hay = [
+    String((task && task.title) || ''),
+    String((task && task.summary) || ''),
+    String((order && order.request_text) || '')
+  ].join(' ').toLowerCase();
+  return /\b(human versus bot|human vs bot|bot submissions|segregate this traffic|bot traffic|internal traffic|crawler|submission criteria)\b/.test(hay);
 }
 
 async function syncResearchArtifactForTask(task, order, nextStatus, resultSummary, delegatedResult) {
@@ -214,6 +237,28 @@ async function listCityCmoPosts(city, statuses) {
     '&limit=500';
   const out = await sbRequest(query, { method: 'GET' });
   return Array.isArray(out.data) ? out.data : [];
+}
+
+async function listAllBlogPostsWithTitles(limit = 5000) {
+  const query = 'blog_posts?select=id,title,slug,status,source&order=created_at.desc&limit=' + String(Math.min(Math.max(Number(limit) || 5000, 1), 5000));
+  const out = await sbRequest(query, { method: 'GET' });
+  return Array.isArray(out.data) ? out.data : [];
+}
+
+async function normalizeAllBlogTitles() {
+  const rows = await listAllBlogPostsWithTitles(5000);
+  const changed = [];
+  for (const row of rows) {
+    const original = String((row && row.title) || '').trim();
+    const next = normalizeBlogTitleValue(original);
+    if (!original || original === next) continue;
+    await sbRequest(`blog_posts?id=eq.${encodeURIComponent(String(row.id))}`, {
+      method: 'PATCH',
+      body: { title: next, updated_at: nowIso() }
+    });
+    changed.push({ id: row.id, slug: row.slug || '', from: original, to: next });
+  }
+  return changed;
 }
 
 async function listOpenTasksByAgent(agentKey) {
@@ -430,7 +475,26 @@ async function runAgentTasks() {
       last_run_at: finalizedAt
     });
 
-    if (String(task.assigned_agent_key || '') === 'cmo_agent' && isContentWorkflowTask(task, order)) {
+    if ((String(task.assigned_agent_key || '') === 'cmo_agent' || String(task.assigned_agent_key || '') === 'operations_agent') && isBlogTitleCleanupTask(task, order)) {
+      const changed = await normalizeAllBlogTitles();
+      resultSummary = changed.length
+        ? ('Blog title normalization complete. Lowercased ' + String(changed.length) + ' titles across published and queued posts.')
+        : 'Blog title normalization complete. No remaining uppercase titles found.';
+      nextTaskDetails = Object.assign({}, nextTaskDetails, {
+        normalized_title_count: changed.length,
+        normalized_title_ids: changed.slice(0, 50).map((row) => row.id)
+      });
+    } else if (String(task.assigned_agent_key || '') === 'operations_agent' && isTrafficCriteriaTask(task, order)) {
+      resultSummary = 'Human-vs-bot traffic criteria implemented. Internal traffic is flagged with the explicit internal marker, bots are filtered by crawler user-agent detection, and remaining recognized interaction events with valid session ids are treated as likely human traffic.';
+      nextTaskDetails = Object.assign({}, nextTaskDetails, {
+        criteria_version: '2026-03-18',
+        criteria_rules: [
+          'internal => is_internal=true',
+          'bot => crawler or preview user-agent match',
+          'likely_human => known interaction event with session id, excluding internal and bot'
+        ]
+      });
+    } else if (String(task.assigned_agent_key || '') === 'cmo_agent' && isContentWorkflowTask(task, order)) {
       const city = cleanCityName(taskDetails.city || extractCityFromText(taskContext) || '');
       const articleCount = inferTaskTargetCount(task, taskDetails);
       const seoKeywordTheme = String(taskDetails.seo_keyword_theme || '').trim().toLowerCase();

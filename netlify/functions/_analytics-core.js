@@ -1,6 +1,7 @@
 const { sbFetch } = require('./_accounting-core');
 
 const BOT_UA_RE = /\b(bot|crawl|crawler|spider|slurp|bingpreview|headlesschrome|facebookexternalhit|whatsapp|discordbot|linkedinbot|embedly|quora link preview|googleother)\b/i;
+const HUMAN_EVENT_RE = /^(page_view|city_search|city_search_auto|filter_used|listing_view|listing_click|listing_share|share_click|event_view|event_share|review_start|review_submit|email_capture|advertise_click|submit_place|blog_post_view|blog_city_hub_view|blog_index_view|claim_click|owner_claim_start|owner_claim_verified|owner_update_saved|owner_contact_submit)$/i;
 
 function parseTimestamp(value) {
   const raw = String(value || '').trim();
@@ -21,6 +22,17 @@ function parseTimestamp(value) {
 function isBotEvent(row) {
   const ua = String((row && row.user_agent) || '');
   return BOT_UA_RE.test(ua);
+}
+
+function classifyTrafficRow(row) {
+  if (!row) return 'unknown';
+  if (row.is_internal) return 'internal';
+  if (isBotEvent(row)) return 'bot';
+  const event = String(row.event || '').trim();
+  const sessionId = normalizeSessionId(row);
+  if (!event || !sessionId) return 'unknown';
+  if (HUMAN_EVENT_RE.test(event)) return 'likely_human';
+  return 'unknown';
 }
 
 function normalizeSessionId(row) {
@@ -83,13 +95,17 @@ function buildTrafficSummary(rows, options = {}) {
     includeInternal: true,
     includeBots: true
   });
+  const allLikelyHumanSessions = new Set(allFiltered.filter((r) => classifyTrafficRow(r) === 'likely_human').map(normalizeSessionId).filter(Boolean));
+  const scopedLikelyHumanSessions = new Set(scoped.filter((r) => classifyTrafficRow(r) === 'likely_human').map(normalizeSessionId).filter(Boolean));
   return {
     range: String(options.range || '24h'),
     sessions: scopedSessions.size,
+    likely_human_sessions: scopedLikelyHumanSessions.size,
     manual_searches: scopedManual.length,
     auto_searches: scopedAuto.length,
     search_conversion_pct: scopedSessions.size ? Math.round((scopedManual.length / scopedSessions.size) * 100) : 0,
     all_time_sessions: allSessions.size,
+    all_time_likely_human_sessions: allLikelyHumanSessions.size,
     all_time_manual_searches: allManual.length,
     all_time_auto_searches: allAuto.length,
     excluded_internal_in_range: options.includeInternal ? 0 : scopedInternal.length,
@@ -141,6 +157,7 @@ async function getActivitySummary(options = {}) {
 module.exports = {
   parseTimestamp,
   isBotEvent,
+  classifyTrafficRow,
   filterAnalyticsRows,
   fetchAnalyticsRows,
   buildTrafficSummary,

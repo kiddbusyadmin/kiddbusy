@@ -60,6 +60,10 @@ function slugify(value) {
     .slice(0, 80);
 }
 
+function normalizeBlogTitle(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
 function cityBase(value) {
   return String(value || '').split(',')[0].trim();
 }
@@ -685,7 +689,7 @@ function parseAnthropicArray(rawText) {
 
 function normalizePost(rawPost, cities) {
   var post = rawPost || {};
-  var title = String(post.title || '').trim();
+  var title = normalizeBlogTitle(post.title || '');
   var excerpt = String(post.excerpt || '').trim();
   var seoDescription = String(post.seo_description || '').trim();
   var bodyHtml = String(post.body_html || '').trim();
