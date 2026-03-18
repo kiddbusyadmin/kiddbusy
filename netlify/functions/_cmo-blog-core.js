@@ -61,7 +61,19 @@ function slugify(value) {
 }
 
 function normalizeBlogTitle(value) {
-  return String(value || '').trim().toLowerCase();
+  var minor = {
+    a: true, an: true, and: true, as: true, at: true, but: true,
+    by: true, for: true, from: true, in: true, nor: true, of: true,
+    on: true, or: true, per: true, the: true, to: true, up: true, via: true
+  };
+  var raw = String(value || '').trim().replace(/\s+/g, ' ');
+  if (!raw) return '';
+  var words = raw.toLowerCase().split(' ');
+  return words.map(function(word, idx) {
+    if (!word) return word;
+    if (idx > 0 && idx < words.length - 1 && minor[word]) return word;
+    return word.charAt(0).toUpperCase() + word.slice(1);
+  }).join(' ');
 }
 
 function cityBase(value) {

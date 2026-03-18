@@ -51,7 +51,15 @@ function inferTaskTargetCount(task, details) {
 }
 
 function normalizeBlogTitleValue(value) {
-  return String(value || '').trim().toLowerCase();
+  const minor = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'from', 'in', 'nor', 'of', 'on', 'or', 'per', 'the', 'to', 'up', 'via']);
+  const raw = String(value || '').trim().replace(/\s+/g, ' ');
+  if (!raw) return '';
+  const words = raw.toLowerCase().split(' ');
+  return words.map((word, idx) => {
+    if (!word) return word;
+    if (idx > 0 && idx < words.length - 1 && minor.has(word)) return word;
+    return word.charAt(0).toUpperCase() + word.slice(1);
+  }).join(' ');
 }
 
 async function sbRequest(path, { method = 'GET', body = null, prefer = null } = {}) {
@@ -478,8 +486,8 @@ async function runAgentTasks() {
     if ((String(task.assigned_agent_key || '') === 'cmo_agent' || String(task.assigned_agent_key || '') === 'operations_agent') && isBlogTitleCleanupTask(task, order)) {
       const changed = await normalizeAllBlogTitles();
       resultSummary = changed.length
-        ? ('Blog title normalization complete. Lowercased ' + String(changed.length) + ' titles across published and queued posts.')
-        : 'Blog title normalization complete. No remaining uppercase titles found.';
+        ? ('Blog title normalization complete. Restyled ' + String(changed.length) + ' titles into title case across published and queued posts.')
+        : 'Blog title normalization complete. No remaining title formatting changes were needed.';
       nextTaskDetails = Object.assign({}, nextTaskDetails, {
         normalized_title_count: changed.length,
         normalized_title_ids: changed.slice(0, 50).map((row) => row.id)
