@@ -228,9 +228,22 @@ async function executeTool(name, input = {}, context = {}) {
       return { success: true, task };
     }
     case 'create_workflow': {
+      const desiredOrderId = input.order_id || context.currentOrderId || null;
+      const desiredWorkflowKey = String(input.workflow_key || '').trim();
+      const desiredAgentKey = String(input.assigned_agent_key || '').trim();
+      const desiredTitle = String(input.title || '').trim().toLowerCase();
+      const existingCreated = Array.isArray(context.createdWorkflows) ? context.createdWorkflows : [];
+      for (let i = 0; i < existingCreated.length; i += 1) {
+        const existing = existingCreated[i] || {};
+        if (String(existing.order_id || '') !== String(desiredOrderId || '')) continue;
+        if (String(existing.workflow_key || '').trim() !== desiredWorkflowKey) continue;
+        if (String(existing.assigned_agent_key || '').trim() !== desiredAgentKey) continue;
+        if (desiredTitle && String(existing.title || '').trim().toLowerCase() !== desiredTitle) continue;
+        return { success: true, workflow: existing, deduped: true };
+      }
       const workflow = await createWorkflow({
         ownerIdentity: input.owner_identity || 'harold',
-        orderId: input.order_id || context.currentOrderId || null,
+        orderId: desiredOrderId,
         threadId: input.thread_id || null,
         workflowKey: input.workflow_key,
         requestedByAgentKey: input.requested_by_agent_key || 'president_agent',
