@@ -23,6 +23,8 @@ const {
 } = require('./_agent-memory');
 const {
   createWorkflow,
+  updateWorkflow,
+  appendWorkflowEvent,
   getWorkflows,
   projectWorkflowAsTask
 } = require('./_workflow-core');
@@ -294,6 +296,13 @@ async function executeTool(name, input = {}, context = {}) {
       } catch (_) {}
       return { success: true, workflow };
     }
+    case 'cancel_workflow': {
+      const workflowId = String(input.workflow_id || '').trim();
+      if (!workflowId) return { success: false, error: 'workflow_id required' };
+      await updateWorkflow({ workflowId, patch: { status: 'cancelled', blocked_reason: input.reason || 'Cancelled on owner request' } });
+      try { await appendWorkflowEvent({ workflowId, eventType: 'cancelled', status: 'info', summary: input.reason || 'Workflow cancelled on owner request' }); } catch (_) {}
+      return { success: true, workflow_id: workflowId, status: 'cancelled' };
+    }
     case 'query_owner_orders': {
       const rows = await getOwnerOrders({
         ownerIdentity: input.owner_identity || 'harold',
@@ -530,6 +539,9 @@ function toolDefinitions() {
     { name: 'query_workflows', description: 'List typed workflows and their live statuses. Prefer this for execution tracking.', input_schema: { type: 'object', properties: {
       owner_identity: { type: 'string' }, status: { type: 'string' }, limit: { type: 'number' }
     }, required: [] } },
+    { name: 'cancel_workflow', description: 'Cancel a queued, running, waiting, or blocked workflow. Call this when Harold asks to stop, cancel, or drop a pending request.', input_schema: { type: 'object', properties: {
+      workflow_id: { type: 'string', description: 'The workflow_id to cancel' }, reason: { type: 'string', description: 'Short reason for cancellation' }
+    }, required: ['workflow_id'] } },
     { name: 'create_progress_subscription', description: 'Create a recurring owner progress update feed, especially for Telegram updates every N minutes.', input_schema: { type: 'object', properties: {
       owner_identity: { type: 'string' }, agent_key: { type: 'string' }, channel: { type: 'string' }, target_chat_id: { type: 'string' }, interval_minutes: { type: 'number' }, scope: { type: 'string' }, summary: { type: 'string' }, thread_key: { type: 'string' }, metadata: { type: 'object' }
     }, required: [] } },
@@ -586,11 +598,12 @@ function buildSystemPrompt(agent, registry, channel) {
     'Default to working through how your existing team can fulfill the request. Use typed workflows before pushback.',
     'If the current team cannot do it well, recommend a new agent and explain why in one short paragraph.',
     'Only refuse or block when there is a hard legal, compliance, access, or business-rule constraint.',
-    'Every owner order should be tracked. For a new order, either create a typed workflow, leave it pending_assignment with a short reason, or mark it completed if you handled it directly.',
+    'WORKFLOW OBLIGATION: If Harold asks you to DO anything — publish content, write articles or listicles, research a topic, investigate an issue, run an operation, create or fix anything — you MUST call create_workflow in this same response. Do not describe the work without calling the tool. If you do not call create_workflow, the work does not happen and cannot be tracked.',
+    'Use the correct workflow_key: publish_city_blog_batch for blog/listicle/content publishing, research_request for research, answer_analytics_question for analytics queries, ops_investigation for everything else.',
+    'Only skip create_workflow for pure informational questions you can answer directly from tool results (e.g. traffic counts, review totals). When in doubt, create the workflow.',
+    'When Harold asks you to cancel a workflow, call cancel_workflow with the workflow_id immediately. Do not just acknowledge — call the tool.',
     'If you are intentionally holding work instead of assigning it right away, you must call update_owner_order with status pending_assignment and a concise summary of why it is being held. Do not leave held work implied only in prose.',
-    'If the owner asks for recurring progress updates, especially on Telegram, create a real progress subscription using create_progress_subscription. Do not just promise future updates in prose.',
-    'Do not create generic tasks for conversational follow-ups or questions that can be answered directly from tools. Use tools to answer directly whenever possible.',
-    'Use create_workflow for execution. Reserve create_agent_task for unusual legacy cases only.'
+    'If the owner asks for recurring progress updates, especially on Telegram, create a real progress subscription using create_progress_subscription. Do not just promise future updates in prose.'
   ].join(' ');
   const specialistRules = `You are ${agent.name} for KiddBusy. Stay within your specialty while still being practical. Report clearly to the President agent when useful.`;
   return [

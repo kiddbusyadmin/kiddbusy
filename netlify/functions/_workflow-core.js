@@ -12,7 +12,7 @@ function normalizeOwnerIdentity(value) {
 
 function normalizeStatus(status) {
   const raw = String(status || '').trim().toLowerCase();
-  if (['queued', 'running', 'waiting', 'completed', 'blocked', 'failed'].includes(raw)) return raw;
+  if (['queued', 'running', 'waiting', 'completed', 'blocked', 'failed', 'cancelled'].includes(raw)) return raw;
   return 'queued';
 }
 

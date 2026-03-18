@@ -16,7 +16,7 @@ const accountantAgent = require('./accountant-agent');
 const { runAgentTasks, runDelegationWatchdog } = require('./_agent-task-runner-core');
 const { runWorkflowEngine } = require('./_workflow-runner-core');
 const { getTrafficSummary, getActivitySummary } = require('./_analytics-core');
-const { getWorkflows, projectWorkflowAsTask } = require('./_workflow-core');
+const { getWorkflows, updateWorkflow, appendWorkflowEvent, projectWorkflowAsTask } = require('./_workflow-core');
 
 const ALLOWED_TABLES = {
   submissions: new Set(['pending', 'approved', 'rejected']),
@@ -632,6 +632,19 @@ exports.handler = async (event) => {
       return json(200, { count: Array.isArray(data) ? data.length : 0, events: data });
     } catch (err) {
       return json(500, { error: err.message || 'Unexpected error' });
+    }
+  }
+
+  if (action === 'cancel_workflow') {
+    const workflowId = String(body.workflow_id || '').trim();
+    const reason = String(body.reason || 'Cancelled from dashboard').trim();
+    if (!workflowId) return json(400, { error: 'workflow_id required' });
+    try {
+      await updateWorkflow({ workflowId, patch: { status: 'cancelled', blocked_reason: reason } });
+      await appendWorkflowEvent({ workflowId, eventType: 'cancelled', status: 'info', summary: reason });
+      return json(200, { success: true });
+    } catch (err) {
+      return json(500, { error: err.message || 'cancel failed' });
     }
   }
 
