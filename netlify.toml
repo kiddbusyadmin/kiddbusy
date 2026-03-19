@@ -23,6 +23,9 @@
 [functions.submit-listing]
   timeout = 30
 
+[functions.public-write]
+  timeout = 30
+
 [functions.db-proxy]
   timeout = 30
 
@@ -151,6 +154,11 @@
 [[redirects]]
   from = "/api/submit-listing"
   to = "/.netlify/functions/submit-listing"
+  status = 200
+
+[[redirects]]
+  from = "/api/public-write"
+  to = "/.netlify/functions/public-write"
   status = 200
 
 [[redirects]]

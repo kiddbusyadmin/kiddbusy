@@ -167,8 +167,27 @@ function isInternalTraffic() {
   return analyticsSource() === 'internal';
 }
 
+async function postPublicWrite(action, payload) {
+  var res = await fetch('/api/public-write', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(Object.assign({ action: action }, payload || {}))
+  });
+  var text = await res.text();
+  var data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (_) {
+    data = { error: text || ('Request failed (' + res.status + ')') };
+  }
+  if (!res.ok || (data && data.error)) {
+    throw new Error((data && data.error) ? data.error : ('Request failed (' + res.status + ')'));
+  }
+  return data || {};
+}
+
 function track(event, city, value) {
-  sb.from('analytics').insert({
+  postPublicWrite('track_analytics', {
     event: event,
     city: city || null,
     value: value == null ? null : JSON.stringify(value),
@@ -177,7 +196,7 @@ function track(event, city, value) {
     source: analyticsSource(),
     user_agent: navigator.userAgent || null,
     path: window.location.pathname || null
-  }).then(function(){}).catch(function(){});
+  }).catch(function(){});
 }
 
 function esc(s) {

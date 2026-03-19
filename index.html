@@ -1656,6 +1656,25 @@ function analyticsSource() {
   return isInternalTraffic() ? 'internal' : 'public';
 }
 
+async function postPublicWrite(action, payload) {
+  const res = await fetch('/api/public-write', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(Object.assign({ action }, payload || {}))
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (_) {
+    data = { error: text || ('Request failed (' + res.status + ')') };
+  }
+  if (!res.ok || (data && data.error)) {
+    throw new Error((data && data.error) ? data.error : ('Request failed (' + res.status + ')'));
+  }
+  return data || {};
+}
+
 function track(event, city = null, value = null) {
   const payload = {
     event,
@@ -1667,11 +1686,7 @@ function track(event, city = null, value = null) {
     user_agent: navigator.userAgent || null,
     path: window.location.pathname || null
   };
-  sb.from('analytics').insert(payload).then(({ error }) => {
-    if (!error) return;
-    // Backward compatibility if new columns are not present.
-    sb.from('analytics').insert({ event, city, value, session_id: SESSION_ID }).then(() => {});
-  });
+  postPublicWrite('track_analytics', payload).catch(() => {});
 }
 
 // ── SHARE ──
@@ -1726,127 +1741,16 @@ async function sharePlace(btn, name, address, desc, businessUrl) {
 
 // ── UPSERT LISTING & GET STABLE ID ──
 async function upsertListing(activity, city, source = 'ai_generated') {
-  const cityParts = city.split(',');
-  const cityName = cityParts[0]?.trim() || city;
-  const stateName = cityParts[1]?.trim() || '';
-  const now = new Date().toISOString();
-
-  function normalizeText(v) {
-    return String(v || '')
-      .toLowerCase()
-      .replace(/&/g, ' and ')
-      .replace(/[^a-z0-9\s]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+  const cityName = cityBaseName(city);
+  try {
+    const out = await postPublicWrite('upsert_listing', { activity, city, source });
+    if (!window._listingCityCache) window._listingCityCache = {};
+    delete window._listingCityCache[cityName];
+    return out && out.listing_id ? out.listing_id : null;
+  } catch (error) {
+    console.warn('Listing upsert error:', error);
+    return null;
   }
-
-  function normalizeAddress(v) {
-    return normalizeText(v)
-      .replace(/\bstreet\b/g, 'st')
-      .replace(/\bavenue\b/g, 'ave')
-      .replace(/\broad\b/g, 'rd')
-      .replace(/\bdrive\b/g, 'dr')
-      .replace(/\bboulevard\b/g, 'blvd')
-      .replace(/\bparkway\b/g, 'pkwy');
-  }
-
-  function canonicalName(v) {
-    return normalizeText(v)
-      .replace(/\b(the|inc|llc|co|company)\b/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  function isNearDuplicate(a, b) {
-    const aCanon = canonicalName(a && a.name);
-    const bCanon = canonicalName(b && b.name);
-    if (!aCanon || !bCanon) return false;
-    if (aCanon === bCanon) return true;
-    if (aCanon.includes(bCanon) || bCanon.includes(aCanon)) return true;
-    const aAddr = normalizeAddress(a && a.address);
-    const bAddr = normalizeAddress(b && b.address);
-    if (aAddr && bAddr && (aAddr === bAddr || aAddr.includes(bAddr) || bAddr.includes(aAddr))) {
-      const aTokens = new Set(aCanon.split(' ').filter(Boolean));
-      const bTokens = new Set(bCanon.split(' ').filter(Boolean));
-      const inter = Array.from(aTokens).filter(t => bTokens.has(t)).length;
-      const union = new Set([...aTokens, ...bTokens]).size || 1;
-      return (inter / union) >= 0.6;
-    }
-    return false;
-  }
-
-  if (!window._listingCityCache) window._listingCityCache = {};
-  let cityRows = window._listingCityCache[cityName];
-  if (!Array.isArray(cityRows)) {
-    const { data: cityData } = await sb
-      .from('listings')
-      .select('listing_id,name,address,city,status,last_refreshed')
-      .ilike('city', cityName)
-      .eq('status', 'active')
-      .limit(400);
-    cityRows = Array.isArray(cityData) ? cityData : [];
-    window._listingCityCache[cityName] = cityRows;
-  }
-
-  // Check if listing already exists
-  const probe = { name: activity.name, address: activity.addr };
-  let existing = cityRows.find(r => isNearDuplicate(probe, r)) || null;
-  const website = normalizeWebsiteUrl(activity.website);
-
-  if (existing) {
-    // Update description + last_refreshed on existing listing
-    const updatePayload = {
-      name: activity.name,
-      category: activity.category,
-      description: activity.desc,
-      address: activity.addr,
-      is_open: activity.open ?? true,
-      last_refreshed: now,
-      source: source
-    };
-    if (website) updatePayload.website = website;
-    await sb.from('listings').update(updatePayload).eq('listing_id', existing.listing_id);
-    return existing.listing_id;
-  }
-
-  // Create new listing
-  const { data: created, error } = await sb
-    .from('listings')
-    .insert({
-      name: activity.name,
-      category: activity.category,
-      description: activity.desc,
-      address: activity.addr,
-      website: website || null,
-      city: cityName,
-      state: stateName,
-      emoji: activity.emoji,
-      ages: activity.ages?.join(',') || '',
-      tags: activity.tags?.join(',') || '',
-      is_open: activity.open ?? true,
-      is_sponsored: false,
-      rating: activity.rating || 0,
-      review_count: 0,
-      status: 'active',
-      source: source,
-      last_refreshed: now,
-    })
-    .select()
-    .single();
-
-  if (error) { console.warn('Listing upsert error:', error); return null; }
-  if (created && created.listing_id) {
-    cityRows.push({
-      listing_id: created.listing_id,
-      name: activity.name,
-      address: activity.addr,
-      city: cityName,
-      status: 'active',
-      last_refreshed: now
-    });
-    window._listingCityCache[cityName] = cityRows;
-  }
-  return created?.listing_id || created?.id || null;
 }
 
 // ── LOAD REVIEWS FROM SUPABASE ──
@@ -1981,21 +1885,7 @@ async function hydrateListingsWithReviewStats(rows) {
 }
 
 async function recomputeListingReviewSnapshot(listingId) {
-  const id = Number(listingId || 0);
-  if (!Number.isFinite(id) || id <= 0) return;
-  const { data, error } = await sb
-    .from('reviews')
-    .select('rating,source,status')
-    .eq('listing_id', id)
-    .eq('status', 'approved');
-  if (error || !Array.isArray(data)) return;
-  const nonAi = data.filter((r) => String((r && r.source) || '').toLowerCase() !== 'ai_seed');
-  const count = nonAi.length;
-  const avg = count ? (nonAi.reduce((sum, r) => sum + (Number(r && r.rating) || 0), 0) / count) : null;
-  await sb.from('listings').update({
-    review_count: count,
-    rating: count ? Math.round(avg * 10) / 10 : null
-  }).eq('listing_id', id);
+  return;
 }
 
 function getCardPhotoUrl(a) {
@@ -2413,17 +2303,20 @@ async function submitReview() {
   // Save to Supabase if we have a DB-backed listing ID (numeric, not sample data 1-8)
   const listingId = currentModalId;
   if (listingId > 8) {
-    const { error } = await sb.from('reviews').insert({
-      listing_id: listingId,
-      reviewer_name: name,
-      rating: modalRating,
-      review_text: text || null,
-      age_range: ageRange,
-      reviewer_email: email || null,
-      status: 'approved',
-      source: 'user'
-    });
-    if (error) console.warn('Review save error:', error);
+    try {
+      await postPublicWrite('submit_review', {
+        listing_id: listingId,
+        reviewer_name: name,
+        rating: modalRating,
+        review_text: text || null,
+        age_range: ageRange,
+        reviewer_email: email || null,
+        status: 'approved',
+        source: 'user'
+      });
+    } catch (error) {
+      console.warn('Review save error:', error);
+    }
     await recomputeListingReviewSnapshot(listingId);
   }
 
@@ -2455,15 +2348,12 @@ async function captureEmail() {
   const city = (citySelect && citySelect.value) ? citySelect.value : 'Unknown';
 
   try {
-    const { error } = await sb.from('email_leads').insert({
+    await postPublicWrite('capture_email_lead', {
       email,
       city,
       source: 'homepage_signup'
     });
-    if (error && error.code !== '23505') {
-      console.warn('Email capture error:', error);
-    }
-  } catch(e) {
+  } catch (e) {
     console.warn('Email capture exception:', e);
   }
 
@@ -3351,39 +3241,21 @@ async function loadEventsForCity(cityLabel) {
     }
     if (!events) throw lastErr || new Error('Unable to fetch events');
 
-    // Upsert to Supabase — delete old events for this city first, then insert fresh ones
-    await sb.from('events').delete().ilike('city', cityLabel);
-    const rows = events.map(e => ({
+    // Replace cached events through the server-side write path.
+    await postPublicWrite('replace_city_events', {
       city: cityLabel,
-      month: e.month,
-      day: e.day,
-      name: e.name,
-      detail: e.detail,
-      is_free: e.free,
-      source_url: e.source_url,
-      ongoing: e.ongoing,
-      start_date: e.start_date ? e.start_date.toISOString().slice(0, 10) : null,
-      end_date: e.end_date ? e.end_date.toISOString().slice(0, 10) : null,
-      last_refreshed: new Date().toISOString()
-    }));
-    let insertOk = false;
-    try {
-      const ins = await sb.from('events').insert(rows);
-      insertOk = !ins.error;
-    } catch (_) {}
-    if (!insertOk) {
-      // Backward compatibility: if source_url column is missing, retry without it.
-      const fallbackRows = rows.map(r => ({
-        city: r.city,
-        month: r.month,
-        day: r.day,
-        name: r.name,
-        detail: r.detail,
-        is_free: r.is_free,
-        last_refreshed: r.last_refreshed
-      }));
-        await sb.from('events').insert(fallbackRows);
-      }
+      rows: events.map(e => ({
+        month: e.month,
+        day: e.day,
+        name: e.name,
+        detail: e.detail,
+        is_free: e.free,
+        source_url: e.source_url,
+        ongoing: e.ongoing,
+        start_date: e.start_date ? e.start_date.toISOString().slice(0, 10) : null,
+        end_date: e.end_date ? e.end_date.toISOString().slice(0, 10) : null
+      }))
+    });
 
     if (!events.length && hasCached) {
       renderEvents(normalizedCachedEvents);
@@ -3439,7 +3311,7 @@ async function onCitySelected(city, options) {
     }
     _sessionCities.push(city);
     if (_sessionCities.length === 2) track('multi_city_session', city, _sessionCities[0]);
-    sb.from('city_searches').upsert({ city, last_searched: new Date().toISOString() }, { onConflict: 'city' }).then(() => {});
+    postPublicWrite('touch_city_search', { city }).catch(() => {});
     return;
   }
 
@@ -3466,7 +3338,7 @@ async function onCitySelected(city, options) {
   }
 
   // Track this city search for the edge function to refresh
-  sb.from('city_searches').upsert({ city, last_searched: new Date().toISOString() }, { onConflict: 'city' }).then(() => {});
+  postPublicWrite('touch_city_search', { city }).catch(() => {});
 
   // Track analytics
   if (isAutoDetected) {
