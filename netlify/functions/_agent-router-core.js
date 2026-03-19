@@ -93,6 +93,20 @@ function summarizeImmediateWorkflowOutcome(workflows) {
   return 'Immediate execution result:\n' + parts.join('\n');
 }
 
+async function executeImmediateCreatedWorkflows(execContext) {
+  const rows = Array.isArray(execContext.createdWorkflows) ? execContext.createdWorkflows : [];
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i] && rows[i].workflow ? rows[i].workflow : rows[i];
+    if (!row || !row.workflow_id) continue;
+    const status = String(row.status || '').trim().toLowerCase();
+    if (status && !['queued', 'running', 'waiting'].includes(status)) continue;
+    if (!shouldRunWorkflowImmediately(row)) continue;
+    const executed = await runSingleWorkflow(row);
+    rows[i] = executed;
+  }
+  execContext.createdWorkflows = rows;
+}
+
 async function dbQuery(table, params = {}) {
   let url = `${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(params.select || '*')}&limit=${Math.min(Math.max(Number(params.limit) || 100, 1), 1000)}`;
   if (params.eq) {
@@ -1278,6 +1292,9 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
   if (currentOrder) {
     if (agent.key === 'president_agent' && shouldAutoDelegateExecutionRequest(text) && execContext.createdWorkflowCount === 0) {
       await ensurePresidentDelegation(text, reply, execContext);
+    }
+    if (execContext.createdWorkflowCount > 0) {
+      await executeImmediateCreatedWorkflows(execContext);
     }
     reply = sanitizeDelegationText(reply);
     if (execContext.createdWorkflowCount > 0 || execContext.createdTaskCount > 0) {
