@@ -1,6 +1,6 @@
 const { runAgentConversation } = require('./_agent-router-core');
 const { getWorkflowById } = require('./_workflow-core');
-const { runSingleWorkflow, shouldRunWorkflowImmediately } = require('./_workflow-runner-core');
+const { runSingleWorkflow } = require('./_workflow-runner-core');
 
 function json(statusCode, payload) {
   return {
@@ -82,7 +82,6 @@ exports.handler = async (event) => {
           executed.push(workflow);
           continue;
         }
-        if (!shouldRunWorkflowImmediately(workflow)) continue;
         executed.push(await runSingleWorkflow(workflow));
       }
       if (executed.length) {
