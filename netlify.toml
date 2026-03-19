@@ -14,6 +14,9 @@
 [functions.agent-router]
   timeout = 60
 
+[functions.agent-router-v2]
+  timeout = 60
+
 [functions.agent-org]
   timeout = 30
 
@@ -118,7 +121,7 @@
 
 [[redirects]]
   from = "/api/agent-router"
-  to = "/.netlify/functions/agent-router"
+  to = "/.netlify/functions/agent-router-v2"
   status = 200
 
 [[redirects]]
