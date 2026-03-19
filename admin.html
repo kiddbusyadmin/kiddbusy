@@ -4426,6 +4426,23 @@ function onAgentRoleChanged() {
   }
 }
 
+async function parseJsonResponse(res, label) {
+  var raw = await res.text();
+  var trimmed = String(raw || '').trim();
+  try {
+    return trimmed ? JSON.parse(trimmed) : {};
+  } catch (_) {
+    var low = trimmed.toLowerCase();
+    if (low.indexOf('inactivity timeout') >= 0) {
+      throw new Error((label || 'Request') + ' timed out while waiting on the agent. The workflow may still be running in the background; check the Agents view in a moment.');
+    }
+    if (trimmed.charAt(0) === '<') {
+      throw new Error((label || 'Request') + ' returned an HTML error page instead of JSON. This usually means the server timed out or hit an upstream error.');
+    }
+    throw new Error((label || 'Request') + ' returned invalid JSON.');
+  }
+}
+
 // ===== AGENT LOOP =====
 async function runAgent(userText) {
   if (agentBusy || !sb) return;
@@ -4450,7 +4467,7 @@ async function runAgent(userText) {
         owner_identity: 'harold'
       })
     });
-    var data = await res.json();
+    var data = await parseJsonResponse(res, 'Agent request');
     if (!res.ok) throw new Error(data.error || 'Agent request failed');
 
     var indicator = document.getElementById('typing-indicator');
