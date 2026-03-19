@@ -30,7 +30,6 @@ const {
 } = require('./_workflow-core');
 const {
   runSingleWorkflow,
-  shouldRunWorkflowImmediately
 } = require('./_workflow-runner-core');
 
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
@@ -100,7 +99,23 @@ async function executeImmediateCreatedWorkflows(execContext) {
     if (!row || !row.workflow_id) continue;
     const status = String(row.status || '').trim().toLowerCase();
     if (status && !['queued', 'running', 'waiting'].includes(status)) continue;
-    if (!shouldRunWorkflowImmediately(row)) continue;
+    const payload = Object.assign({}, row.input || {}, row.details || {});
+    const wfKey = String(row.workflow_key || '').trim();
+    const deferred = payload.background === true || payload.defer === true || payload.async === true;
+    const smallBlogRun = wfKey === 'publish_blog_post' ||
+      wfKey === 'blog_title_qc' ||
+      (wfKey === 'publish_city_blog_batch' && Number(payload.target_count || payload.article_count || 1) <= 1);
+    const immediateEligible = !deferred && (
+      wfKey === 'answer_analytics_question' ||
+      wfKey === 'research_request' ||
+      wfKey === 'ops_investigation' ||
+      wfKey === 'fix_content_quality_issue' ||
+      wfKey === 'review_submission' ||
+      wfKey === 'process_owner_claim' ||
+      wfKey === 'process_sponsorship' ||
+      smallBlogRun
+    );
+    if (!immediateEligible) continue;
     const executed = await runSingleWorkflow(row);
     rows[i] = executed;
   }
