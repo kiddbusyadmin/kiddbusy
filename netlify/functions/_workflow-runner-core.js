@@ -31,6 +31,114 @@ function inferTargetCount(payload) {
   return 1;
 }
 
+function inferTouchedRecordCount(payload) {
+  const direct = Number(payload.record_count || payload.records_count || payload.affected_count || 0);
+  if (direct > 0) return Math.max(Math.round(direct), 0);
+  const candidateArrays = [
+    payload.ids,
+    payload.record_ids,
+    payload.listing_ids,
+    payload.post_ids,
+    payload.submission_ids,
+    payload.city_ids
+  ];
+  for (const candidate of candidateArrays) {
+    if (Array.isArray(candidate)) return candidate.length;
+  }
+  return 1;
+}
+
+function classifyWorkflowExecution(workflow) {
+  const row = workflow || {};
+  const wfKey = String(row.workflow_key || '').trim();
+  const payload = Object.assign({}, row.input || {}, row.details || {});
+  const targetCount = inferTargetCount(payload);
+  const recordCount = inferTouchedRecordCount(payload);
+  const expectsLongRun = Number(payload.expected_runtime_seconds || 0) > 20;
+  const expectedModelCalls = Number(payload.expected_model_calls || 0);
+  const externalWait = !!(
+    payload.wait_for_webhook ||
+    payload.wait_for_email_click ||
+    payload.wait_for_owner_response ||
+    payload.wait_for_user_response ||
+    payload.wait_for_schedule ||
+    payload.wait_for_payment_confirmation
+  );
+  const explicitBackground = !!(
+    payload.background === true ||
+    payload.defer === true ||
+    payload.async === true ||
+    payload.batch === true ||
+    payload.backfill === true ||
+    payload.reconcile === true ||
+    payload.scheduled === true
+  );
+
+  if (!wfKey) {
+    return { mode: 'background', reason: 'No workflow key was provided, so immediate execution is unsafe.' };
+  }
+  if (externalWait) {
+    return { mode: 'external_wait', reason: 'This workflow is waiting on an external event or human response.' };
+  }
+  if (explicitBackground) {
+    return { mode: 'background', reason: 'This workflow was explicitly marked as batch, scheduled, deferred, backfill, or reconcile work.' };
+  }
+  if (expectsLongRun || expectedModelCalls > 2 || recordCount > 25) {
+    return { mode: 'background', reason: 'This workflow exceeds the immediate execution budget.' };
+  }
+
+  if (wfKey === 'answer_analytics_question') {
+    return { mode: 'immediate', reason: 'Analytics questions are always immediate.' };
+  }
+  if (wfKey === 'publish_blog_post') {
+    return { mode: 'immediate', reason: 'A single blog post should execute immediately.' };
+  }
+  if (wfKey === 'publish_city_blog_batch') {
+    if (targetCount <= 1) {
+      return { mode: 'immediate', reason: 'A single-city, single-article publish request should execute immediately.' };
+    }
+    return { mode: 'background', reason: 'Multi-article blog batches are background work.' };
+  }
+  if (wfKey === 'research_request') {
+    if (targetCount <= 1 && recordCount <= 25 && !payload.multi_city && !payload.batch) {
+      return { mode: 'immediate', reason: 'A single-topic research request should execute immediately.' };
+    }
+    return { mode: 'background', reason: 'Multi-scope or broad research work belongs in background mode.' };
+  }
+  if (wfKey === 'ops_investigation') {
+    if (!payload.audit_scope && !payload.multi_city && recordCount <= 25) {
+      return { mode: 'immediate', reason: 'A single investigation should execute immediately.' };
+    }
+    return { mode: 'background', reason: 'Wide audits and reconciliations are background work.' };
+  }
+  if (wfKey === 'fix_content_quality_issue') {
+    if (targetCount <= 1 && recordCount <= 25) {
+      return { mode: 'immediate', reason: 'Single-item content fixes should execute immediately.' };
+    }
+    return { mode: 'background', reason: 'Bulk content cleanup belongs in background mode.' };
+  }
+  if (wfKey === 'review_submission') {
+    if (recordCount <= 1) {
+      return { mode: 'immediate', reason: 'Single submission review should execute immediately.' };
+    }
+    return { mode: 'background', reason: 'Moderation sweeps are background work.' };
+  }
+  if (wfKey === 'process_owner_claim') {
+    return { mode: 'immediate', reason: 'Owner claims should execute immediately unless waiting on outside proof.' };
+  }
+  if (wfKey === 'process_sponsorship') {
+    return { mode: 'immediate', reason: 'Sponsorship processing should execute immediately until it reaches an external wait state.' };
+  }
+  if (wfKey === 'blog_title_qc') {
+    if (recordCount <= 25) {
+      return { mode: 'immediate', reason: 'Small title-quality fixes should execute immediately.' };
+    }
+    return { mode: 'background', reason: 'Large title cleanup batches are background work.' };
+  }
+
+  return { mode: 'background', reason: 'Unclassified workflows default to background mode until explicitly approved for immediate execution.' };
+}
+
 function tokenizeTopic(text) {
   const stop = new Set([
     'a', 'an', 'and', 'are', 'article', 'articles', 'as', 'at', 'be', 'blog', 'blogs', 'by',
@@ -417,24 +525,7 @@ async function runSingleWorkflow(workflow) {
 }
 
 function shouldRunWorkflowImmediately(workflow) {
-  const row = workflow || {};
-  const wfKey = String(row.workflow_key || '').trim();
-  const payload = Object.assign({}, row.input || {}, row.details || {});
-  if (!wfKey) return false;
-  if (payload.background === true || payload.defer === true || payload.async === true) return false;
-  if (wfKey === 'answer_analytics_question') return true;
-  if (wfKey === 'research_request') return true;
-  if (wfKey === 'ops_investigation') return true;
-  if (wfKey === 'fix_content_quality_issue') return true;
-  if (wfKey === 'review_submission') return true;
-  if (wfKey === 'process_owner_claim') return true;
-  if (wfKey === 'process_sponsorship') return true;
-  if (wfKey === 'blog_title_qc') return true;
-  if (wfKey === 'publish_blog_post') return true;
-  if (wfKey === 'publish_city_blog_batch') {
-    return inferTargetCount(payload) <= 1;
-  }
-  return false;
+  return classifyWorkflowExecution(workflow).mode === 'immediate';
 }
 
 async function runWorkflowEngine(limit = 12) {
@@ -473,5 +564,6 @@ async function runWorkflowEngine(limit = 12) {
 module.exports = {
   runWorkflowEngine,
   runSingleWorkflow,
-  shouldRunWorkflowImmediately
+  shouldRunWorkflowImmediately,
+  classifyWorkflowExecution
 };
