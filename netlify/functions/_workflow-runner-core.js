@@ -19,7 +19,7 @@ function cleanCity(value) {
 
 function extractCity(text) {
   const raw = String(text || '');
-  const match = raw.match(/\b(?:for|in)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})(?:,\s*[A-Z]{2})?\b/);
+  const match = raw.match(/\b(?:for|in|on|about)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})(?:,\s*[A-Z]{2})?\b/);
   return match && match[1] ? cleanCity(match[1]) : '';
 }
 

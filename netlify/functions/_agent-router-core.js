@@ -243,7 +243,9 @@ async function executeTool(name, input = {}, context = {}) {
     case 'create_workflow': {
       const desiredOrderId = input.order_id || context.currentOrderId || null;
       const desiredWorkflowKey = String(input.workflow_key || '').trim();
-      const desiredAgentKey = String(input.assigned_agent_key || '').trim();
+      const normalizedAssignment = normalizeWorkflowAssignment(desiredWorkflowKey, input.assigned_agent_key, input.title, input.input || {});
+      const desiredAgentKey = String(normalizedAssignment.assigned_agent_key || '').trim();
+      const desiredPayload = normalizedAssignment.payload || {};
       const desiredTitle = String(input.title || '').trim().toLowerCase();
       const existingCreated = Array.isArray(context.createdWorkflows) ? context.createdWorkflows : [];
       for (let i = 0; i < existingCreated.length; i += 1) {
@@ -260,10 +262,10 @@ async function executeTool(name, input = {}, context = {}) {
         threadId: input.thread_id || null,
         workflowKey: input.workflow_key,
         requestedByAgentKey: input.requested_by_agent_key || 'president_agent',
-        assignedAgentKey: input.assigned_agent_key,
+        assignedAgentKey: desiredAgentKey,
         title: input.title,
         summary: input.summary || '',
-        payload: input.input || {},
+        payload: desiredPayload,
         details: Object.assign({}, input.details || {}, {
           order_id: input.order_id || context.currentOrderId || null
         }),
@@ -277,20 +279,20 @@ async function executeTool(name, input = {}, context = {}) {
           orderId: input.order_id || context.currentOrderId,
           status: 'delegated',
           summary: input.summary || workflow.title,
-          details: { workflow_id: workflow.workflow_id, workflow_key: workflow.workflow_key, delegated_to: input.assigned_agent_key }
+          details: { workflow_id: workflow.workflow_id, workflow_key: workflow.workflow_key, delegated_to: desiredAgentKey }
         });
         context.orderUpdated = true;
       }
       try {
         await logAgentActivity({
-          agentKey: input.assigned_agent_key || 'unknown',
+          agentKey: desiredAgentKey || 'unknown',
           status: 'info',
           summary: `New typed workflow from President: ${String(workflow.title || 'Untitled workflow').slice(0, 240)}`,
           details: {
             workflow_id: workflow.workflow_id,
             workflow_key: workflow.workflow_key,
             order_id: (input.order_id || context.currentOrderId || null),
-            assigned_agent_key: input.assigned_agent_key || null
+            assigned_agent_key: desiredAgentKey || null
           }
         });
       } catch (_) {}
@@ -811,9 +813,23 @@ async function maybeBuildDeterministicAnalyticsReply(text) {
 
 function inferCityFromRequest(text) {
   var raw = String(text || '').trim();
-  var m = raw.match(/\b(?:for|in)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})(?:,\s*[A-Z]{2})?\b/);
+  var m = raw.match(/\b(?:for|in|on|about)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})(?:,\s*[A-Z]{2})?\b/);
   if (m && m[1]) return String(m[1]).trim();
   return '';
+}
+
+function normalizeWorkflowAssignment(workflowKey, assignedAgentKey, title, payload) {
+  var wf = String(workflowKey || '').trim();
+  var assigned = String(assignedAgentKey || '').trim();
+  var normalizedPayload = Object.assign({}, payload || {});
+  var inferredCity = inferCityFromRequest(String(title || ''));
+  if (!normalizedPayload.city && inferredCity) normalizedPayload.city = inferredCity;
+  if (wf === 'publish_city_blog_batch' || wf === 'publish_blog_post' || wf === 'blog_title_qc') {
+    assigned = 'cmo_agent';
+  } else if (wf === 'research_request') {
+    assigned = 'research_agent';
+  }
+  return { assigned_agent_key: assigned, payload: normalizedPayload };
 }
 
 function isLowSignalFollowUp(text) {
