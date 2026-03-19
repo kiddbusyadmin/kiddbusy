@@ -814,7 +814,11 @@ async function maybeBuildDeterministicAnalyticsReply(text) {
 function inferCityFromRequest(text) {
   var raw = String(text || '').trim();
   var m = raw.match(/\b(?:for|in|on|about)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})(?:,\s*[A-Z]{2})?\b/);
-  if (m && m[1]) return String(m[1]).trim();
+  if (m && m[1]) {
+    return String(m[1])
+      .replace(/\b(Public|Parks?|Playgrounds?|Activities|Listicle|Guide|Blog|Post|Weekend|Family|Families|Toddler|Toddlers)\b.*$/i, '')
+      .trim();
+  }
   return '';
 }
 

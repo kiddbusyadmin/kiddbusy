@@ -14,7 +14,10 @@ const {
 const { sbFetch } = require('./_accounting-core');
 
 function cleanCity(value) {
-  return String(value || '').split(',')[0].trim();
+  return String(value || '')
+    .split(',')[0]
+    .replace(/\b(Public|Parks?|Playgrounds?|Activities|Listicle|Guide|Blog|Post|Weekend|Family|Families|Toddler|Toddlers)\b.*$/i, '')
+    .trim();
 }
 
 function extractCity(text) {
