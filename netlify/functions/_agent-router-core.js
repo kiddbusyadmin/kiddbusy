@@ -1254,9 +1254,9 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
     }
   }
   if (currentOrder) {
-    // Post-reply auto-delegation via ensurePresidentDelegation() is removed.
-    // The President must call create_workflow explicitly via tool use to delegate.
-    // This eliminates ghost workflows created from keyword regex scanning of prose replies.
+    if (agent.key === 'president_agent' && shouldAutoDelegateExecutionRequest(text) && execContext.createdWorkflowCount === 0) {
+      await ensurePresidentDelegation(text, reply, execContext);
+    }
     reply = sanitizeDelegationText(reply);
     if (execContext.createdWorkflowCount > 0 || execContext.createdTaskCount > 0) {
       try {
@@ -1295,13 +1295,22 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
         }
       });
     } else {
-      await updateOwnerOrder({
-        orderId: currentOrder.order_id,
-        status: 'completed',
-        summary: String(reply || '').slice(0, 600),
-        details: { auto_status: 'completed_by_direct_response' },
-        completed: true
-      });
+      if (agent.key === 'president_agent' && shouldAutoDelegateExecutionRequest(text)) {
+        await updateOwnerOrder({
+          orderId: currentOrder.order_id,
+          status: 'blocked',
+          summary: 'President responded without creating a required workflow for an execution request.',
+          details: { auto_status: 'blocked_missing_required_workflow' }
+        });
+      } else {
+        await updateOwnerOrder({
+          orderId: currentOrder.order_id,
+          status: 'completed',
+          summary: String(reply || '').slice(0, 600),
+          details: { auto_status: 'completed_by_direct_response' },
+          completed: true
+        });
+      }
     }
   }
   await appendMessage({ threadId: thread.thread_id, role: 'user', content: text, agentKey: null, metadata: { channel, owner_identity: ownerIdentity } });
