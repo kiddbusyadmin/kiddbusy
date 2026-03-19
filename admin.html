@@ -170,6 +170,49 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 .sponsor-search-bar input,.sponsor-search-bar select{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;color:var(--text);font-family:var(--mono);font-size:.75rem;outline:none;transition:border-color .2s;}
 .sponsor-search-bar input{flex:1;min-width:180px;}
 .sponsor-search-bar input:focus,.sponsor-search-bar select:focus{border-color:var(--accent2);}
+.inventory-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;}
+.inventory-shell{display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr);gap:18px;}
+.inventory-pane{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;min-height:0;}
+.inventory-pane-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:16px 18px;border-bottom:1px solid var(--border);}
+.inventory-pane-title{font-family:var(--mono);font-size:.75rem;letter-spacing:1.3px;text-transform:uppercase;color:var(--text);}
+.inventory-pane-copy{font-size:.76rem;color:var(--muted);line-height:1.45;margin-top:4px;}
+.inventory-list{max-height:620px;overflow:auto;padding:8px;}
+.inventory-item{padding:12px 14px;border:1px solid transparent;border-radius:10px;cursor:pointer;transition:border-color .15s,background .15s;}
+.inventory-item:hover{background:var(--surface2);border-color:rgba(124,92,191,.28);}
+.inventory-item.active{background:linear-gradient(180deg,rgba(124,92,191,.16),rgba(124,92,191,.08));border-color:rgba(124,92,191,.55);}
+.inventory-item-head{display:flex;align-items:flex-start;gap:10px;}
+.inventory-item-title{font-weight:700;color:var(--text);line-height:1.35;}
+.inventory-item-meta{font-size:.74rem;color:var(--muted);margin-top:5px;line-height:1.45;}
+.inventory-item-status{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:8px;}
+.inventory-pill{font-family:var(--mono);font-size:.64rem;letter-spacing:.8px;text-transform:uppercase;padding:4px 8px;border-radius:999px;border:1px solid var(--border);color:var(--muted);background:var(--surface2);}
+.inventory-pill.sponsored{background:rgba(255,207,47,.12);border-color:rgba(255,207,47,.25);color:var(--yellow);}
+.inventory-pill.unsponsored{background:rgba(124,92,191,.1);border-color:rgba(124,92,191,.22);color:#c1b3f4;}
+.inventory-pill.pending{background:rgba(77,159,255,.12);border-color:rgba(77,159,255,.22);color:var(--blue);}
+.inventory-detail{padding:18px 20px 20px;}
+.inventory-detail-empty{display:flex;align-items:center;justify-content:center;min-height:320px;color:var(--muted);font-size:.84rem;padding:24px;text-align:center;}
+.inventory-kicker{font-family:var(--mono);font-size:.66rem;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+.inventory-detail-title{font-size:1.35rem;font-weight:700;line-height:1.15;margin-bottom:8px;}
+.inventory-detail-sub{font-size:.82rem;color:var(--muted);line-height:1.6;margin-bottom:14px;}
+.inventory-meta-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 14px;margin-bottom:16px;}
+.inventory-meta-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;}
+.inventory-meta-label{font-family:var(--mono);font-size:.63rem;letter-spacing:1.1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+.inventory-meta-value{font-size:.84rem;color:var(--text);line-height:1.5;word-break:break-word;}
+.inventory-actions{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;}
+.inventory-block{border-top:1px solid var(--border);padding-top:16px;margin-top:16px;}
+.inventory-block:first-of-type{border-top:none;padding-top:0;margin-top:0;}
+.inventory-block-title{font-family:var(--mono);font-size:.72rem;letter-spacing:1.2px;text-transform:uppercase;color:var(--text);margin-bottom:10px;}
+.inventory-mini-list{display:grid;gap:10px;}
+.inventory-mini-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;}
+.inventory-mini-card-title{font-size:.82rem;font-weight:700;line-height:1.4;}
+.inventory-mini-card-meta{font-size:.74rem;color:var(--muted);line-height:1.5;margin-top:4px;}
+.inventory-queue-shell{margin-top:18px;}
+.inventory-queue-body{padding:0 0 14px;}
+.inventory-queue-scroll{max-height:420px;overflow:auto;padding:0 16px 6px;}
+.inventory-upload-wrap{padding:0 16px 16px;}
+.inventory-upload-wrap details{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;}
+.inventory-upload-wrap summary{cursor:pointer;font-family:var(--mono);font-size:.72rem;letter-spacing:1px;text-transform:uppercase;color:var(--text);}
+.inventory-upload-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px;}
+.inventory-upload-grid input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-family:var(--mono);font-size:.72rem;}
 
 /* Action buttons inline */
 .act-btn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:3px 9px;font-size:.7rem;cursor:pointer;font-family:var(--mono);transition:all .15s;}
@@ -217,6 +260,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
   .hub-inner{padding:16px 16px 42px;}
   .panels{grid-template-columns:1fr;}
   .stats-row{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));}
+  .inventory-shell{grid-template-columns:1fr;}
+  .inventory-list{max-height:320px;}
 }
 
 /* Status Board (view-agents hub) */
@@ -525,10 +570,36 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
 <div class="view" id="view-locations">
 <div class="locations-inner">
   <div class="date-banner">// LOCATIONS + SPONSORSHIPS</div>
-  <div class="panels full">
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Sponsor Manager</div>
+  <div class="inventory-stats">
+    <div class="stat-card blue">
+      <div class="stat-label">Active Listings</div>
+      <div class="stat-value" id="locationskpi-total">--</div>
+      <div class="stat-sub">current inventory</div>
+    </div>
+    <div class="stat-card yellow">
+      <div class="stat-label">Sponsored</div>
+      <div class="stat-value" id="locationskpi-sponsored">--</div>
+      <div class="stat-sub">top-tile placements enabled</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-label">Unsponsored</div>
+      <div class="stat-value" id="locationskpi-unsponsored">--</div>
+      <div class="stat-sub">available inventory</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Banner Queue</div>
+      <div class="stat-value" id="locationskpi-banners">--</div>
+      <div class="stat-sub">pending creative approvals</div>
+    </div>
+  </div>
+
+  <div class="inventory-shell">
+    <div class="inventory-pane">
+      <div class="inventory-pane-head">
+        <div>
+          <div class="inventory-pane-title">Listing Inventory</div>
+          <div class="inventory-pane-copy">Filter once, pick a listing, and manage sponsorship from a single focused detail pane.</div>
+        </div>
         <div class="panel-badge" id="badge-sponsors">--</div>
       </div>
       <div class="sponsor-search-bar">
@@ -546,23 +617,44 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
         <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
       </div>
     </div>
+
+    <div class="inventory-pane">
+      <div class="inventory-pane-head">
+        <div>
+          <div class="inventory-pane-title">Selected Listing</div>
+          <div class="inventory-pane-copy">See sponsorship state, business details, and any related banner creatives without scanning a giant table.</div>
+        </div>
+        <div class="panel-badge" id="badge-sponsor-detail">pick one</div>
+      </div>
+      <div id="body-sponsor-detail">
+        <div class="inventory-detail-empty">Choose a listing from the left to manage sponsorship and related creative work.</div>
+      </div>
+    </div>
   </div>
-  <div class="panels full" style="margin-top:14px">
+
+  <div class="inventory-queue-shell">
     <div class="panel">
       <div class="panel-header">
         <div class="panel-title">Paid Banner Creative Queue</div>
         <div class="panel-badge" id="badge-banner-creatives">--</div>
       </div>
-      <div class="sponsor-search-bar" style="border-bottom:none;padding-bottom:8px">
-        <input id="banner-business-name" type="text" placeholder="Business name">
-        <input id="banner-city" type="text" placeholder="City (example: Charlotte, NC)">
-        <input id="banner-click-url" type="url" placeholder="Click URL (official site)">
-        <input id="banner-sponsorship-id" type="text" placeholder="Sponsorship ID (optional)">
-        <input id="banner-priority" type="number" min="1" max="1000" value="100" placeholder="Priority">
-        <input id="banner-headline" type="text" placeholder="Headline (optional)">
-        <input id="banner-subheadline" type="text" placeholder="Subheadline (optional)">
-        <input id="banner-file" type="file" accept="image/jpeg,image/png,image/webp,image/gif">
-        <button class="topbar-btn primary" onclick="submitSponsorBannerCreative()">Upload Banner</button>
+      <div class="inventory-upload-wrap">
+        <details>
+          <summary>Upload New Banner Creative</summary>
+          <div class="inventory-upload-grid">
+            <input id="banner-business-name" type="text" placeholder="Business name">
+            <input id="banner-city" type="text" placeholder="City (example: Charlotte, NC)">
+            <input id="banner-click-url" type="url" placeholder="Click URL (official site)">
+            <input id="banner-sponsorship-id" type="text" placeholder="Sponsorship ID (optional)">
+            <input id="banner-priority" type="number" min="1" max="1000" value="100" placeholder="Priority">
+            <input id="banner-headline" type="text" placeholder="Headline (optional)">
+            <input id="banner-subheadline" type="text" placeholder="Subheadline (optional)">
+            <input id="banner-file" type="file" accept="image/jpeg,image/png,image/webp,image/gif">
+          </div>
+          <div style="margin-top:12px;display:flex;justify-content:flex-end">
+            <button class="topbar-btn primary" onclick="submitSponsorBannerCreative()">Upload Banner</button>
+          </div>
+        </details>
       </div>
       <div class="sponsor-search-bar">
         <input id="banner-q" type="text" placeholder="Search by business, city, or submitter..." oninput="filterSponsorBanners()">
@@ -574,8 +666,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh
           <option value="archived">Archived</option>
         </select>
       </div>
-      <div id="body-banner-creatives">
-        <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+      <div class="inventory-queue-body">
+        <div id="body-banner-creatives">
+          <div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>
+        </div>
       </div>
     </div>
   </div>
@@ -1178,6 +1272,7 @@ var ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 
 var sb = null;
 var _allSponsorListings = [];
+var _selectedSponsorListingId = null;
 var convHistory = [];
 var agentBusy = false;
 var refreshTimer = null;
@@ -3518,8 +3613,9 @@ async function loadSponsorListings() {
 
   var sponsoredCount = res.data.filter(function(r) { return r.is_sponsored; }).length;
   document.getElementById('badge-sponsors').textContent = sponsoredCount + ' sponsored / ' + res.data.length + ' total';
-
-  renderSponsorTable(res.data);
+  updateLocationInventoryStats(res.data);
+  if (!_selectedSponsorListingId && res.data.length) _selectedSponsorListingId = res.data[0].listing_id;
+  sponsorSearch(document.getElementById('sponsor-q').value);
 }
 
 function sponsorSearch(query) {
@@ -3537,37 +3633,114 @@ function sponsorSearch(query) {
   if (statusFilter === 'sponsored') filtered = filtered.filter(function(r) { return r.is_sponsored; });
   if (statusFilter === 'unsponsored') filtered = filtered.filter(function(r) { return !r.is_sponsored; });
 
+  if (!filtered.some(function(r) { return r.listing_id === _selectedSponsorListingId; })) {
+    _selectedSponsorListingId = filtered.length ? filtered[0].listing_id : null;
+  }
   renderSponsorTable(filtered);
+  renderSponsorDetail(_selectedSponsorListingId);
 }
 
 function renderSponsorTable(rows) {
   if (!rows.length) {
-    document.getElementById('body-sponsors').innerHTML = '<div style="color:var(--muted);padding:20px;text-align:center">No listings found</div>';
+    document.getElementById('body-sponsors').innerHTML = '<div class="inventory-list"><div class="empty">No listings match the current filters.</div></div>';
     return;
   }
 
   document.getElementById('body-sponsors').innerHTML =
-    '<table class="data-table" style="width:100%"><thead><tr>' +
-    '<th>Business</th><th>City</th><th>Category</th><th>Rating</th><th style="text-align:center">Status</th><th style="text-align:center">Action</th>' +
-    '</tr></thead><tbody>' +
+    '<div class="inventory-list">' +
     rows.map(function(r) {
-      var escapedName = (r.name || '').replace(/'/g, "\\'");
-      var statusBadge = r.is_sponsored
-        ? '<span style="background:linear-gradient(135deg,#F59E0B,#D97706);color:white;padding:3px 10px;border-radius:50px;font-size:0.75rem;font-weight:900">Sponsored</span>'
-        : '<span style="background:#2a2a4a;color:#888;padding:3px 10px;border-radius:50px;font-size:0.75rem;font-weight:700">Unsponsored</span>';
-      var actionBtn = r.is_sponsored
-        ? '<button onclick="setSponsor(' + r.listing_id + ', false, \'' + escapedName + '\', this)" style="background:#3a1a1a;color:#ff6b6b;border:2px solid #ff6b6b;padding:5px 14px;border-radius:6px;font-size:0.8rem;font-weight:800;cursor:pointer">Remove Sponsor</button>'
-        : '<button onclick="setSponsor(' + r.listing_id + ', true, \'' + escapedName + '\', this)" style="background:linear-gradient(135deg,#F59E0B,#D97706);color:white;border:none;padding:5px 14px;border-radius:6px;font-size:0.8rem;font-weight:800;cursor:pointer">Make Sponsor</button>';
-      return '<tr id="sponsor-row-' + r.listing_id + '">' +
-        '<td style="font-weight:700;color:#e0e0ff">' + (r.name || '--') + '</td>' +
-        '<td style="color:#9d8fcc">' + (r.city || '--') + '</td>' +
-        '<td style="color:#9d8fcc;font-size:0.82rem">' + (r.category || '--') + '</td>' +
-        '<td style="color:#ffd166">' + (r.rating ? '* ' + Number(r.rating).toFixed(1) : '--') + '</td>' +
-        '<td style="text-align:center">' + statusBadge + '</td>' +
-        '<td style="text-align:center">' + actionBtn + '</td>' +
-        '</tr>';
-    }).join('') + '</tbody></table>' +
-    '<div style="margin-top:10px;font-size:0.78rem;color:#555;text-align:right">' + rows.length + ' listing' + (rows.length !== 1 ? 's' : '') + ' shown</div>';
+      var active = r.listing_id === _selectedSponsorListingId ? ' active' : '';
+      var rating = r.rating ? Number(r.rating).toFixed(1) + ' stars' : 'no rating';
+      return '<div class="inventory-item' + active + '" id="sponsor-row-' + r.listing_id + '" onclick="selectSponsorListing(' + r.listing_id + ')">' +
+        '<div class="inventory-item-head">' +
+          '<div>' +
+            '<div class="inventory-item-title">' + (r.name || '--') + '</div>' +
+            '<div class="inventory-item-meta">' + (r.city || '--') + ' · ' + (r.category || '--') + '<br>' + rating + '</div>' +
+          '</div>' +
+          '<div class="inventory-item-status">' +
+            '<span class="inventory-pill ' + (r.is_sponsored ? 'sponsored' : 'unsponsored') + '">' + (r.is_sponsored ? 'Sponsored' : 'Unsponsored') + '</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('') + '</div>';
+}
+
+function updateLocationInventoryStats(rows) {
+  var total = (rows || []).length;
+  var sponsored = (rows || []).filter(function(r) { return !!r.is_sponsored; }).length;
+  document.getElementById('locationskpi-total').textContent = total;
+  document.getElementById('locationskpi-sponsored').textContent = sponsored;
+  document.getElementById('locationskpi-unsponsored').textContent = Math.max(total - sponsored, 0);
+}
+
+function selectSponsorListing(listingId) {
+  _selectedSponsorListingId = listingId;
+  sponsorSearch(document.getElementById('sponsor-q').value);
+}
+
+function relatedBannerRowsForListing(listing) {
+  if (!listing) return [];
+  var name = String(listing.name || '').toLowerCase();
+  var city = String(listing.city || '').toLowerCase();
+  return (_allSponsorBanners || []).filter(function(b) {
+    var businessName = String(b.business_name || '').toLowerCase();
+    var bannerCity = String(b.city || '').toLowerCase();
+    return (businessName && businessName === name) || ((businessName && name && businessName.indexOf(name) >= 0) && (!city || bannerCity === city));
+  });
+}
+
+function renderSponsorDetail(listingId) {
+  var body = document.getElementById('body-sponsor-detail');
+  var badge = document.getElementById('badge-sponsor-detail');
+  if (!body || !badge) return;
+  var listing = (_allSponsorListings || []).find(function(r) { return r.listing_id === listingId; }) || null;
+  if (!listing) {
+    badge.textContent = 'pick one';
+    body.innerHTML = '<div class="inventory-detail-empty">Choose a listing from the left to manage sponsorship and related creative work.</div>';
+    return;
+  }
+  var related = relatedBannerRowsForListing(listing);
+  var pending = related.filter(function(r) { return r.status === 'pending'; });
+  var escapedName = (listing.name || '').replace(/'/g, "\\'");
+  var actionBtn = listing.is_sponsored
+    ? '<button class="topbar-btn" onclick="setSponsor(' + listing.listing_id + ', false, \'' + escapedName + '\', this)">Remove Sponsor</button>'
+    : '<button class="topbar-btn primary" onclick="setSponsor(' + listing.listing_id + ', true, \'' + escapedName + '\', this)">Make Sponsor</button>';
+  badge.textContent = listing.is_sponsored ? 'sponsored' : 'unsponsored';
+  body.innerHTML =
+    '<div class="inventory-detail">' +
+      '<div class="inventory-kicker">Listing #' + listing.listing_id + '</div>' +
+      '<div class="inventory-detail-title">' + (listing.name || '--') + '</div>' +
+      '<div class="inventory-detail-sub">' + (listing.city || '--') + (listing.address ? (' · ' + listing.address) : '') + '</div>' +
+      '<div class="inventory-actions">' +
+        actionBtn +
+        '<button class="topbar-btn" onclick="copySponsorBusinessName(' + listing.listing_id + ')">Use In Banner Form</button>' +
+      '</div>' +
+      '<div class="inventory-meta-grid">' +
+        '<div class="inventory-meta-card"><div class="inventory-meta-label">Category</div><div class="inventory-meta-value">' + (listing.category || '--') + '</div></div>' +
+        '<div class="inventory-meta-card"><div class="inventory-meta-label">Rating</div><div class="inventory-meta-value">' + (listing.rating ? Number(listing.rating).toFixed(1) + ' stars' : 'No rating yet') + '</div></div>' +
+        '<div class="inventory-meta-card"><div class="inventory-meta-label">Sponsorship State</div><div class="inventory-meta-value">' + (listing.is_sponsored ? 'Live in sponsored rotation' : 'Available inventory') + '</div></div>' +
+        '<div class="inventory-meta-card"><div class="inventory-meta-label">Related Banners</div><div class="inventory-meta-value">' + related.length + ' total · ' + pending.length + ' pending</div></div>' +
+      '</div>' +
+      '<div class="inventory-block">' +
+        '<div class="inventory-block-title">Related Banner Creatives</div>' +
+        (related.length
+          ? '<div class="inventory-mini-list">' + related.slice(0, 6).map(function(r) {
+              var clickUrl = r.click_url ? '<a href="' + r.click_url + '" target="_blank" rel="noopener" style="color:var(--blue)">open</a>' : '--';
+              return '<div class="inventory-mini-card">' +
+                '<div class="inventory-mini-card-title">' + (r.headline || r.business_name || '--') + '</div>' +
+                '<div class="inventory-mini-card-meta">' + (r.city || '--') + ' · ' + String(r.status || 'pending') + ' · URL: ' + clickUrl + '</div>' +
+              '</div>';
+            }).join('') + '</div>'
+          : '<div class="empty" style="padding:18px 0">No banner creatives linked to this business yet.</div>') +
+      '</div>' +
+    '</div>';
+}
+
+function copySponsorBusinessName(listingId) {
+  var listing = (_allSponsorListings || []).find(function(r) { return r.listing_id === listingId; }) || null;
+  if (!listing) return;
+  document.getElementById('banner-business-name').value = listing.name || '';
+  document.getElementById('banner-city').value = listing.city || '';
 }
 
 async function setSponsor(listingId, sponsored, name, btn) {
@@ -3597,6 +3770,8 @@ async function setSponsor(listingId, sponsored, name, btn) {
 
   var sponsoredCount = _allSponsorListings.filter(function(r) { return r.is_sponsored; }).length;
   document.getElementById('badge-sponsors').textContent = sponsoredCount + ' sponsored / ' + _allSponsorListings.length + ' total';
+  updateLocationInventoryStats(_allSponsorListings);
+  renderSponsorDetail(listingId);
 
   var row = document.getElementById('sponsor-row-' + listingId);
   if (row) {
@@ -3624,7 +3799,9 @@ async function loadSponsorBanners() {
     sponsorBannersLoaded = true;
     var pending = _allSponsorBanners.filter(function(r) { return r.status === 'pending'; }).length;
     document.getElementById('badge-banner-creatives').textContent = pending + ' pending / ' + _allSponsorBanners.length + ' total';
+    document.getElementById('locationskpi-banners').textContent = pending;
     filterSponsorBanners();
+    renderSponsorDetail(_selectedSponsorListingId);
   } catch (e) {
     document.getElementById('body-banner-creatives').innerHTML = '<div class="empty" style="padding:24px;color:var(--accent)">Failed to load sponsor banners: ' + e.message + '</div>';
   }
@@ -3651,12 +3828,12 @@ function filterSponsorBanners() {
 function renderSponsorBannerTable(rows) {
   var body = document.getElementById('body-banner-creatives');
   if (!rows || !rows.length) {
-    body.innerHTML = '<div class="empty" style="padding:24px">No sponsor banner creatives yet</div>';
+    body.innerHTML = '<div class="inventory-queue-scroll"><div class="empty" style="padding:24px">No sponsor banner creatives yet</div></div>';
     return;
   }
 
   body.innerHTML =
-    '<div class="table-wrap"><table class="data-table"><thead><tr>' +
+    '<div class="inventory-queue-scroll"><div class="table-wrap"><table class="data-table"><thead><tr>' +
     '<th>Preview</th><th>Business</th><th>City</th><th>Status</th><th>URL</th><th>Sponsorship</th><th>Submitter</th><th>Date</th><th>Actions</th>' +
     '</tr></thead><tbody>' +
     rows.map(function(r) {
@@ -3683,7 +3860,7 @@ function renderSponsorBannerTable(rows) {
         '<td>' + actions + '</td>' +
         '</tr>';
     }).join('') +
-    '</tbody></table></div>';
+    '</tbody></table></div></div>';
 }
 
 function fileToBase64Admin(file) {
