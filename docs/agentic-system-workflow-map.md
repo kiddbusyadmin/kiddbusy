@@ -268,6 +268,8 @@ If the system cannot clearly explain why a request qualifies as background work,
 
 ### `publish_blog_post`
 - mode: immediate only
+- exception:
+  - if the post does not already exist and needs fresh generation, switch to tracked background mode and tell the owner it exceeded the live request window budget
 
 ### `publish_city_blog_batch`
 - immediate if:
@@ -276,6 +278,7 @@ If the system cannot clearly explain why a request qualifies as background work,
   - `target_count > 1`
   - multi-city
   - scheduled campaign
+  - fresh one-off generation that is likely to exceed the live request window
 
 ### `fix_content_quality_issue`
 - immediate if:

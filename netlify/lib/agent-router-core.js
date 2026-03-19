@@ -31,7 +31,8 @@ const {
 const {
   runSingleWorkflow,
   classifyWorkflowExecution,
-  shouldRunWorkflowImmediately
+  shouldRunWorkflowImmediately,
+  resolveWorkflowExecutionPlan
 } = require('./workflow-runner-core');
 
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
@@ -101,12 +102,35 @@ async function executeImmediateCreatedWorkflows(execContext) {
     if (!row || !row.workflow_id) continue;
     const status = String(row.status || '').trim().toLowerCase();
     if (status && !['queued', 'running', 'waiting'].includes(status)) continue;
-    const classification = classifyWorkflowExecution(row);
-    if (classification.mode !== 'immediate') continue;
+    const classification = await resolveWorkflowExecutionPlan(row);
+    if (classification.mode !== 'immediate') {
+      row.details = Object.assign({}, row.details || {}, {
+        execution_mode: classification.mode,
+        execution_reason: classification.reason
+      });
+      rows[i] = row;
+      continue;
+    }
     const executed = await runSingleWorkflow(row);
     rows[i] = executed;
   }
   execContext.createdWorkflows = rows;
+}
+
+function appendExecutionExpectations(reply, createdWorkflows) {
+  var rows = Array.isArray(createdWorkflows) ? createdWorkflows.map(function(t) { return t && t.workflow ? t.workflow : t; }).filter(Boolean) : [];
+  var notes = [];
+  rows.forEach(function(row) {
+    var mode = String(((row.details || {}).execution_mode) || '').trim().toLowerCase();
+    var reason = String(((row.details || {}).execution_reason) || '').trim();
+    if (mode === 'background') {
+      notes.push('- workflow #' + row.workflow_id + ' is continuing in the background: ' + (reason || 'This work is expected to take longer than the live request window.'));
+    } else if (mode === 'external_wait') {
+      notes.push('- workflow #' + row.workflow_id + ' is waiting on an external event: ' + (reason || 'This work depends on something outside the current request.'));
+    }
+  });
+  if (!notes.length) return String(reply || '');
+  return String(reply || '').trim() + '\n\nExecution status:\n' + notes.join('\n');
 }
 
 async function dbQuery(table, params = {}) {
@@ -291,14 +315,15 @@ async function executeTool(name, input = {}, context = {}) {
         if (desiredTitle && String(existing.title || '').trim().toLowerCase() !== desiredTitle) continue;
         return { success: true, workflow: existing, deduped: true };
       }
-      const workflowClassification = classifyWorkflowExecution({
+      const draftWorkflow = {
         workflow_key: input.workflow_key,
         title: input.title,
         input: desiredPayload,
         details: Object.assign({}, input.details || {}, {
           order_id: input.order_id || context.currentOrderId || null
         })
-      });
+      };
+      const workflowClassification = await resolveWorkflowExecutionPlan(draftWorkflow);
       let workflow = await createWorkflow({
         ownerIdentity: input.owner_identity || 'harold',
         orderId: desiredOrderId,
@@ -316,7 +341,7 @@ async function executeTool(name, input = {}, context = {}) {
         }),
         priority: input.priority || 'normal'
       });
-      if (workflow && shouldRunWorkflowImmediately(workflow)) {
+      if (workflow && workflowClassification.mode === 'immediate' && shouldRunWorkflowImmediately(workflow)) {
         workflow = await runSingleWorkflow(workflow);
       }
       context.createdWorkflowCount = (context.createdWorkflowCount || 0) + 1;
@@ -1341,6 +1366,7 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
       if (immediateSummary) {
         reply = String(reply || '').trim() + '\n\n' + immediateSummary;
       }
+      reply = appendExecutionExpectations(reply, execContext.createdWorkflows || []);
       var workflowRows = (execContext.createdWorkflows || []).map(function(t) { return t && t.workflow ? t.workflow : t; }).filter(Boolean);
       var pendingCount = workflowRows.filter(function(row) {
         var status = String((row && row.status) || '').trim().toLowerCase();

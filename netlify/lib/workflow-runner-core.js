@@ -237,6 +237,37 @@ async function listCityPosts(city) {
   return out.data;
 }
 
+async function resolveWorkflowExecutionPlan(workflow) {
+  const base = classifyWorkflowExecution(workflow);
+  const row = workflow || {};
+  const wfKey = String(row.workflow_key || '').trim();
+  if (!wfKey) return base;
+  if (!['publish_blog_post', 'publish_city_blog_batch'].includes(wfKey)) return base;
+  if (base.mode !== 'immediate') return base;
+
+  const payload = Object.assign({}, row.input || {}, row.details || {});
+  const city = cleanCity(payload.city || extractCity(row.title || ''));
+  const targetCount = inferTargetCount(payload);
+  const keywordTarget = inferKeywordTarget(payload, row, null, city);
+  const topicSignals = buildTopicSignals(keywordTarget, row, null, city);
+  const existing = await listCityPosts(city);
+  const published = existing
+    .filter((post) => String(post.status || '') === 'published')
+    .filter((post) => doesPostMatchTopic(post, topicSignals));
+
+  if (published.length >= targetCount) {
+    return {
+      mode: 'immediate',
+      reason: 'The requested blog post already exists, so the workflow can complete immediately.'
+    };
+  }
+
+  return {
+    mode: 'background',
+    reason: 'Fresh blog generation can exceed the live request window, so this will continue as tracked background work.'
+  };
+}
+
 async function runBlogPublishWorkflow(workflow, order) {
   const payload = Object.assign({}, workflow.input || {}, workflow.details || {});
   const city = cleanCity(payload.city || extractCity(workflow.title || (order && order.request_text) || ''));
@@ -565,5 +596,6 @@ module.exports = {
   runWorkflowEngine,
   runSingleWorkflow,
   shouldRunWorkflowImmediately,
-  classifyWorkflowExecution
+  classifyWorkflowExecution,
+  resolveWorkflowExecutionPlan
 };

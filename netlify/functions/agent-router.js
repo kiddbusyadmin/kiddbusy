@@ -1,6 +1,6 @@
 const { runAgentConversation } = require('../lib/agent-router-core');
 const { getWorkflowById } = require('./_workflow-core');
-const { runSingleWorkflow, classifyWorkflowExecution } = require('../lib/workflow-runner-core');
+const { runSingleWorkflow, resolveWorkflowExecutionPlan } = require('../lib/workflow-runner-core');
 const AGENT_ROUTER_POLICY_VERSION = '2026-03-19-immediate-v4';
 
 function json(statusCode, payload) {
@@ -123,7 +123,7 @@ exports.handler = async (event) => {
           executed.push(workflow);
           continue;
         }
-        const classification = classifyWorkflowExecution(workflow);
+        const classification = await resolveWorkflowExecutionPlan(workflow);
         if (classification.mode !== 'immediate') continue;
         executed.push(await runSingleWorkflow(workflow));
       }
