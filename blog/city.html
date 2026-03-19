@@ -5,12 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="apple-touch-icon" href="/favicon.svg">
+<script>
+(function() {
+  try {
+    var canonicalUrl = 'https://kiddbusy.com' + window.location.pathname + window.location.search;
+    window.__KB_CANONICAL_URL__ = canonicalUrl;
+  } catch (e) {
+    window.__KB_CANONICAL_URL__ = 'https://kiddbusy.com/blog/';
+  }
+})();
+</script>
 <title>KiddBusy City Guide</title>
 <meta name="description" content="Top kid-friendly listings, latest events, and related guides for your city." />
 <meta name="robots" content="index,follow,max-image-preview:large" />
-<link rel="canonical" href="https://kiddbusy.com/blog/" />
+<link rel="canonical" href="https://kiddbusy.com/blog/" id="page-canonical" />
 <meta property="og:type" content="website" />
-<meta property="og:url" content="https://kiddbusy.com/blog/" />
+<meta property="og:url" content="https://kiddbusy.com/blog/" id="page-og-url" />
 <meta property="og:title" content="KiddBusy City Guide" />
 <meta property="og:description" content="Top kid-friendly listings, latest events, and related guides for your city." />
 <meta property="og:image" content="https://kiddbusy.com/og-image.png" />
@@ -18,6 +28,15 @@
 <meta name="twitter:title" content="KiddBusy City Guide" />
 <meta name="twitter:description" content="Top kid-friendly listings, latest events, and related guides for your city." />
 <meta name="twitter:image" content="https://kiddbusy.com/og-image.png" />
+<script>
+(function() {
+  var url = window.__KB_CANONICAL_URL__ || 'https://kiddbusy.com/blog/';
+  var canonical = document.getElementById('page-canonical');
+  var ogUrl = document.getElementById('page-og-url');
+  if (canonical) canonical.setAttribute('href', url);
+  if (ogUrl) ogUrl.setAttribute('content', url);
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
