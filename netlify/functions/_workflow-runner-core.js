@@ -1,5 +1,4 @@
 const { runCmoBlog } = require('./_cmo-blog-core');
-const { runAgentConversation } = require('./_agent-router-core');
 const { upsertResearchArtifact } = require('./_research-memory');
 const { logAgentActivity } = require('./_agent-activity');
 const { getTrafficSummary, getActivitySummary } = require('./_analytics-core');
@@ -199,6 +198,7 @@ async function runBlogPublishWorkflow(workflow, order) {
 // If no evidence is extractable, the workflow is blocked rather than silently "completed".
 async function runStructuredMemoWorkflow(workflow, order) {
   const workflowKey = String(workflow.workflow_key || 'ops_investigation');
+  const { runAgentConversation } = require('./_agent-router-core');
   const reply = await runAgentConversation({
     role: workflow.assigned_agent_key,
     userMessage:
@@ -416,6 +416,27 @@ async function runSingleWorkflow(workflow) {
   return row;
 }
 
+function shouldRunWorkflowImmediately(workflow) {
+  const row = workflow || {};
+  const wfKey = String(row.workflow_key || '').trim();
+  const payload = Object.assign({}, row.input || {}, row.details || {});
+  if (!wfKey) return false;
+  if (payload.background === true || payload.defer === true || payload.async === true) return false;
+  if (wfKey === 'answer_analytics_question') return true;
+  if (wfKey === 'research_request') return true;
+  if (wfKey === 'ops_investigation') return true;
+  if (wfKey === 'fix_content_quality_issue') return true;
+  if (wfKey === 'review_submission') return true;
+  if (wfKey === 'process_owner_claim') return true;
+  if (wfKey === 'process_sponsorship') return true;
+  if (wfKey === 'blog_title_qc') return true;
+  if (wfKey === 'publish_blog_post') return true;
+  if (wfKey === 'publish_city_blog_batch') {
+    return inferTargetCount(payload) <= 1;
+  }
+  return false;
+}
+
 async function runWorkflowEngine(limit = 12) {
   const workflows = await getWorkflows({ ownerIdentity: '', status: 'ready', limit });
   const processed = [];
@@ -450,5 +471,7 @@ async function runWorkflowEngine(limit = 12) {
 }
 
 module.exports = {
-  runWorkflowEngine
+  runWorkflowEngine,
+  runSingleWorkflow,
+  shouldRunWorkflowImmediately
 };

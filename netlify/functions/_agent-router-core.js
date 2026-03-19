@@ -28,6 +28,10 @@ const {
   getWorkflows,
   projectWorkflowAsTask
 } = require('./_workflow-core');
+const {
+  runSingleWorkflow,
+  shouldRunWorkflowImmediately
+} = require('./_workflow-runner-core');
 
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -73,6 +77,21 @@ const PRESIDENT_CONTEXT_BRIEF = [
   '- SEO priority rule: pursue queries that parents actually search for, especially city + toddler activities patterns, but do not recommend mismatched activities such as outdoor playgrounds for rainy-day intent unless justified.',
   '- Future city rollout rule: when asked to expand to more cities, preserve the same local, link-aware, cross-linked, search-intent-led process rather than bulk publishing thin pages.'
 ].join('\n');
+
+function summarizeImmediateWorkflowOutcome(workflows) {
+  const rows = Array.isArray(workflows) ? workflows.filter(Boolean) : [];
+  if (!rows.length) return '';
+  const parts = [];
+  for (const row of rows) {
+    const status = String(row.status || '').trim();
+    if (!status || ['queued', 'running', 'waiting'].includes(status)) continue;
+    const label = String(row.assigned_agent_key || 'agent').replace(/_agent$/, '');
+    const summary = String(row.summary || '').trim();
+    parts.push(`- ${label} workflow #${row.workflow_id} ${status}${summary ? `: ${summary}` : ''}`);
+  }
+  if (!parts.length) return '';
+  return 'Immediate execution result:\n' + parts.join('\n');
+}
 
 async function dbQuery(table, params = {}) {
   let url = `${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(params.select || '*')}&limit=${Math.min(Math.max(Number(params.limit) || 100, 1), 1000)}`;
@@ -256,7 +275,7 @@ async function executeTool(name, input = {}, context = {}) {
         if (desiredTitle && String(existing.title || '').trim().toLowerCase() !== desiredTitle) continue;
         return { success: true, workflow: existing, deduped: true };
       }
-      const workflow = await createWorkflow({
+      let workflow = await createWorkflow({
         ownerIdentity: input.owner_identity || 'harold',
         orderId: desiredOrderId,
         threadId: input.thread_id || null,
@@ -271,6 +290,9 @@ async function executeTool(name, input = {}, context = {}) {
         }),
         priority: input.priority || 'normal'
       });
+      if (workflow && shouldRunWorkflowImmediately(workflow)) {
+        workflow = await runSingleWorkflow(workflow);
+      }
       context.createdWorkflowCount = (context.createdWorkflowCount || 0) + 1;
       context.createdWorkflows = Array.isArray(context.createdWorkflows) ? context.createdWorkflows : [];
       context.createdWorkflows.push(workflow);
@@ -1260,8 +1282,15 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
     reply = sanitizeDelegationText(reply);
     if (execContext.createdWorkflowCount > 0 || execContext.createdTaskCount > 0) {
       try {
-        var followUpId = await ensureProgressFollowUp(reply, execContext);
-        if (followUpId) reply = appendTrackedFollowUp(reply, followUpId);
+        var hasPendingWorkflow = (execContext.createdWorkflows || []).some(function(t) {
+          var row = t && t.workflow ? t.workflow : t;
+          var status = String((row && row.status) || '').trim().toLowerCase();
+          return !status || status === 'queued' || status === 'running' || status === 'waiting';
+        });
+        if (hasPendingWorkflow || execContext.createdTaskCount > 0) {
+          var followUpId = await ensureProgressFollowUp(reply, execContext);
+          if (followUpId) reply = appendTrackedFollowUp(reply, followUpId);
+        }
       } catch (followUpErr) {
         try {
           await logAgentActivity({
@@ -1277,9 +1306,33 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
         } catch (_) {}
       }
       reply = appendTrackedDelegationSummary(reply, execContext.createdWorkflows.length ? execContext.createdWorkflows : execContext.createdTasks);
+      var immediateSummary = summarizeImmediateWorkflowOutcome((execContext.createdWorkflows || []).map(function(t) {
+        return t && t.workflow ? t.workflow : t;
+      }));
+      if (immediateSummary) {
+        reply = String(reply || '').trim() + '\n\n' + immediateSummary;
+      }
+      var workflowRows = (execContext.createdWorkflows || []).map(function(t) { return t && t.workflow ? t.workflow : t; }).filter(Boolean);
+      var pendingCount = workflowRows.filter(function(row) {
+        var status = String((row && row.status) || '').trim().toLowerCase();
+        return !status || status === 'queued' || status === 'running' || status === 'waiting';
+      }).length;
+      var completedCount = workflowRows.filter(function(row) {
+        return String((row && row.status) || '').trim().toLowerCase() === 'completed';
+      }).length;
+      var blockedCount = workflowRows.filter(function(row) {
+        var status = String((row && row.status) || '').trim().toLowerCase();
+        return status === 'blocked' || status === 'failed' || status === 'cancelled';
+      }).length;
+      var orderStatus = 'delegated';
+      if (workflowRows.length && pendingCount === 0) {
+        if (completedCount === workflowRows.length) orderStatus = 'completed';
+        else if (blockedCount > 0 && completedCount === 0) orderStatus = 'blocked';
+        else if (completedCount > 0) orderStatus = 'completed';
+      }
       await updateOwnerOrder({
         orderId: currentOrder.order_id,
-        status: 'delegated',
+        status: orderStatus,
         summary: String(reply || '').slice(0, 600),
         details: {
           auto_status: execContext.createdWorkflows.length ? 'delegated_from_workflow_creation' : 'delegated_from_task_creation',
@@ -1292,7 +1345,8 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
             var row = t && t.workflow ? t.workflow : t;
             return row && row.assigned_agent_key;
           }).concat((execContext.createdTasks || []).map(function(t) { return t && t.assigned_agent_key; })).filter(Boolean)
-        }
+        },
+        completed: orderStatus === 'completed'
       });
     } else {
       if (agent.key === 'president_agent' && shouldAutoDelegateExecutionRequest(text)) {
