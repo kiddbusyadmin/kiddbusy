@@ -3,7 +3,7 @@
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const TELEGRAM_ALLOWED_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
-const { runAgentConversation } = require('./_agent-router-core');
+const { runAgentConversation } = require('../lib/agent-router-core');
 
 async function sendTelegram(chatId, text) {
   if (!TELEGRAM_TOKEN) {

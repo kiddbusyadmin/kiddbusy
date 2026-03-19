@@ -1,7 +1,7 @@
-const { runCmoBlog } = require('./_cmo-blog-core');
-const { upsertResearchArtifact } = require('./_research-memory');
-const { logAgentActivity } = require('./_agent-activity');
-const { getTrafficSummary, getActivitySummary } = require('./_analytics-core');
+const { runCmoBlog } = require('../functions/_cmo-blog-core');
+const { upsertResearchArtifact } = require('../functions/_research-memory');
+const { logAgentActivity } = require('../functions/_agent-activity');
+const { getTrafficSummary, getActivitySummary } = require('../functions/_analytics-core');
 const {
   getWorkflows,
   updateWorkflow,
@@ -9,8 +9,8 @@ const {
   projectWorkflowAsTask,
   nowIso,
   normalizeOwnerIdentity
-} = require('./_workflow-core');
-const { sbFetch } = require('./_accounting-core');
+} = require('../functions/_workflow-core');
+const { sbFetch } = require('../functions/_accounting-core');
 
 function cleanCity(value) {
   return String(value || '')
@@ -306,7 +306,7 @@ async function runBlogPublishWorkflow(workflow, order) {
 // If no evidence is extractable, the workflow is blocked rather than silently "completed".
 async function runStructuredMemoWorkflow(workflow, order) {
   const workflowKey = String(workflow.workflow_key || 'ops_investigation');
-  const { runAgentConversation } = require('./_agent-router-core');
+  const { runAgentConversation } = require('./agent-router-core');
   const reply = await runAgentConversation({
     role: workflow.assigned_agent_key,
     userMessage:

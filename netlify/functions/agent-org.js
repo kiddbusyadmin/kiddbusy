@@ -1,4 +1,4 @@
-const { getAgentRegistry } = require('./_agent-router-core');
+const { getAgentRegistry } = require('../lib/agent-router-core');
 
 function json(statusCode, payload) {
   return {

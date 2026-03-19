@@ -1,9 +1,9 @@
-const { sendCompliantEmail } = require('./_email-compliance');
-const { triggerSponsorshipPaymentRequestEmail } = require('./_sponsorship-payment-email');
-const { buildFinanceSnapshot, upsertFinanceSnapshot, addManualEntry, sbFetch } = require('./_accounting-core');
-const { getTrafficSummary, getActivitySummary } = require('./_analytics-core');
-const { getAgentRegistry, createAgentDefinition, findAgent, normalizeKey } = require('./_agent-org');
-const { logAgentActivity } = require('./_agent-activity');
+const { sendCompliantEmail } = require('../functions/_email-compliance');
+const { triggerSponsorshipPaymentRequestEmail } = require('../functions/_sponsorship-payment-email');
+const { buildFinanceSnapshot, upsertFinanceSnapshot, addManualEntry, sbFetch } = require('../functions/_accounting-core');
+const { getTrafficSummary, getActivitySummary } = require('../functions/_analytics-core');
+const { getAgentRegistry, createAgentDefinition, findAgent, normalizeKey } = require('../functions/_agent-org');
+const { logAgentActivity } = require('../functions/_agent-activity');
 const {
   getOrCreateThread,
   appendMessage,
@@ -20,19 +20,19 @@ const {
   getProgressSubscriptions,
   getProgressReports,
   getResearchArchive
-} = require('./_agent-memory');
+} = require('../functions/_agent-memory');
 const {
   createWorkflow,
   updateWorkflow,
   appendWorkflowEvent,
   getWorkflows,
   projectWorkflowAsTask
-} = require('./_workflow-core');
+} = require('../functions/_workflow-core');
 const {
   runSingleWorkflow,
   classifyWorkflowExecution,
   shouldRunWorkflowImmediately
-} = require('./_workflow-runner-core');
+} = require('./workflow-runner-core');
 
 const SUPABASE_URL = process.env.KB_DB_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.KB_DB_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;

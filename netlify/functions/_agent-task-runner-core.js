@@ -1,5 +1,5 @@
 const { runCmoBlog } = require('./_cmo-blog-core');
-const { runAgentConversation } = require('./_agent-router-core');
+const { runAgentConversation } = require('../lib/agent-router-core');
 const accountantAgent = require('./accountant-agent');
 const { logAgentActivity } = require('./_agent-activity');
 const { upsertResearchArtifact, inferQuestion, inferCity } = require('./_research-memory');

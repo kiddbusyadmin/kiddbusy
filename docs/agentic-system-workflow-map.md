@@ -497,7 +497,7 @@ If starting fresh with another model, use this instruction:
 
 ## Related Repo References
 - [/Users/Harold/Documents/codex kiddbusy/repo/docs/claude-agent-handoff.md](/Users/Harold/Documents/codex%20kiddbusy/repo/docs/claude-agent-handoff.md)
-- [/Users/Harold/Documents/codex kiddbusy/repo/netlify/functions/_agent-router-core.js](/Users/Harold/Documents/codex%20kiddbusy/repo/netlify/functions/_agent-router-core.js)
+- [/Users/Harold/Documents/codex kiddbusy/repo/netlify/lib/agent-router-core.js](/Users/Harold/Documents/codex%20kiddbusy/repo/netlify/lib/agent-router-core.js)
 - [/Users/Harold/Documents/codex kiddbusy/repo/netlify/functions/_workflow-core.js](/Users/Harold/Documents/codex%20kiddbusy/repo/netlify/functions/_workflow-core.js)
-- [/Users/Harold/Documents/codex kiddbusy/repo/netlify/functions/_workflow-runner-core.js](/Users/Harold/Documents/codex%20kiddbusy/repo/netlify/functions/_workflow-runner-core.js)
+- [/Users/Harold/Documents/codex kiddbusy/repo/netlify/lib/workflow-runner-core.js](/Users/Harold/Documents/codex%20kiddbusy/repo/netlify/lib/workflow-runner-core.js)
 - [/Users/Harold/Documents/codex kiddbusy/repo/netlify/functions/agent-router.js](/Users/Harold/Documents/codex%20kiddbusy/repo/netlify/functions/agent-router.js)

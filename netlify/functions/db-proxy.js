@@ -11,10 +11,10 @@ const { enrollClaimNurture } = require('./_sponsorship-claim-nurture');
 const { buildFinanceSnapshot, upsertFinanceSnapshot } = require('./_accounting-core');
 const { sendCompliantEmail } = require('./_email-compliance');
 const { runCmoBlog } = require('./_cmo-blog-core');
-const { runAgentConversation } = require('./_agent-router-core');
+const { runAgentConversation } = require('../lib/agent-router-core');
 const accountantAgent = require('./accountant-agent');
 const { runAgentTasks, runDelegationWatchdog } = require('./_agent-task-runner-core');
-const { runWorkflowEngine } = require('./_workflow-runner-core');
+const { runWorkflowEngine } = require('../lib/workflow-runner-core');
 const { getTrafficSummary, getActivitySummary } = require('./_analytics-core');
 const { getWorkflows, updateWorkflow, appendWorkflowEvent, projectWorkflowAsTask } = require('./_workflow-core');
 
