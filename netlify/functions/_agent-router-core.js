@@ -1428,6 +1428,12 @@ async function runAgentConversation({ role = '', userMessage = '', history = [],
     agent_name: agent.name,
     provider,
     reply,
+    created_workflows: (execContext.createdWorkflows || []).map(function(t) {
+      return t && t.workflow ? t.workflow : t;
+    }).filter(Boolean),
+    created_tasks: (execContext.createdTasks || []).map(function(t) {
+      return t && t.task ? t.task : t;
+    }).filter(Boolean),
     registry,
     thread_id: thread.thread_id,
     thread_key: resolvedThreadKey

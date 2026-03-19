@@ -40,6 +40,42 @@ function appendImmediateSummary(reply, rows) {
   return String(reply || '').trim() + '\n\nImmediate execution result:\n' + lines.join('\n');
 }
 
+function buildDeterministicExecutionReply(result, rows) {
+  const list = Array.isArray(rows) ? rows.filter(Boolean) : [];
+  if (!list.length) return String((result && result.reply) || '');
+  const completed = list.filter((row) => String(row.status || '').trim().toLowerCase() === 'completed');
+  const pending = list.filter((row) => {
+    const status = String(row.status || '').trim().toLowerCase();
+    return !status || status === 'queued' || status === 'running' || status === 'waiting';
+  });
+  const blocked = list.filter((row) => {
+    const status = String(row.status || '').trim().toLowerCase();
+    return status === 'blocked' || status === 'failed' || status === 'cancelled';
+  });
+  if (completed.length && pending.length === 0 && blocked.length === 0) {
+    const primary = completed[0];
+    return [
+      `I ran this immediately through workflow #${primary.workflow_id}.`,
+      primary.summary ? primary.summary : 'The workflow completed successfully.',
+      '',
+      'Tracked delegation:',
+      `- ${String(primary.assigned_agent_key || 'agent').replace(/_agent$/, '')} workflow #${primary.workflow_id}`
+    ].join('\n');
+  }
+  if (blocked.length && completed.length === 0 && pending.length === 0) {
+    const primary = blocked[0];
+    return [
+      `I ran this immediately through workflow #${primary.workflow_id}, but it is blocked.`,
+      primary.summary ? primary.summary : 'The workflow did not complete.',
+      primary.blocked_reason ? `Blocked reason: ${primary.blocked_reason}` : '',
+      '',
+      'Tracked delegation:',
+      `- ${String(primary.assigned_agent_key || 'agent').replace(/_agent$/, '')} workflow #${primary.workflow_id}`
+    ].filter(Boolean).join('\n');
+  }
+  return appendImmediateSummary((result && result.reply) || '', list);
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -72,10 +108,14 @@ exports.handler = async (event) => {
       ownerIdentity: body.owner_identity || 'harold'
     });
     if (String(body.role || '') === 'president_agent' && shouldRunNow(body.message || '')) {
-      const workflowIds = extractWorkflowIds(result && result.reply);
+      const freshRows = Array.isArray(result && result.created_workflows) ? result.created_workflows : [];
+      const workflowIds = freshRows.length
+        ? freshRows.map((row) => row && row.workflow_id).filter(Boolean)
+        : extractWorkflowIds(result && result.reply);
       const executed = [];
       for (const workflowId of workflowIds) {
-        const workflow = await getWorkflowById(workflowId);
+        let workflow = freshRows.find((row) => Number(row && row.workflow_id) === Number(workflowId)) || null;
+        if (!workflow) workflow = await getWorkflowById(workflowId);
         if (!workflow) continue;
         const status = String(workflow.status || '').trim().toLowerCase();
         if (!['queued', 'running', 'waiting'].includes(status)) {
@@ -87,8 +127,9 @@ exports.handler = async (event) => {
         executed.push(await runSingleWorkflow(workflow));
       }
       if (executed.length) {
-        result.reply = appendImmediateSummary(result.reply, executed);
+        result.reply = buildDeterministicExecutionReply(result, executed);
         result.immediate_execution = true;
+        result.created_workflows = executed;
       }
     }
     return json(200, result);
