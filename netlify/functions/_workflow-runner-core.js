@@ -32,6 +32,72 @@ function inferTargetCount(payload) {
   return 1;
 }
 
+function tokenizeTopic(text) {
+  const stop = new Set([
+    'a', 'an', 'and', 'are', 'article', 'articles', 'as', 'at', 'be', 'blog', 'blogs', 'by',
+    'complete', 'completed', 'create', 'do', 'done', 'end', 'endtoend', 'ensure', 'for', 'from',
+    'generate', 'guide', 'guides', 'how', 'i', 'immediately', 'in', 'is', 'it', 'its', 'list',
+    'listicle', 'listicles', 'live', 'me', 'nc', 'need', 'on', 'or', 'post', 'posts', 'publish',
+    'published', 'publishing', 'research', 'that', 'the', 'this', 'through', 'to', 'up', 'verify',
+    'want', 'with', 'write'
+  ]);
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length >= 4 && !stop.has(part));
+}
+
+function inferKeywordTarget(payload, workflow, order, city) {
+  const explicit = String(payload.keyword_target || '').trim();
+  if (explicit) return explicit;
+  const combined = [
+    String(workflow.title || ''),
+    String((order && order.request_text) || '')
+  ].join(' ').toLowerCase();
+  if (!combined.trim()) return '';
+  const cityPart = String(city || '').trim();
+  if (/\bpublic parks?\b/.test(combined)) return cityPart ? `${cityPart} public parks` : 'public parks';
+  if (/\bindoor playgrounds?\b/.test(combined)) return cityPart ? `indoor playgrounds ${cityPart}` : 'indoor playgrounds';
+  if (/\bplaygrounds?\b/.test(combined)) return cityPart ? `${cityPart} playgrounds` : 'playgrounds';
+  if (/\brainy day\b/.test(combined)) return cityPart ? `rainy day activities ${cityPart}` : 'rainy day activities';
+  if (/\bwater\b|\bswimming\b/.test(combined)) return cityPart ? `water and swimming activities ${cityPart}` : 'water and swimming activities';
+  if (/\bteen\b|\bteens\b/.test(combined)) return cityPart ? `teen activities ${cityPart}` : 'teen activities';
+  if (/\btoddler\b|\btoddlers\b/.test(combined)) return cityPart ? `toddler activities ${cityPart}` : 'toddler activities';
+  return '';
+}
+
+function buildTopicSignals(keywordTarget, workflow, order, city) {
+  const text = [
+    String(keywordTarget || ''),
+    String(workflow.title || ''),
+    String((order && order.request_text) || '')
+  ].join(' ');
+  const rawTokens = tokenizeTopic(text);
+  const cityTokens = tokenizeTopic(city).filter(Boolean);
+  const filtered = rawTokens.filter((token) => cityTokens.indexOf(token) === -1);
+  const unique = [];
+  for (const token of filtered) {
+    if (unique.indexOf(token) === -1) unique.push(token);
+  }
+  return unique.slice(0, 6);
+}
+
+function doesPostMatchTopic(post, topicSignals) {
+  if (!Array.isArray(topicSignals) || !topicSignals.length) return true;
+  const haystack = [
+    String((post && post.title) || ''),
+    String((post && post.slug) || '')
+  ].join(' ').toLowerCase();
+  let matched = 0;
+  for (const token of topicSignals) {
+    if (haystack.indexOf(String(token || '').toLowerCase()) >= 0) matched += 1;
+  }
+  if (topicSignals.length === 1) return matched >= 1;
+  return matched >= Math.min(2, topicSignals.length);
+}
+
 function requestImpliesPublication(text) {
   return /\b(publish|published|article|blog post|listicle|post)\b/i.test(String(text || ''));
 }
@@ -68,16 +134,23 @@ async function runBlogPublishWorkflow(workflow, order) {
   const payload = Object.assign({}, workflow.input || {}, workflow.details || {});
   const city = cleanCity(payload.city || extractCity(workflow.title || (order && order.request_text) || ''));
   const targetCount = inferTargetCount(payload);
-  const keywordTarget = String(payload.keyword_target || '').trim();
+  const keywordTarget = inferKeywordTarget(payload, workflow, order, city);
+  const topicSignals = buildTopicSignals(keywordTarget, workflow, order, city);
   const before = await listCityPosts(city);
-  const beforePublished = before.filter((row) => String(row.status || '') === 'published').length;
+  const beforePublishedRows = before.filter((row) => String(row.status || '') === 'published');
+  const beforeMatchingRows = beforePublishedRows.filter((row) => doesPostMatchTopic(row, topicSignals));
+  const beforePublished = beforeMatchingRows.length;
   const remaining = Math.max(targetCount - beforePublished, 0);
   if (remaining <= 0) {
     return {
       status: 'completed',
-      summary: 'Blog publish target already satisfied' + (city ? (' for ' + city) : '') + '.',
+      summary: 'Blog publish target already satisfied' + (city ? (' for ' + city) : '') + (keywordTarget ? (' (' + keywordTarget + ')') : '') + '.',
       output: { published_count: beforePublished, remaining_count: 0 },
-      evidence: { post_ids: before.map((row) => row.id).slice(0, targetCount) }
+      evidence: {
+        post_ids: beforeMatchingRows.map((row) => row.id).slice(0, targetCount),
+        keyword_target: keywordTarget || null,
+        topic_signals: topicSignals
+      }
     };
   }
   const batchSize = Math.min(remaining, 3);
@@ -99,11 +172,13 @@ async function runBlogPublishWorkflow(workflow, order) {
     throw new Error(parsed.error || 'Blog workflow failed');
   }
   const after = await listCityPosts(city);
-  const afterPublished = after.filter((row) => String(row.status || '') === 'published').length;
+  const afterPublishedRows = after.filter((row) => String(row.status || '') === 'published');
+  const afterMatchingRows = afterPublishedRows.filter((row) => doesPostMatchTopic(row, topicSignals));
+  const afterPublished = afterMatchingRows.length;
   const remainingAfter = Math.max(targetCount - afterPublished, 0);
   return {
     status: remainingAfter > 0 ? 'waiting' : 'completed',
-    summary: 'CMO workflow' + (city ? (' for ' + city) : '') + ': published ' + String(afterPublished) + '/' + String(targetCount) + '.',
+    summary: 'CMO workflow' + (city ? (' for ' + city) : '') + (keywordTarget ? (' (' + keywordTarget + ')') : '') + ': published ' + String(afterPublished) + '/' + String(targetCount) + '.',
     output: {
       city,
       keyword_target: keywordTarget || null,
@@ -112,7 +187,9 @@ async function runBlogPublishWorkflow(workflow, order) {
       remaining_count: remainingAfter
     },
     evidence: {
-      post_ids: after.filter((row) => String(row.status || '') === 'published').map((row) => row.id).slice(0, targetCount)
+      post_ids: afterMatchingRows.map((row) => row.id).slice(0, targetCount),
+      keyword_target: keywordTarget || null,
+      topic_signals: topicSignals
     }
   };
 }

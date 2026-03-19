@@ -826,8 +826,16 @@ function normalizeWorkflowAssignment(workflowKey, assignedAgentKey, title, paylo
   var wf = String(workflowKey || '').trim();
   var assigned = String(assignedAgentKey || '').trim();
   var normalizedPayload = Object.assign({}, payload || {});
+  var loweredTitle = String(title || '').toLowerCase();
   var inferredCity = inferCityFromRequest(String(title || ''));
   if (!normalizedPayload.city && inferredCity) normalizedPayload.city = inferredCity;
+  if ((wf === 'publish_city_blog_batch' || wf === 'publish_blog_post') && !normalizedPayload.keyword_target) {
+    var cityPart = String(normalizedPayload.city || inferredCity || '').trim();
+    if (/\bpublic parks?\b/.test(loweredTitle)) normalizedPayload.keyword_target = cityPart ? (cityPart + ' public parks') : 'public parks';
+    else if (/\bindoor playground/.test(loweredTitle)) normalizedPayload.keyword_target = cityPart ? ('indoor playgrounds ' + cityPart) : 'indoor playgrounds';
+    else if (/\bplaygrounds?\b/.test(loweredTitle)) normalizedPayload.keyword_target = cityPart ? (cityPart + ' playgrounds') : 'playgrounds';
+    else if (/\bwater\b|\bswimming\b/.test(loweredTitle)) normalizedPayload.keyword_target = cityPart ? ('water and swimming activities ' + cityPart) : 'water and swimming activities';
+  }
   if (wf === 'publish_city_blog_batch' || wf === 'publish_blog_post' || wf === 'blog_title_qc') {
     assigned = 'cmo_agent';
   } else if (wf === 'research_request') {
@@ -879,6 +887,9 @@ function buildAutoDelegationPlan(text, reply) {
     var explicitKeyword = '';
     if (/\bindoor playground/.test(lower)) explicitKeyword = 'indoor playgrounds ' + (city || '').trim();
     else if (/\bindoor play/.test(lower)) explicitKeyword = 'indoor play areas ' + (city || '').trim();
+    else if (/\bpublic parks?\b/.test(lower)) explicitKeyword = (city || '').trim() ? ((city || '').trim() + ' public parks') : 'public parks';
+    else if (/\bplaygrounds?\b/.test(lower)) explicitKeyword = (city || '').trim() ? ((city || '').trim() + ' playgrounds') : 'playgrounds';
+    else if (/\bwater\b|\bswimming\b/.test(lower)) explicitKeyword = (city || '').trim() ? ('water and swimming activities ' + (city || '').trim()) : 'water and swimming activities';
     var blogPlan = [{
       workflow_key: isTitleFix ? 'blog_title_qc' : 'publish_city_blog_batch',
       assigned_agent_key: 'cmo_agent',
