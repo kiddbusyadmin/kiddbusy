@@ -1,6 +1,7 @@
 const { runAgentConversation } = require('./_agent-router-core');
 const { getWorkflowById } = require('./_workflow-core');
 const { runSingleWorkflow, classifyWorkflowExecution } = require('./_workflow-runner-core');
+const AGENT_ROUTER_POLICY_VERSION = '2026-03-19-immediate-v4';
 
 function json(statusCode, payload) {
   return {
@@ -132,6 +133,7 @@ exports.handler = async (event) => {
         result.created_workflows = executed;
       }
     }
+    result.agent_router_policy_version = AGENT_ROUTER_POLICY_VERSION;
     return json(200, result);
   } catch (err) {
     return json(500, { error: err.message || 'Agent router failed' });
